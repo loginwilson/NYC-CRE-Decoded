@@ -1,0 +1,29 @@
+# secrets
+*.env
+.env
+.env.*
+
+# data and documents never enter git
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.pdf
+*.tif
+*.tiff
+*.jsonl
+*.zip
+_working/
+*.log
+
+# python
+__pycache__/
+*.pyc
+
+# supabase cli
+supabase/.temp/
+supabase/.branches/
+
+# os
+.DS_Store
+Thumbs.db
