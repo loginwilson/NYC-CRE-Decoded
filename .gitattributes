@@ -1,0 +1,7 @@
+# line endings: LF in the repo; shell scripts stay LF on checkout so the Mac can run them
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.sql text eol=lf
+*.toml text eol=lf
+*.md text
