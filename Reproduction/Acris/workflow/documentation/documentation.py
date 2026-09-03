@@ -23,6 +23,10 @@ The rules are kept from the lane that ran before this one (ACRIS REPRODUCTION.md
               above the number park, missing ones are born staggered); `stop` there stops cleanly
   mega lane   --also registration:40 hosts another lane's crew in this process, entered --entry-gap
               later through its own session (one entry per floor, as measured)
+  pending     goes back to the backfill: a pending is re-checked once its last check is --pending-age old,
+              ahead of the empties; when the lane is up to date every claim is pendings, cycling through
+              them, so a scan that appears is recorded on the next pass and a document that ages past
+              --fresh-days becomes absent on the next pass
   no overlap  claim() hands this workstation its own slice; land() fills the cells once a minute,
               buffered in documentation.outbox.jsonl until the cloud takes them; heartbeat() every
               minute carries the width and the last word
@@ -148,7 +152,10 @@ def main():
     ap.add_argument("--stagger", type=float, default=0.5, help="seconds between worker births")
     ap.add_argument("--claim", type=int, default=0, help="documents taken per claim (default 12 x width)")
     ap.add_argument("--ttl", default="20 minutes", help="how long a claim is ours before it goes back on the list")
-    ap.add_argument("--pending-age", default="1 day", help="how old a pending must be before it is re-asked")
+    ap.add_argument("--pending-age", default="1 hour",
+                    help="re-check a pending once its last check is this old; pendings ride ahead of the backfill, and when"
+                         " the lane is up to date every claim is pendings (one request per pending per interval;"
+                         " the old lane used 5 minutes)")
     ap.add_argument("--redial-wait", type=int, default=600, help="seconds to wait after a hang-up before re-entering")
     ap.add_argument("--tries", type=int, default=3, help="redials per incident before parking")
     ap.add_argument("--entry-gap", type=float, default=20.0, help="seconds between one crew's entry and the next (--also)")
