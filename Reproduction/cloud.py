@@ -122,6 +122,41 @@ class Cloud:
         self._run("select reproduction.heartbeat(%s, %s, %s, %s, %s)",
                   (self.source, self.lane, self.host, width, last_event), False)
 
+    def insert_ids(self, ids):
+        """synchronization: new document ids into the workflow table - one row per document, nothing
+        else filled - and the counters moved in the SAME transaction by exactly the rows that were new:
+        needed (the phase and every lane) and synchronization's landed.  Returns the rows inserted."""
+        if not ids:
+            return 0
+        for attempt in (1, 2):
+            try:
+                if self.con is None or self.con.closed:
+                    self.connect()
+                self.con.autocommit = False
+                try:
+                    with self.con.cursor() as cur:
+                        cur.execute("insert into reproduction.%s (doc_id) select unnest(%%s::text[]) on conflict (doc_id) do nothing"
+                                    % self.source, (list(ids),))
+                        n = cur.rowcount
+                        if n:
+                            cur.execute("update reproduction.%s_update set needed = needed + %%s" % self.source, (n,))
+                            cur.execute("update reproduction.%s_update_lanes set needed = needed + %%s" % self.source, (n,))
+                            cur.execute("update reproduction.%s_update_lanes set landed = landed + %%s where lane = 'synchronization'"
+                                        % self.source, (n,))
+                    self.con.commit()
+                    return n
+                except Exception:
+                    self.con.rollback()
+                    raise
+                finally:
+                    if self.con is not None and not self.con.closed:
+                        self.con.autocommit = True
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                self.close()
+                if attempt == 2:
+                    raise
+                time.sleep(2)
+
 
 class Outbox:
     """Landings that could not reach the cloud yet, one JSON object per line.  Append first, land

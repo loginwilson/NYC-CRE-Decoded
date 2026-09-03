@@ -201,7 +201,8 @@ class Crew:
         self.results = []
         self.lock = threading.Lock()
         self.stats = {"reqs": 0, "ok": 0, "fail": 0, "reask": 0, "short": 0,
-                      "filled": 0, "pending": 0, "absent": 0}
+                      "filled": 0, "pending": 0, "absent": 0, "blank": 0}
+        self.failed = []                  # (item, reason) since the last land - a role that walks a range re-asks these
         self.transport_streak = 0
         self.wall_streak = 0
         self.last_success = time.time()
@@ -233,6 +234,7 @@ class Crew:
     def note_fail(self, doc_id, err):
         with self.lock:
             self.stats["fail"] += 1
+            self.failed.append((doc_id, err))
         try:
             with self.fails.open("a", encoding="utf-8") as f:
                 f.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "id": doc_id, "err": err[:160]}) + "\n")
@@ -247,10 +249,11 @@ class Crew:
                 continue
             try:
                 value = self.role.fetch(self, doc_id, registry)
+                classify = getattr(self.role, "classify", None)
                 with self.lock:
                     self.results.append({"doc_id": doc_id, "value": value})
                     self.stats["ok"] += 1
-                    self.stats["filled" if value not in ("pending", "absent") else value] += 1
+                    self.stats[classify(value) if classify else ("filled" if value not in ("pending", "absent") else value)] += 1
                     self.transport_streak = 0
                     self.wall_streak = 0
                     self.last_success = time.time()
@@ -378,7 +381,11 @@ def _control(ctx, crews):
 
 
 def _feed(ctx, c):
-    """Keep the crew's queue a batch ahead: claim when it runs low, fetch the registries, queue."""
+    """Keep the crew's queue a batch ahead: claim when it runs low, fetch the registries, queue.
+    A role that walks a range instead (synchronization) brings its own feed."""
+    if hasattr(c.role, "feed"):
+        c.role.feed(c, ctx)
+        return
     if c.q.qsize() >= c.width or time.time() < c.idle_until:
         return
     if ctx.args.limit and c.stats["ok"] + c.q.qsize() >= ctx.args.limit:
@@ -399,8 +406,12 @@ def _feed(ctx, c):
 
 
 def _land(ctx, c, final=False):
+    if hasattr(c.role, "land"):
+        c.role.land(c, ctx)               # a role that walks a range lands its own way (ids + the edge)
+        return
     with c.lock:
         rows, c.results = c.results, []
+        c.failed = []                     # claim lanes leave a failed document for a later pass
     if rows:
         c.outbox.append(rows)
         for r in rows:
@@ -419,9 +430,11 @@ def _progress(ctx, c, t0, last):
     c.progress_at = now
     fmt = ("PROGRESS %dm %s - reqs %s (%.1f/s) - %s " + getattr(c.role, "noun", "filled")
            + " - %s absent - %s pending - short %d - fail %d - reask %d - width %d/%d - held %d - outbox %d - %.2f docs/s")
-    _log(ctx, fmt % (el / 60, c.role.lane, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["filled"]),
-                     "{:,}".format(s["absent"]), "{:,}".format(s["pending"]), s["short"], s["fail"], s["reask"],
-                     c.alive(), c.width, len(c.held), c.outbox.count(), docs))
+    line = fmt % (el / 60, c.role.lane, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["filled"]),
+                  "{:,}".format(s["absent"]), "{:,}".format(s["pending"]), s["short"], s["fail"], s["reask"],
+                  c.alive(), c.width, len(c.held), c.outbox.count(), docs)
+    status = getattr(c.role, "status", None)
+    _log(ctx, line + (" - " + status() if status else ""))
     return s
 
 

@@ -36,6 +36,23 @@ def image_url(doc_id, page):
     return "%s/GetImage?doc_id=%s&page=%d" % (BASE, doc_id, page)
 
 
+def crfn_url(crfn):
+    """The detail page reached by CRFN instead of by id: one GET, no session, no token (measured
+    2026-08-23: hid_CRFN works as a query parameter on this route).  A live CRFN answers the same
+    ~131 KB detail page as by id; an unissued one answers a ~10 KB stub with no document id."""
+    return "%s/DocumentDetail?hid_CRFN=%d&SearchType=DocID" % (BASE, int(crfn))
+
+
+MIN_DETAIL = 20_000     # a detail parsed from fewer bytes is suspect truncation, never reported live
+_DOC_ID = re.compile(r"DOCUMENT ID:\s*([A-Za-z0-9_]{10,})")
+
+
+def detail_doc_id(html):
+    """The document id a detail page prints, or None for the stub (no document at that number)."""
+    m = _DOC_ID.search(flat_text(html))
+    return m.group(1) if m else None
+
+
 # ── the refusal: HTTP 200 carrying the Bandwidth Notice page (never a status code) ──────────
 
 NOTICE_SIGNALS = ("further access to acris is denied", "acris bandwidth notice",
