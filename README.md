@@ -1,62 +1,50 @@
 # NYC CRE Decoded
 
-The reproduction of New York City's public real-estate record sources into one place:
-the registered data in one cloud database, the documents on drives, and the code that
-keeps both current. This repo is the process. The data is not in it.
+The reproduction of New York City's public real-estate record sources into one place: the registered data in one cloud database, the documents on the One Touch, and the code that keeps both current. This repo is the process. The data is not in it. The concept, in login's words, is `Reproduction/SCHEMA.md`.
 
-## Sources
+## Three homes
 
-| source | registry | what it holds |
+| what | where | shape |
 |---|---|---|
-| `acris` | NYC Department of Finance, ACRIS | recorded instruments for the five boroughs, including the microfilm era |
-| `richmond` | Richmond County Clerk | Staten Island's own registry, its own numbering |
+| database | Supabase project **NYC CRE Decoded** (East US) | schema `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table |
+| code | this repo | `Reproduction/<Source>/workflow/<lane>/` and `Reproduction/<Source>/update/` |
+| documents | the One Touch, `D:\CRE Decoding System\Documents\` | `source\borough\year\month\id.pdf` (richmond has no borough); a second workstation mounts its drive under the same letter and layout, then transfers |
 
-## Lanes, per source
+Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or printed.
 
-| lane | job |
-|---|---|
-| enumeration | the audit: what the source holds against what we hold |
-| synchronization | keeps the table live and watches the source for change; the source's URLs are minted by code from the id, never stored |
-| registration | mines the registered data behind each id into the table |
-| documentation | populates the document's access path on the drive, with its state (path, pending, absent, imageless, unservable) carried in the table |
+## The phase: reproduction
 
-The monitor has two tabs: tab 1 is reproduction as a whole; tab 2 is the three running
-lanes (synchronization, registration, documentation) per source.
+Two sources, `acris` and `richmond`. Per source one workflow table, one row per document, three cells: `doc_id` · `registry` · `document`. No URL or key columns: every URL is minted from the id. Each source has four lanes, each its own code in its own folder, toggled independently and configurable in width (1x40, 1x20, one entry of 100 split 20/40/40); three of them fill the cells.
+
+| lane | job | fills |
+|---|---|---|
+| enumeration | the audit, not a cycle lane: counts the source (acris: Socrata + CRFN; richmond: census + date/range), compares with the table, difference must be 0 | nothing (no table) |
+| synchronization | keeps the table live: the CRFN edge monitor and walkers for acris, the date walk for richmond | `doc_id` |
+| registration | the recorded details, by a URL minted from the id stem; no navigation step | `registry` |
+| documentation | the document, by minted access; saved to the drive, its full One Touch path recorded | `document` |
+
+**The cell rule.** Each lane fills its own cell and nothing else. A cell holds the fill or one of two words: `pending` (recorded but not yet served, inside the source's window; it stays in the backfill until it becomes the fill or `absent`) or `absent` (checked: there is none). Nothing else can go in a cell; the table itself refuses it. Anything but empty counts as landed.
+
+**Two workstations, no overlap.** The table is the only to-do list. A lane calls `claim()` for a slice of empty cells with its name and an expiry on them, atomic and skip-locked so two machines never receive the same document; it fills them with `land()` once a minute, which drops the claims; expired claims go back on the list. Each running lane writes `heartbeat()` once a minute. Synchronization runs at home; registration and documentation on any machine.
+
+**The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells filled against rows), tab 2 is the lanes (each cell filled against rows), both with 60-second and 5-minute rate, increase, percent and eta, landed, needed, percent of total, status and as-of. The status follows the lane's own heartbeat: `active` (fresh heartbeat, landed rising) · `pending` (no fresh heartbeat, not complete: paused or parked) · `stalled` (the lane parked on a refusal after its tries) · `complete` (100 %).
 
 ## Layout
 
 ```
-docs/                    the reproduction docs, one folder per source: the written authority
-supabase/migrations/     the schema, one numbered SQL file per decision, applied with the Supabase CLI
-reproduction/acris/      the four lanes for ACRIS
-reproduction/richmond/   the four lanes for Richmond
-reproduction/monitor/    tab 1 the whole, tab 2 the lanes
-tools/                   the SQL executor, the storage check, the fleet
+Reproduction/
+  SCHEMA.md                       the concept, in login's words
+  supabase/migrations/            one numbered SQL file per dictated decision; supabase/db_push.ps1 applies them
+  Acris/     ACRIS REPRODUCTION.md · workflow/{enumeration,synchronization,registration,documentation}/ · update/
+  Richmond/  RICHMOND REPRODUCTION.md · workflow/{enumeration,synchronization,registration,documentation}/ · update/
 ```
 
-## Where things are
-
-- Cloud database: Supabase project **NYC CRE Decoded** (`bhyputyffmuxxhapvhsz`, East US). Credentials live in an
-  env file outside this repo (`C:/dev/nyc-cre-decoded.env` at home) and are never committed or printed.
-- Documents: the One Touch at home (`D:/CRE Decoding System`), an exFAT drive at the office. Paths recorded in the
-  table are relative to the acquisition store, so they hold on both sides.
-- The previous code (a Downloads folder, never versioned) is reference only. Each lane is rebuilt here deliberately,
-  under dictation, and the old folder is retired when the last lane moves.
-
-## How the schema changes
-
-One decision, one migration file under `supabase/migrations/`, one commit. Applied with:
-
-```
-npx supabase db push --db-url "$SUPABASE_DB_URL"
-```
-
-The database can be rebuilt from this folder on any project.
+Everything about a source lives in its folder; everything about the phase lives at the phase level. There is nothing else at the top. A lane is launched from its own folder: go to Acris, workflow, documentation, launch at 1x20 is one command there.
 
 ## Rules that do not bend
 
-- One entry per client, 40 workers. 60 was refused at 105 min, 80 at 121; 40 has hundreds of clean minutes.
-- Stop on refusal and stay stopped. No retry, no probe, nothing rotated. Restoring access is a person's decision.
-- Nothing auto-restarts.
+- One entry per client: one pooled session, one connection per worker at birth, keep-alive after, no further handshakes. Never a handshake burst.
+- A block is HTTP 200 plus the Bandwidth Notice page, nothing else. A redial into a notice is refused; the notice lifts on its own clock. A hang-up (the far side closing every line at once) is redialed by the supervisor: wifi down waits, otherwise three tries per incident, then park with the reason. A fetch error never stops a lane.
+- Never kill a lane on a fail count; its own detectors decide. Never edit running code.
 - Never repair a number to make a check pass. Report the failure.
-- Env files, databases, documents and bulk inputs never enter git.
+- Env files, databases, documents and bulk inputs never enter git. The One Touch is storage only; code lives here.
