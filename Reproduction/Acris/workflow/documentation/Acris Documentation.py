@@ -6,8 +6,10 @@ document by minted access, saves it to the drive named by --drive, and records i
 path in the `document` cell - or the verdict word: pending (recorded in the last --fresh-days, no
 image yet) or absent (checked: none).
 
-    python documentation.py --drive NYCCRED1            home
-    python3 documentation.py --drive NYCCRED2           workstation 2
+    python "Acris Documentation.py" --drive NYCCRED1            home
+    python3 "Acris Documentation.py" --drive NYCCRED2           workstation 2
+
+This file's own authority is Acris Documentation.md beside it; the cycle's is ../reproduction/Acris Reproduction.md.
 
 The rules are kept from the lane that ran before this one (ACRIS REPRODUCTION.md is the authority):
 
@@ -41,7 +43,7 @@ land, heartbeat), ../../../storage.py (the drive by label, the One Touch layout)
 ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, where a document files).
 """
 import argparse
-import importlib
+import importlib.util
 import os
 import pathlib
 import sys
@@ -136,11 +138,13 @@ def role_for(name, drive_root, args):
     """--also <lane>:<width>: the sibling lane file's role, in this process (its own session)."""
     if name == "documentation":
         return Documentation(drive_root, args.fresh_days)
-    sib = HERE.parent / name / ("%s.py" % name)
+    sib = HERE.parent / name / ("Acris %s.py" % name.capitalize())
     if not sib.is_file():
         raise SystemExit("no lane file for --also %s (expected %s)" % (name, sib))
-    sys.path.insert(0, str(sib.parent))
-    return importlib.import_module(name).role(drive_root, args)
+    spec = importlib.util.spec_from_file_location("acris_" + name, sib)     # the file name carries a space
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.role(drive_root, args)
 
 
 def main():
