@@ -115,6 +115,55 @@ def take_lock(path):
                          % (path.name, type(e).__name__))
 
 
+def add_common_args(ap):
+    """The knobs every cycle lane shares; a lane file adds its own (documentation: --drive, --fresh-days)."""
+    ap.add_argument("--width", type=int, default=40, help="workers = connections (default 40)")
+    ap.add_argument("--host", default="", help="this workstation's name in the cloud (default: the machine name)")
+    ap.add_argument("--stagger", type=float, default=0.5, help="seconds between worker births")
+    ap.add_argument("--claim", type=int, default=0, help="documents taken per claim (default 12 x width)")
+    ap.add_argument("--ttl", default="20 minutes", help="how long a claim is ours before it goes back on the list")
+    ap.add_argument("--pending-age", default="1 hour",
+                    help="re-check a pending once its last check is this old; pendings ride ahead of the backfill, and when"
+                         " the lane is up to date every claim is pendings (one request per pending per interval)")
+    ap.add_argument("--redial-wait", type=int, default=600, help="seconds to wait after a hang-up before re-entering")
+    ap.add_argument("--tries", type=int, default=3, help="redials per incident before parking")
+    ap.add_argument("--entry-gap", type=float, default=20.0, help="seconds between one crew's entry and the next (--also)")
+    ap.add_argument("--also", action="append", default=[], metavar="LANE:WIDTH", help="host another lane's crew too, e.g. registration:40")
+    ap.add_argument("--limit", type=int, default=0, help="stop after this many documents (a test run)")
+    ap.add_argument("--log", default="", help="also append the printed lines to this file")
+    ap.add_argument("--unpark", action="store_true", help="start although the lane parked itself (a person has decided)")
+    return ap
+
+
+def sibling_role(source, name, here, drive_root, args):
+    """The role of a sibling lane file, loaded by path (`<Source> <Name>.py` carries a space): its
+    module-level role(drive_root, args)."""
+    sib = pathlib.Path(here).parent / name / ("%s %s.py" % (source, name.capitalize()))
+    if not sib.is_file():
+        raise SystemExit("no lane file for --also %s (expected %s)" % (name, sib))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("%s_%s" % (source.lower(), name), sib)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.role(drive_root, args)
+
+
+def roles_for(source, args, here, drive_root, own):
+    """[(role, width), ...]: this lane's own role first, then every --also LANE:WIDTH crew."""
+    roles = [(own, args.width)]
+    for spec in args.also:
+        name, _, w = spec.partition(":")
+        name = name.strip().lower()
+        try:
+            w = int(w or 40)
+        except ValueError:
+            raise SystemExit("--also takes LANE:WIDTH, e.g. registration:40 (got %r)" % spec)
+        if name == args.lane:
+            raise SystemExit("--also %s: that is this lane" % name)
+        roles.append((sibling_role(source, name, here, drive_root, args), w))
+    return roles
+
+
 def net_up():
     """Any HTTP answer from a neutral host = the wire is up.  A wifi outage is never a block."""
     for host in ("https://www.nyc.gov/", "https://github.com/"):
@@ -152,7 +201,7 @@ class Crew:
         self.results = []
         self.lock = threading.Lock()
         self.stats = {"reqs": 0, "ok": 0, "fail": 0, "reask": 0, "short": 0,
-                      "path": 0, "pending": 0, "absent": 0}
+                      "filled": 0, "pending": 0, "absent": 0}
         self.transport_streak = 0
         self.wall_streak = 0
         self.last_success = time.time()
@@ -201,7 +250,7 @@ class Crew:
                 with self.lock:
                     self.results.append({"doc_id": doc_id, "value": value})
                     self.stats["ok"] += 1
-                    self.stats["path" if value not in ("pending", "absent") else value] += 1
+                    self.stats["filled" if value not in ("pending", "absent") else value] += 1
                     self.transport_streak = 0
                     self.wall_streak = 0
                     self.last_success = time.time()
@@ -336,7 +385,7 @@ def _feed(ctx, c):
         return
     try:
         ids = c.cloud.claim(ctx.args.claim or 12 * c.width, ctx.args.ttl, ctx.args.pending_age)
-        regs = c.cloud.registries(ids)
+        regs = c.cloud.registries(ids) if getattr(c.role, "needs_registry", True) else {}
     except Exception as e:
         _log(ctx, "%s: claim failed (%s) - will retry" % (c.role.lane, reason(e)))
         c.idle_until = time.time() + 30
@@ -368,11 +417,11 @@ def _progress(ctx, c, t0, last):
     el = max(now - t0, 1e-9)
     docs = (s["ok"] - last.get("ok", 0)) / max(now - c.progress_at, 1e-9)   # real window, never an assumed minute
     c.progress_at = now
-    _log(ctx, "PROGRESS %dm %s - reqs %s (%.1f/s) - %s pdfs - %s absent - %s pending - short %d - fail %d - reask %d"
-         " - width %d/%d - held %d - outbox %d - %.2f docs/s"
-         % (el / 60, c.role.lane, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["path"]),
-            "{:,}".format(s["absent"]), "{:,}".format(s["pending"]), s["short"], s["fail"], s["reask"],
-            c.alive(), c.width, len(c.held), c.outbox.count(), docs))
+    fmt = ("PROGRESS %dm %s - reqs %s (%.1f/s) - %s " + getattr(c.role, "noun", "filled")
+           + " - %s absent - %s pending - short %d - fail %d - reask %d - width %d/%d - held %d - outbox %d - %.2f docs/s")
+    _log(ctx, fmt % (el / 60, c.role.lane, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["filled"]),
+                     "{:,}".format(s["absent"]), "{:,}".format(s["pending"]), s["short"], s["fail"], s["reask"],
+                     c.alive(), c.width, len(c.held), c.outbox.count(), docs))
     return s
 
 

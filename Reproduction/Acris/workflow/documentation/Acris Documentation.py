@@ -11,7 +11,7 @@ image yet) or absent (checked: none).
 
 This file's own authority is Acris Documentation.md beside it; the cycle's is ../reproduction/Acris Reproduction.md.
 
-The rules are kept from the lane that ran before this one (ACRIS REPRODUCTION.md is the authority):
+The rules are kept from the lane that ran before this one:
 
   failures    a fetch error never stops the lane: the document stays empty for a later pass and the
               reason is written to documentation.fails.jsonl
@@ -43,7 +43,6 @@ land, heartbeat), ../../../storage.py (the drive by label, the One Touch layout)
 ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, where a document files).
 """
 import argparse
-import importlib.util
 import os
 import pathlib
 import sys
@@ -64,6 +63,8 @@ class Documentation:
     """What one worker does with one document."""
     source, lane_name = "acris", "documentation"
     ua = acris.UA
+    noun = "pdfs"                 # the PROGRESS line's word for a filled cell
+    needs_registry = True         # the registry places the file and judges freshness
 
     def __init__(self, drive_root, fresh_days):
         self.root = drive_root
@@ -134,52 +135,24 @@ class Documentation:
         return canon
 
 
-def role_for(name, drive_root, args):
-    """--also <lane>:<width>: the sibling lane file's role, in this process (its own session)."""
-    if name == "documentation":
-        return Documentation(drive_root, args.fresh_days)
-    sib = HERE.parent / name / ("Acris %s.py" % name.capitalize())
-    if not sib.is_file():
-        raise SystemExit("no lane file for --also %s (expected %s)" % (name, sib))
-    spec = importlib.util.spec_from_file_location("acris_" + name, sib)     # the file name carries a space
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.role(drive_root, args)
+def role(drive_root, args):
+    """This lane's role, for a sibling lane hosting it with --also documentation:N."""
+    if not drive_root:
+        raise SystemExit("documentation needs --drive <label>: the drive its files are written to")
+    return Documentation(drive_root, getattr(args, "fresh_days", 30))
 
 
 def main():
     ap = argparse.ArgumentParser(description="acris documentation: one entry, N workers, the cloud table as the to-do list")
     ap.add_argument("--drive", required=True, help="label of the drive to write to (NYCCRED1 at home, NYCCRED2 on workstation 2)")
-    ap.add_argument("--width", type=int, default=40, help="workers = connections (default 40)")
-    ap.add_argument("--host", default="", help="this workstation's name in the cloud (default: the machine name)")
     ap.add_argument("--fresh-days", type=int, default=30, help="a document recorded within this many days with no image is pending, not absent")
-    ap.add_argument("--stagger", type=float, default=0.5, help="seconds between worker births")
-    ap.add_argument("--claim", type=int, default=0, help="documents taken per claim (default 12 x width)")
-    ap.add_argument("--ttl", default="20 minutes", help="how long a claim is ours before it goes back on the list")
-    ap.add_argument("--pending-age", default="1 hour",
-                    help="re-check a pending once its last check is this old; pendings ride ahead of the backfill, and when"
-                         " the lane is up to date every claim is pendings (one request per pending per interval;"
-                         " the old lane used 5 minutes)")
-    ap.add_argument("--redial-wait", type=int, default=600, help="seconds to wait after a hang-up before re-entering")
-    ap.add_argument("--tries", type=int, default=3, help="redials per incident before parking")
-    ap.add_argument("--entry-gap", type=float, default=20.0, help="seconds between one crew's entry and the next (--also)")
-    ap.add_argument("--also", action="append", default=[], metavar="LANE:WIDTH", help="host another lane's crew too, e.g. registration:40")
-    ap.add_argument("--limit", type=int, default=0, help="stop after this many documents (a test run)")
-    ap.add_argument("--log", default="", help="also append the printed lines to this file")
-    ap.add_argument("--unpark", action="store_true", help="start although the lane parked itself (a person has decided)")
+    lane.add_common_args(ap)
     args = ap.parse_args()
     args.lane = "documentation"
 
     drive_root = storage.find_drive(args.drive)
     storage.documents_root(drive_root)
-    roles = [(Documentation(drive_root, args.fresh_days), args.width)]
-    for spec in args.also:
-        name, _, w = spec.partition(":")
-        try:
-            w = int(w or 40)
-        except ValueError:
-            raise SystemExit("--also takes LANE:WIDTH, e.g. registration:40 (got %r)" % spec)
-        roles.append((role_for(name.strip(), drive_root, args), w))
+    roles = lane.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days))
     print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, storage.documents_root(drive_root), storage.CANON_ROOT), flush=True)
     sys.exit(lane.run(roles, args, HERE))
 
