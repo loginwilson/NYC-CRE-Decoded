@@ -1,3 +1,5 @@
 # Reproduction
 
 The phase. `SCHEMA.md` is the concept in login's words; `supabase/` holds the phase's migrations, the push script, the SQL executor and the live test; one folder per source holds that source's written authority, `workflow/` (the four lane codes, each in its own folder) and `update/` (the one program that always runs and feeds the two-tab updates). Supabase side: schema `reproduction`.
+
+Three files every lane shares, so a rule is fixed once and every lane on every workstation gets it: `lane.py` (the entry: one pooled session per crew, staggered births, failures, retries, the refusal park, the hang-up redial, the wall stop, live width changes, the mega lane, claim/land/heartbeat once a minute), `cloud.py` (the cloud table from a lane's point of view: claim, registries, land, heartbeat, and the local outbox so a cloud hiccup loses nothing), `storage.py` (the drive found by its label on Windows or Mac, and the One Touch layout `source\borough\year\month\id.pdf` recorded in canonical `D:\` form whichever machine fetched the file). `requirements.txt` is the one install a workstation needs.

@@ -16,6 +16,12 @@
 _working/
 *.log
 
+# a lane's working files live beside it and never enter git
+*.control
+*.parked
+*.part
+refusals/
+
 # python
 __pycache__/
 *.pyc

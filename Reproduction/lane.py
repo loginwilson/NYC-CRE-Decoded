@@ -1,0 +1,441 @@
+"""THE ENTRY EVERY CYCLE LANE SHARES: one pooled session per crew, staggered births, workers each on
+their own connection, and the policies that keep a lane alive without a person - measured on the
+acris lanes of 2026-08/09 and written down in ACRIS REPRODUCTION.md.
+
+A lane file (documentation.py, registration.py, ...) defines a ROLE - what one worker does with one
+document - and hands it to run().  run() owns everything else:
+
+  claim / land / heartbeat   the cloud hands this workstation its slice (claim); results land once a
+                             minute through the outbox, so a cloud hiccup loses nothing; heartbeat
+                             once a minute carries the width and the last word
+  failures                   a fetch error never stops the lane; the document stays empty for a later
+                             pass and the reason is written to <lane>.fails.jsonl
+  refusal                    HTTP 200 + the Bandwidth Notice = the source's decision: park at once,
+                             no retry, no rotation, exit
+  hang-up                    every line dropped at once (transport errors, nothing landing) = dead
+                             transport: close the pool, wait (wifi down waits without spending a try),
+                             re-enter with staggered births; 3 tries per incident, then park
+  wall                       40 consecutive 503/429 on a crew with no success between: park
+  width                      <lane>.control holds `width=N` (or `<lane>=N` per crew) and `stop`; read
+                             once a minute; workers above N park after their current document, the
+                             missing ones are born staggered, one connection each
+  mega lane                  several roles in one process: each crew enters through ITS OWN session,
+                             --entry-gap apart (mixing floors through one session made acris serve
+                             empty viewer pages for documents whose images exist, run 3, 2026-08-28)
+"""
+import json
+import pathlib
+import queue
+import socket
+import sys
+import threading
+import time
+import urllib.request
+
+import requests
+import requests.adapters
+
+from cloud import Cloud, Outbox
+
+
+class Refused(RuntimeError):
+    """The source declined (the notice page).  Stop the lane; a person decides."""
+
+
+class Transport(RuntimeError):
+    """The wire failed (EOF, reset, timeout): our side, retryable, counted toward a hang-up."""
+
+
+class HTTPStatus(RuntimeError):
+    def __init__(self, code, url):
+        super().__init__("HTTP %d" % code)
+        self.code = code
+
+
+class Retry(RuntimeError):
+    """Leave the document empty for a later pass (short document, unknown page shape)."""
+
+
+def reason(e):
+    t = str(e)
+    i = t.rfind("Caused by")
+    return (t[i:] if i >= 0 else t[-160:])[:160]
+
+
+def net_up():
+    """Any HTTP answer from a neutral host = the wire is up.  A wifi outage is never a block."""
+    for host in ("https://www.nyc.gov/", "https://github.com/"):
+        try:
+            urllib.request.urlopen(urllib.request.Request(host, method="HEAD",
+                                   headers={"User-Agent": "Mozilla/5.0"}), timeout=10)
+            return True
+        except urllib.error.HTTPError:
+            return True
+        except Exception:
+            continue
+    return False
+
+
+MAX_WIDTH = 128          # the pool's ceiling; a connection is opened only when a worker first asks
+
+
+def make_session(width, ua):
+    s = requests.Session()
+    s.headers.update({"User-Agent": ua})
+    s.mount("https://", requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=MAX_WIDTH + 4,
+                                                      max_retries=0, pool_block=True))
+    return s
+
+
+class Crew:
+    """One role, one session, N workers, its own queue, results, counters and detectors."""
+
+    def __init__(self, role, width, lane_ctx):
+        self.role, self.width, self.ctx = role, width, lane_ctx
+        self.session = None
+        self.workers = []
+        self.stop = threading.Event()
+        self.q = queue.Queue()
+        self.results = []
+        self.lock = threading.Lock()
+        self.stats = {"reqs": 0, "ok": 0, "fail": 0, "reask": 0, "short": 0,
+                      "path": 0, "pending": 0, "absent": 0}
+        self.transport_streak = 0
+        self.wall_streak = 0
+        self.last_success = time.time()
+        self.cloud = Cloud(role.source, role.lane, lane_ctx.host, app="%s %s" % (role.source, role.lane))
+        self.outbox = Outbox(lane_ctx.here / ("%s.outbox.jsonl" % role.lane))
+        self.fails = lane_ctx.here / ("%s.fails.jsonl" % role.lane)
+        self.held = set()                 # claimed, not yet landed
+        self.tries = 0                    # redials in the current incident
+        self.last_redial = 0.0
+        self.idle_until = 0.0             # when the to-do list came back empty, do not ask again before this
+
+    # ── the fetcher every worker uses: counts, closes, classifies ────────────────────────
+    def get(self, url, referer, timeout=90):
+        with self.lock:
+            self.stats["reqs"] += 1
+        try:
+            r = self.session.get(url, headers={"Referer": referer}, timeout=timeout)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                requests.exceptions.ChunkedEncodingError) as e:
+            raise Transport("%s: %s" % (type(e).__name__, reason(e)))
+        try:
+            if r.status_code >= 400:
+                raise HTTPStatus(r.status_code, url)
+            return r.content, r.headers.get("Content-Type", "")
+        finally:
+            r.close()
+
+    def note_fail(self, doc_id, err):
+        with self.lock:
+            self.stats["fail"] += 1
+        try:
+            with self.fails.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "id": doc_id, "err": err[:160]}) + "\n")
+        except OSError:
+            pass
+
+    def worker(self, born):
+        while not self.stop.is_set():
+            try:
+                doc_id, registry, attempt = self.q.get(timeout=1)
+            except queue.Empty:
+                continue
+            try:
+                value = self.role.fetch(self, doc_id, registry)
+                with self.lock:
+                    self.results.append({"doc_id": doc_id, "value": value})
+                    self.stats["ok"] += 1
+                    self.stats["path" if value not in ("pending", "absent") else value] += 1
+                    self.transport_streak = 0
+                    self.wall_streak = 0
+                    self.last_success = time.time()
+            except Refused as e:
+                self.ctx.park("REFUSED at %s %s - %s" % (doc_id, time.strftime("%Y-%m-%d %H:%M"), e), code=2)
+                return
+            except HTTPStatus as e:
+                with self.lock:
+                    if e.code in (429, 500, 502, 503, 504):
+                        self.wall_streak += 1
+                self.note_fail(doc_id, str(e))
+            except Transport as e:
+                with self.lock:
+                    self.transport_streak += 1
+                if attempt == 0 and not self.stop.is_set():
+                    self.q.put((doc_id, registry, 1))     # one more try: a stale keep-alive after an idle spell fails once
+                else:
+                    self.note_fail(doc_id, str(e))
+            except Retry as e:
+                with self.lock:
+                    if str(e).startswith("short"):
+                        self.stats["short"] += 1
+                self.note_fail(doc_id, str(e))
+            except Exception as e:
+                self.note_fail(doc_id, "%s: %s" % (type(e).__name__, reason(e)))
+            # a parked worker (width lowered) leaves after its document
+            if born > self.width:
+                return
+
+    def enter(self, stagger):
+        """ONE entry: a fresh pooled session, workers born `stagger` apart - one handshake each, then
+        keep-alive for the life of the crew."""
+        self.stop = threading.Event()
+        self.session = make_session(self.width, self.role.ua)
+        self.workers = []
+        for i in range(self.width):
+            t = threading.Thread(target=self.worker, args=(i + 1,), daemon=True, name="%s-%d" % (self.role.lane, i + 1))
+            t.start()
+            self.workers.append(t)
+            if i < self.width - 1:
+                time.sleep(stagger)
+        self.transport_streak = 0
+        self.wall_streak = 0
+        self.last_success = time.time()
+
+    def leave(self):
+        self.stop.set()
+        for t in self.workers:
+            t.join(timeout=120)
+        try:
+            self.session.close()
+        except Exception:
+            pass
+
+    def resize(self, new_width, stagger):
+        """Workers above the new width park after their current document; missing ones are born."""
+        old, self.width = self.width, new_width
+        if new_width > old:
+            for i in range(old, new_width):
+                t = threading.Thread(target=self.worker, args=(i + 1,), daemon=True, name="%s-%d" % (self.role.lane, i + 1))
+                t.start()
+                self.workers.append(t)
+                time.sleep(stagger)
+
+    def alive(self):
+        return sum(1 for t in self.workers if t.is_alive())
+
+
+class Context:
+    def __init__(self, here, host, args):
+        self.here, self.host, self.args = here, host, args
+        self.exit_code = None
+        self.exit_reason = None
+        self.stopping = threading.Event()
+
+    def park(self, why, code):
+        """Stop the whole process with a written reason; the lane refuses to start again until
+        --unpark, so nobody walks it back into a refusal by habit."""
+        if self.stopping.is_set():
+            return
+        self.exit_code, self.exit_reason = code, why
+        self.stopping.set()
+        try:
+            (self.here / ("%s.parked" % self.args.lane)).write_text(why + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+
+def _log(ctx, msg):
+    line = "%s  %s" % (time.strftime("%H:%M:%S"), msg)
+    print(line, flush=True)
+    if ctx.args.log:
+        try:
+            with open(ctx.args.log, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except OSError:
+            pass
+
+
+def _control(ctx, crews):
+    """<lane>.control: `width=N` / `<lane>=N` per crew, `stop` to stop.  Read once a minute."""
+    p = ctx.here / ("%s.control" % ctx.args.lane)
+    if not p.exists():
+        return
+    try:
+        lines = [l.strip() for l in p.read_text(encoding="utf-8").splitlines()]
+    except OSError:
+        return
+    for l in lines:
+        if l.lower() == "stop":
+            ctx.exit_code, ctx.exit_reason = 0, "stopped by %s at %s" % (p.name, time.strftime("%H:%M"))
+            ctx.stopping.set()
+            return
+        if "=" in l:
+            k, v = [x.strip() for x in l.split("=", 1)]
+            for c in crews:
+                if (k == "width" and c is crews[0]) or k == c.role.lane:
+                    try:
+                        n = min(int(v), MAX_WIDTH)
+                    except ValueError:
+                        continue
+                    if n != c.width and n > 0:
+                        _log(ctx, "%s width %d -> %d (control file)" % (c.role.lane, c.width, n))
+                        c.resize(n, ctx.args.stagger)
+
+
+def _feed(ctx, c):
+    """Keep the crew's queue a batch ahead: claim when it runs low, fetch the registries, queue."""
+    if c.q.qsize() >= c.width or time.time() < c.idle_until:
+        return
+    if ctx.args.limit and c.stats["ok"] + c.q.qsize() >= ctx.args.limit:
+        return
+    try:
+        ids = c.cloud.claim(ctx.args.claim, ctx.args.ttl, ctx.args.pending_age)
+        regs = c.cloud.registries(ids)
+    except Exception as e:
+        _log(ctx, "%s: claim failed (%s) - will retry" % (c.role.lane, reason(e)))
+        c.idle_until = time.time() + 30
+        return
+    if not ids:
+        c.idle_until = time.time() + 60          # nothing to do: ask again in a minute, not every second
+        return
+    for i in ids:
+        c.held.add(i)
+        c.q.put((i, regs.get(i), 0))
+
+
+def _land(ctx, c, final=False):
+    with c.lock:
+        rows, c.results = c.results, []
+    if rows:
+        c.outbox.append(rows)
+        for r in rows:
+            c.held.discard(r["doc_id"])
+    if c.outbox.path.exists() and c.outbox.path.stat().st_size > 0:
+        landed, left = c.outbox.drain(c.cloud.land)
+        if left:
+            _log(ctx, "%s: cloud did not take %d landings (kept in %s)" % (c.role.lane, left, c.outbox.path.name))
+
+
+def _progress(ctx, c, t0, last):
+    s = dict(c.stats)
+    el = max(time.time() - t0, 1e-9)
+    docs = (s["ok"] - last.get("ok", 0)) / 60.0
+    _log(ctx, "PROGRESS %dm %s - reqs %s (%.1f/s) - %s pdfs - %s absent - %s pending - short %d - fail %d - reask %d"
+         " - width %d/%d - held %d - outbox %d - %.2f docs/s"
+         % (el / 60, c.role.lane, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["path"]),
+            "{:,}".format(s["absent"]), "{:,}".format(s["pending"]), s["short"], s["fail"], s["reask"],
+            c.alive(), c.width, len(c.held), c.outbox.count(), docs))
+    return s
+
+
+def _redial(ctx, c):
+    """Dead transport: leave, wait, re-enter.  Wifi down waits without spending a try."""
+    now = time.time()
+    if c.tries and now - c.last_redial > 1800 and c.stats["ok"] > 0:
+        c.tries = 0                      # the incident closed: half an hour of service since the last redial
+    if c.tries >= ctx.args.tries:
+        ctx.park("PARKED: %d redials in a row failed (%s) at %s" % (c.tries, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=3)
+        return
+    c.tries += 1
+    c.last_redial = now
+    _log(ctx, "%s: DEAD TRANSPORT (%d transport errors in a row, nothing landed since %ds) - hanging up, redial %d/%d after %ds"
+         % (c.role.lane, c.transport_streak, int(now - c.last_success), c.tries, ctx.args.tries, ctx.args.redial_wait))
+    try:
+        c.cloud.heartbeat(0, "hang-up: redial %d/%d at %s" % (c.tries, ctx.args.tries, time.strftime("%H:%M")))
+    except Exception:
+        pass
+    c.leave()
+    _land(ctx, c)                                       # what the crew had already fetched lands now
+    word = "hang-up: waiting to redial %d/%d" % (c.tries, ctx.args.tries)
+    waited = 0
+    while waited < ctx.args.redial_wait and not ctx.stopping.is_set():
+        time.sleep(10)
+        waited += 10
+        if waited % 60 == 0:
+            try:
+                c.cloud.heartbeat(0, word)              # the board keeps seeing the lane while it waits
+            except Exception:
+                pass
+    while not net_up() and not ctx.stopping.is_set():
+        _log(ctx, "%s: network is DOWN - waiting, no try spent" % c.role.lane)
+        time.sleep(60)
+    if ctx.stopping.is_set():
+        return
+    c.enter(ctx.args.stagger)
+    _log(ctx, "%s: re-entered, %d workers, one entry" % (c.role.lane, c.width))
+
+
+def run(roles, args, here):
+    """roles = [(role, width), ...]; the first is the lane's own."""
+    here = pathlib.Path(here)
+    host = args.host or socket.gethostname()
+    ctx = Context(here, host, args)
+    parked = here / ("%s.parked" % args.lane)
+    if parked.exists() and not args.unpark:
+        raise SystemExit("this lane is PARKED: %s\n  start it again with --unpark once a person has decided."
+                         % parked.read_text(encoding="utf-8").strip())
+    if parked.exists():
+        parked.unlink()
+
+    crews = [Crew(role, width, ctx) for role, width in roles]
+    _log(ctx, "%s up on %s - %s - one pooled session per crew, staggered births, keep-alive after, no pacer"
+         % (args.lane, host, ", ".join("%s x%d" % (c.role.lane, c.width) for c in crews)))
+    for c in crews:
+        try:
+            c.cloud.connect()
+            c.cloud.heartbeat(c.width, "started 1x%d at %s" % (c.width, time.strftime("%Y-%m-%d %H:%M")))
+        except Exception as e:
+            raise SystemExit("the cloud table is unreachable (%s) - nothing to claim, not entering ACRIS" % reason(e))
+        _land(ctx, c)                                  # anything left in the outbox from last time
+        _feed(ctx, c)
+    t0 = time.time()
+    for i, c in enumerate(crews):
+        if i:
+            time.sleep(args.entry_gap)
+        c.enter(args.stagger)
+        _log(ctx, "%s: entered, %d workers" % (c.role.lane, c.width))
+
+    last = {c.role.lane: dict(c.stats) for c in crews}
+    tick = time.time()
+    quiet = {c.role.lane: 0 for c in crews}
+    try:
+        while not ctx.stopping.is_set():
+            time.sleep(1)
+            for c in crews:
+                _feed(ctx, c)
+                with c.lock:
+                    n = len(c.results)
+                if n >= 200:
+                    _land(ctx, c)
+                # detectors
+                if c.wall_streak >= 40:
+                    ctx.park("wall: %d consecutive 503/429 on %s at %s - not retrying, not rotating"
+                             % (c.wall_streak, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=4)
+                if c.transport_streak >= 3 * c.width and time.time() - c.last_success > 60:
+                    _redial(ctx, c)
+                if args.limit and c.stats["ok"] >= args.limit and c.q.empty():
+                    ctx.exit_code, ctx.exit_reason = 0, "limit %d reached" % args.limit
+                    ctx.stopping.set()
+            if time.time() - tick >= getattr(args, "tick", 60):     # the minute; shorter only in tests
+                tick = time.time()
+                _control(ctx, crews)
+                for c in crews:
+                    _land(ctx, c)
+                    s = _progress(ctx, c, t0, last[c.role.lane])
+                    asked = s["reqs"] - last[c.role.lane]["reqs"]
+                    moved = s["ok"] - last[c.role.lane]["ok"]
+                    quiet[c.role.lane] = quiet[c.role.lane] + 1 if (asked > 0 and moved == 0) else 0
+                    if quiet[c.role.lane] >= 5:      # five minutes asking, nothing landing = our wire
+                        quiet[c.role.lane] = 0
+                        _redial(ctx, c)
+                    last[c.role.lane] = s
+                    try:
+                        c.cloud.heartbeat(c.alive(), None)
+                    except Exception as e:
+                        _log(ctx, "%s: heartbeat failed (%s)" % (c.role.lane, reason(e)))
+    except KeyboardInterrupt:
+        ctx.exit_code, ctx.exit_reason = 0, "stopped by hand (Ctrl+C) at %s" % time.strftime("%H:%M")
+        ctx.stopping.set()
+    finally:
+        for c in crews:
+            c.leave()
+            _land(ctx, c, final=True)
+            try:
+                c.cloud.heartbeat(0, ctx.exit_reason)
+            except Exception:
+                pass
+            c.cloud.close()
+        _log(ctx, "run end %.1f min - %s" % ((time.time() - t0) / 60, ctx.exit_reason or "stopped"))
+    return ctx.exit_code or 0
