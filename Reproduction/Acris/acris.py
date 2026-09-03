@@ -6,9 +6,13 @@ authority); the dates in the comments say when.
 """
 import hashlib
 import html as _html
+import json
 import pathlib
 import re
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 
 import storage
 from lane import Refused
@@ -180,6 +184,115 @@ def fresh(registry, days):
     except (ValueError, OverflowError):
         return False
     return (time.time() - rec) < days * 86400
+
+
+# ── THE INDEX: ACRIS's own published extract on NYC Open Data (Socrata) - the audit's baseline ──
+# One master per corpus (real property, personal property), refreshed monthly and weeks behind:
+# the good_through_date column says how far.  Measured 2026-09-04: real 17,049,742 distinct ids and
+# personal 4,544,590, both good through 2026-07-31; both hold the film bands (FT_ + a borough digit
+# 1-4 + a digit; BK_ + a two-digit year 66-81) and the digital ids (2002-12 on).  A different host
+# from the web endpoint, so reading it is never a second door at ACRIS.  Rows repeat (15,348
+# duplicate rows in the real master), so ids are counted DISTINCT.  A throttled call answers HTTP
+# 200 and [] (2026-08-31), so every pull is held to the index's own count and a short answer is Void,
+# never empty.  Without SOCRATA_APP_TOKEN in the env file the index throttles.
+INDEX = (("real", "bnx9-e6tj"), ("personal", "sv7x-dduq"))
+SOCRATA = "https://data.cityofnewyork.us/resource/%s.json"
+SOCRATA_PAGE = 50_000          # honoured (measured 2026-08-05); a page shorter than this ends a walk
+
+
+class Void(RuntimeError):
+    """The index answered, but not what it counted: unknown, never empty."""
+
+
+def socrata_token():
+    """SOCRATA_APP_TOKEN from the nyc-cre-decoded env file, never printed."""
+    import cloud
+    try:
+        return cloud.env().get("SOCRATA_APP_TOKEN", "")
+    except SystemExit:
+        return ""
+
+
+def socrata(dataset, params, timeout=180, tries=4):
+    """One index request.  A 5xx or a dropped wire is the server's moment and is asked again (2, 4,
+    8 s); a 4xx is this client's query and is raised at once, never retried into silence."""
+    url = SOCRATA % dataset + "?" + urllib.parse.urlencode({"$" + k: str(v) for k, v in params.items()})
+    tok = socrata_token()
+    req = urllib.request.Request(url, headers={"X-App-Token": tok} if tok else {})
+    for i in range(tries):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code < 500 or i == tries - 1:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+            if i == tries - 1:
+                raise
+        time.sleep(2 ** (i + 1))
+
+
+def _between(col, lo, hi):
+    w = "%s >= '%s'" % (col, lo)
+    if hi is not None:
+        w += " and %s < '%s'" % (col, hi)
+    return w
+
+
+def index_state(dataset):
+    """Distinct ids, newest recorded date, good_through_date and the highest CRFN of one master."""
+    r = socrata(dataset, {"select": "count(distinct document_id) as ids, max(recorded_datetime) as recorded,"
+                                    " max(good_through_date) as good_through, max(crfn) as crfn"})[0]
+    return {"ids": int(r.get("ids") or 0), "recorded": (r.get("recorded") or "")[:10],
+            "good_through": (r.get("good_through") or "")[:10], "crfn": r.get("crfn") or ""}
+
+
+def index_prefixes(dataset, lo, hi, n):
+    """{prefix: rows} for the n-character id prefixes the index holds in [lo, hi): the shard list is
+    the index's own, never assumed."""
+    rows = socrata(dataset, {"select": "substring(document_id, 1, %d) as p, count(*) as n" % n,
+                             "where": _between("document_id", lo, hi), "group": "p", "order": "p",
+                             "limit": SOCRATA_PAGE})
+    return {r["p"]: int(r["n"]) for r in rows if r.get("p")}
+
+
+def index_count(dataset, lo, hi):
+    rows = socrata(dataset, {"select": "count(distinct document_id) as n", "where": _between("document_id", lo, hi)})
+    return int(rows[0].get("n") or 0) if rows else 0
+
+
+def _paged(dataset, select, where, key):
+    """Every value of one column under a where, paged with $order=:id - without an order, $offset
+    silently drops and duplicates rows (measured 2026-08-06) - until a page comes back short."""
+    got, off = set(), 0
+    while True:
+        rows = socrata(dataset, {"select": select, "where": where, "order": ":id",
+                                 "limit": SOCRATA_PAGE, "offset": off})
+        got.update(r[key] for r in rows if r.get(key))
+        if len(rows) < SOCRATA_PAGE:
+            return got
+        off += SOCRATA_PAGE
+
+
+def index_ids(dataset, lo, hi):
+    """Every distinct id in [lo, hi), held to the index's own count of them: fewer is Void."""
+    want = index_count(dataset, lo, hi)
+    got = _paged(dataset, "document_id", _between("document_id", lo, hi), "document_id")
+    if len(got) != want:
+        raise Void("%s ids in [%s, %s): pulled %d, counted %d" % (dataset, lo, hi, len(got), want))
+    return got
+
+
+def index_crfns(dataset, year):
+    """The CRFN sequence numbers the index holds for one year (a CRFN is YYYY + nine digits), held
+    to the count of distinct CRFNs in that year."""
+    where = _between("crfn", "%d" % year, "%d" % (year + 1))
+    rows = socrata(dataset, {"select": "count(distinct crfn) as n", "where": where})
+    want = int(rows[0].get("n") or 0) if rows else 0
+    raw = _paged(dataset, "crfn", where, "crfn")
+    if len(raw) != want:
+        raise Void("%s crfns in %d: pulled %d, counted %d" % (dataset, year, len(raw), want))
+    return {int(c[4:]) for c in raw if len(c) == 13 and c.isdigit()}
 
 
 # ── THE RECORDED DETAILS PAGE - the one place its format is known ─────────────────────────

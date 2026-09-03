@@ -20,7 +20,12 @@ _working/
 *.control
 *.parked
 *.part
+*.lock
 refusals/
+synchronization.edge.json
+synchronization.edge.tmp
+enumeration.*.json
+enumeration.*.txt
 
 # python
 __pycache__/

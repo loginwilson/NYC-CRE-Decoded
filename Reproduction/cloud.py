@@ -157,6 +157,61 @@ class Cloud:
                     raise
                 time.sleep(2)
 
+    # ── reads for the audit: enumeration never writes a cell and has no table ────────────
+    def _range(self, lo, hi, after=None):
+        parts, params = [], []
+        if after is not None:
+            parts.append("doc_id > %s")
+            params.append(after)
+        elif lo is not None:
+            parts.append("doc_id >= %s")
+            params.append(lo)
+        if hi is not None:
+            parts.append("doc_id < %s")
+            params.append(hi)
+        return (" where " + " and ".join(parts)) if parts else "", tuple(params)
+
+    def count(self, lo=None, hi=None):
+        """Rows in [lo, hi) of the workflow table (every row when lo is None): a range on the key."""
+        where, params = self._range(lo, hi)
+        return self._run("select count(*) from reproduction.%s%s" % (self.source, where), params, True)[0][0]
+
+    def ids(self, lo, hi=None, page=50_000):
+        """Every doc_id in [lo, hi), keyset-paged on the primary key - a range, never a scan."""
+        out, after = set(), None
+        while True:
+            where, params = self._range(lo, hi, after)
+            rows = self._run("select doc_id from reproduction.%s%s order by doc_id limit %%s" % (self.source, where),
+                             params + (page,), True)
+            out.update(r[0] for r in rows)
+            if len(rows) < page:
+                return out
+            after = rows[-1][0]
+
+    def prefixes(self, lo, hi, n):
+        """{prefix: rows} for the n-character id prefixes the table holds in [lo, hi)."""
+        where, params = self._range(lo, hi)
+        rows = self._run("select left(doc_id, %%s) p, count(*) from reproduction.%s%s group by 1 order by 1"
+                         % (self.source, where), (n,) + params, True)
+        return {r[0]: r[1] for r in rows}
+
+    def held(self, ids):
+        """The subset of ids the table holds."""
+        if not ids:
+            return set()
+        rows = self._run("select doc_id from reproduction.%s where doc_id = any(%%s)" % self.source, (list(ids),), True)
+        return {r[0] for r in rows}
+
+    def max_id(self, lo, hi=None):
+        where, params = self._range(lo, hi)
+        return self._run("select max(doc_id) from reproduction.%s%s" % (self.source, where), params, True)[0][0]
+
+    def alive(self, within="3 minutes"):
+        """[(lane, host, width, age_seconds, last_event)] for every lane heard from within the interval."""
+        return self._run("select lane, host, width, extract(epoch from now() - heartbeat_at)::int, last_event"
+                         " from reproduction.%s_heartbeats where heartbeat_at > now() - %%s::interval order by lane, host"
+                         % self.source, (within,), True)
+
 
 class Outbox:
     """Landings that could not reach the cloud yet, one JSON object per line.  Append first, land
