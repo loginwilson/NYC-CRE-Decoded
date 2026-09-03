@@ -26,6 +26,11 @@ The rules are kept from the lane that ran before this one (ACRIS REPRODUCTION.md
   no overlap  claim() hands this workstation its own slice; land() fills the cells once a minute,
               buffered in documentation.outbox.jsonl until the cloud takes them; heartbeat() every
               minute carries the width and the last word
+  one door    documentation.lock: a second start on this machine is refused while the first lives
+  drive       once a minute the drive must still be there, or the lane parks with the reason
+
+Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused · 3 redials exhausted · 4 wall ·
+5 crash · 6 drive gone.  A parked lane refuses to start until --unpark.
 
 The shared pieces it imports: ../../../lane.py (the entry and the policies), ../../../cloud.py (claim,
 land, heartbeat), ../../../storage.py (the drive by label, the One Touch layout), ../../acris.py (the
@@ -61,6 +66,13 @@ class Documentation:
     @property
     def lane(self):
         return self.lane_name
+
+    def check(self, ctx):
+        """Once a minute: the drive must still be there.  A pulled drive parks the lane instead of
+        leaving it fetching with every write failing (trap 5)."""
+        if not os.path.isdir(self.root):
+            ctx.park("PARKED: the drive %s is gone at %s - plug it back in, then start with --unpark"
+                     % (self.root, time.strftime("%Y-%m-%d %H:%M")), code=6)
 
     def fetch(self, crew, doc_id, registry):
         if not isinstance(registry, dict):
@@ -104,10 +116,15 @@ class Documentation:
             raise lane.Retry("short: %d/%d pages - %s" % (len(frames), total, why))
 
         # 3. the file, written whole or not at all
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.parent / (path.name + ".part")
-        tmp.write_bytes(img2pdf.convert(frames))
-        os.replace(tmp, path)                            # whole or not at all: never a truncated pdf in the store
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.parent / (path.name + ".part")
+            tmp.write_bytes(img2pdf.convert(frames))
+            os.replace(tmp, path)                        # whole or not at all: never a truncated pdf in the store
+        except OSError as e:
+            if not os.path.isdir(self.root):
+                self.check(crew.ctx)
+            raise lane.Retry("could not write the file (%s: %s)" % (type(e).__name__, str(e)[:100]))
         return canon
 
 
@@ -129,7 +146,7 @@ def main():
     ap.add_argument("--host", default="", help="this workstation's name in the cloud (default: the machine name)")
     ap.add_argument("--fresh-days", type=int, default=30, help="a document recorded within this many days with no image is pending, not absent")
     ap.add_argument("--stagger", type=float, default=0.5, help="seconds between worker births")
-    ap.add_argument("--claim", type=int, default=500, help="documents taken per claim")
+    ap.add_argument("--claim", type=int, default=0, help="documents taken per claim (default 12 x width)")
     ap.add_argument("--ttl", default="20 minutes", help="how long a claim is ours before it goes back on the list")
     ap.add_argument("--pending-age", default="1 day", help="how old a pending must be before it is re-asked")
     ap.add_argument("--redial-wait", type=int, default=600, help="seconds to wait after a hang-up before re-entering")
@@ -147,7 +164,11 @@ def main():
     roles = [(Documentation(drive_root, args.fresh_days), args.width)]
     for spec in args.also:
         name, _, w = spec.partition(":")
-        roles.append((role_for(name.strip(), drive_root, args), int(w or 40)))
+        try:
+            w = int(w or 40)
+        except ValueError:
+            raise SystemExit("--also takes LANE:WIDTH, e.g. registration:40 (got %r)" % spec)
+        roles.append((role_for(name.strip(), drive_root, args), w))
     print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, storage.documents_root(drive_root), storage.CANON_ROOT), flush=True)
     sys.exit(lane.run(roles, args, HERE))
 

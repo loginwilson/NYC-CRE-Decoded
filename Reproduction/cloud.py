@@ -151,7 +151,10 @@ class Outbox:
         return rows
 
     def count(self):
-        return len(self.load())
+        if not self.path.exists():
+            return 0
+        with self.path.open("rb") as f:
+            return sum(1 for line in f if line.strip())
 
     def drain(self, land, chunk=500):
         """Land everything held, in chunks; keep whatever the cloud did not take.  Returns (landed, left)."""

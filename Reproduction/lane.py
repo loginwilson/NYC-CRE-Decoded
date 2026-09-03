@@ -22,10 +22,20 @@ document - and hands it to run().  run() owns everything else:
   mega lane                  several roles in one process: each crew enters through ITS OWN session,
                              --entry-gap apart (mixing floors through one session made acris serve
                              empty viewer pages for documents whose images exist, run 3, 2026-08-28)
+  one door                   <lane>.lock holds the running pid; a second start on the same machine is
+                             refused while that pid lives (two processes on one lane = two doors = the
+                             ban condition, trap 8); a stale lock from a crash is taken over
+  drive                      a role may define check(ctx); documentation parks when its drive is gone
+                             (a pulled USB left the old lane fetching with every write failing, trap 5)
+
+Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused (notice page) · 3 redials
+exhausted · 4 wall · 5 crash · 6 drive gone.  Every stop writes its reason as the lane's last word.
 """
 import json
+import os
 import pathlib
 import queue
+import signal
 import socket
 import sys
 import threading
@@ -60,6 +70,49 @@ def reason(e):
     t = str(e)
     i = t.rfind("Caused by")
     return (t[i:] if i >= 0 else t[-160:])[:160]
+
+
+def pid_alive(pid):
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, pid)          # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            k.GetExitCodeProcess(h, ctypes.byref(code))
+            return code.value == 259                    # STILL_ACTIVE
+        finally:
+            k.CloseHandle(h)
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def take_lock(path):
+    """One process per lane per machine.  Fail closed: if we cannot prove we are the only door, we
+    do not open one."""
+    try:
+        if path.exists():
+            old = int((path.read_text(encoding="utf-8").strip() or "0"))
+            if pid_alive(old):
+                raise SystemExit("REFUSING TO START: %s is already running as pid %d on this machine."
+                                 " Two processes on one lane = two doors at the source = the ban condition."
+                                 " Stop that one first." % (path.stem, old))
+            print("stale lock from pid %d (not running) - taking the lane" % old, flush=True)
+        path.write_text(str(os.getpid()), encoding="utf-8")
+    except SystemExit:
+        raise
+    except Exception as e:
+        raise SystemExit("REFUSING TO START: could not take the lock %s (%s) - cannot prove this is the only door."
+                         % (path.name, type(e).__name__))
 
 
 def net_up():
@@ -110,6 +163,7 @@ class Crew:
         self.tries = 0                    # redials in the current incident
         self.last_redial = 0.0
         self.idle_until = 0.0             # when the to-do list came back empty, do not ask again before this
+        self.progress_at = time.time()    # when the last PROGRESS line was printed (the rate divides by real time)
 
     # ── the fetcher every worker uses: counts, closes, classifies ────────────────────────
     def get(self, url, referer, timeout=90):
@@ -156,7 +210,7 @@ class Crew:
                 return
             except HTTPStatus as e:
                 with self.lock:
-                    if e.code in (429, 500, 502, 503, 504):
+                    if e.code in (429, 503):             # the wall counts these two only (trap 2)
                         self.wall_streak += 1
                 self.note_fail(doc_id, str(e))
             except Transport as e:
@@ -281,7 +335,7 @@ def _feed(ctx, c):
     if ctx.args.limit and c.stats["ok"] + c.q.qsize() >= ctx.args.limit:
         return
     try:
-        ids = c.cloud.claim(ctx.args.claim, ctx.args.ttl, ctx.args.pending_age)
+        ids = c.cloud.claim(ctx.args.claim or 12 * c.width, ctx.args.ttl, ctx.args.pending_age)
         regs = c.cloud.registries(ids)
     except Exception as e:
         _log(ctx, "%s: claim failed (%s) - will retry" % (c.role.lane, reason(e)))
@@ -310,8 +364,10 @@ def _land(ctx, c, final=False):
 
 def _progress(ctx, c, t0, last):
     s = dict(c.stats)
-    el = max(time.time() - t0, 1e-9)
-    docs = (s["ok"] - last.get("ok", 0)) / 60.0
+    now = time.time()
+    el = max(now - t0, 1e-9)
+    docs = (s["ok"] - last.get("ok", 0)) / max(now - c.progress_at, 1e-9)   # real window, never an assumed minute
+    c.progress_at = now
     _log(ctx, "PROGRESS %dm %s - reqs %s (%.1f/s) - %s pdfs - %s absent - %s pending - short %d - fail %d - reask %d"
          " - width %d/%d - held %d - outbox %d - %.2f docs/s"
          % (el / 60, c.role.lane, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["path"]),
@@ -368,6 +424,21 @@ def run(roles, args, here):
                          % parked.read_text(encoding="utf-8").strip())
     if parked.exists():
         parked.unlink()
+    for role, width in roles:
+        if width <= 0 or width > MAX_WIDTH:
+            raise SystemExit("%s: width %d - a crew has 1 to %d workers; a zero-worker floor does not exist" % (role.lane, width, MAX_WIDTH))
+    lock = here / ("%s.lock" % args.lane)
+    take_lock(lock)
+
+    def _signalled(signum, _frame):
+        ctx.exit_code, ctx.exit_reason = 0, "stopped by signal %d at %s" % (signum, time.strftime("%H:%M"))
+        ctx.stopping.set()
+    for sig in (getattr(signal, "SIGTERM", None), getattr(signal, "SIGHUP", None)):
+        if sig is not None:
+            try:
+                signal.signal(sig, _signalled)
+            except Exception:
+                pass
 
     crews = [Crew(role, width, ctx) for role, width in roles]
     _log(ctx, "%s up on %s - %s - one pooled session per crew, staggered births, keep-alive after, no pacer"
@@ -381,16 +452,15 @@ def run(roles, args, here):
         _land(ctx, c)                                  # anything left in the outbox from last time
         _feed(ctx, c)
     t0 = time.time()
-    for i, c in enumerate(crews):
-        if i:
-            time.sleep(args.entry_gap)
-        c.enter(args.stagger)
-        _log(ctx, "%s: entered, %d workers" % (c.role.lane, c.width))
-
     last = {c.role.lane: dict(c.stats) for c in crews}
     tick = time.time()
     quiet = {c.role.lane: 0 for c in crews}
     try:
+        for i, c in enumerate(crews):
+            if i:
+                time.sleep(args.entry_gap)
+            c.enter(args.stagger)
+            _log(ctx, "%s: entered, %d workers" % (c.role.lane, c.width))
         while not ctx.stopping.is_set():
             time.sleep(1)
             for c in crews:
@@ -412,6 +482,8 @@ def run(roles, args, here):
                 tick = time.time()
                 _control(ctx, crews)
                 for c in crews:
+                    if hasattr(c.role, "check"):
+                        c.role.check(ctx)                         # e.g. the drive is still there
                     _land(ctx, c)
                     s = _progress(ctx, c, t0, last[c.role.lane])
                     asked = s["reqs"] - last[c.role.lane]["reqs"]
@@ -428,6 +500,10 @@ def run(roles, args, here):
     except KeyboardInterrupt:
         ctx.exit_code, ctx.exit_reason = 0, "stopped by hand (Ctrl+C) at %s" % time.strftime("%H:%M")
         ctx.stopping.set()
+    except Exception as e:
+        ctx.exit_code, ctx.exit_reason = 5, "CRASH %s: %s at %s" % (type(e).__name__, reason(e), time.strftime("%H:%M"))
+        ctx.stopping.set()
+        raise                                            # the traceback still prints; the board still gets the word
     finally:
         for c in crews:
             c.leave()
@@ -437,5 +513,9 @@ def run(roles, args, here):
             except Exception:
                 pass
             c.cloud.close()
+        try:
+            lock.unlink()
+        except OSError:
+            pass
         _log(ctx, "run end %.1f min - %s" % ((time.time() - t0) / 60, ctx.exit_reason or "stopped"))
     return ctx.exit_code or 0
