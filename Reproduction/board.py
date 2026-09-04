@@ -140,10 +140,18 @@ class Board:
         alive = [b for b in rows if b[4] is not None and b[4] < self.fresh]
         freshest = min(rows, key=lambda b: b[4] if b[4] is not None else 10 ** 9)
         last = (freshest[5] or "")
+        # a rejection on ANY lane stalls the phase (name None): a fresher "started" on another lane never masks
+        # a refusal (audit 2026-09-03).  For one lane the freshest word across its hosts decides.
+        per_lane = {}
+        for b in rows:
+            age = b[4] if b[4] is not None else 10 ** 9
+            if b[0] not in per_lane or age < per_lane[b[0]][0]:
+                per_lane[b[0]] = (age, b[5] or "")
+        rejected = any(w.startswith("REFUSED") or w.startswith("wall") for _, w in per_lane.values())
         return {"hosts": ", ".join("%s:%s" % (b[1], b[2]) for b in sorted(alive, key=lambda b: b[1])) or None,
                 "width": sum(int(b[2] or 0) for b in alive) or None,
                 "heartbeat_at": freshest[3], "last_event": last or None, "alive": bool(alive),
-                "rejected": last.startswith("REFUSED") or last.startswith("wall")}
+                "rejected": rejected}
 
     def compute(self, now, counters, beats):
         rows = {}
@@ -280,7 +288,8 @@ class Board:
         except Exception as e:
             code = 5
             self.log("CRASH %s: %s" % (type(e).__name__, lane.reason(e)))
-            raise
+            import traceback
+            traceback.print_exc()                       # the process leaves with 5 (a raise made it exit 1)
         finally:
             self.cloud.close()
             try:

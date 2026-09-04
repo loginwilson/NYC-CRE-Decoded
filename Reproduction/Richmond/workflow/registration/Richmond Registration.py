@@ -332,27 +332,33 @@ class Registration:
                     lane._log(ctx, "registration: the cloud did not take %d landing%s - kept in the outbox for the next minute" % (left, "" if left == 1 else "s"))
             except Exception as e:
                 lane._log(ctx, "registration: landing failed (%s) - kept in the outbox" % lane.reason(e))
-        moved = None
+        # the edge never jumps a window still open or holed: a done window moves it only when no earlier window is
+        # open; a done window behind an open one is kept until the open one answers, then both move the edge
         today = self.today()
-        for (a, b) in list(self.windows):
-            if self._window_done(a, b):
-                end = dt.date.fromisoformat(b)
-                if end <= today:
-                    moved = max(moved or end, end)
-                del self.windows[(a, b)]
+        done = {k for k in self.windows if self._window_done(*k)}
+        open_starts = [a for (a, b) in self.windows if (a, b) not in done]
+        earliest_open = min(open_starts) if open_starts else None
+        moved = None
+        for (a, b) in done:
+            end = dt.date.fromisoformat(b)
+            if end <= today and (earliest_open is None or b < earliest_open):
+                moved = max(moved or end, end)
         if moved and moved > self.edge:
             self.edge = moved
             self._save_edge()
         elif to_land:
             self._save_edge()
+        for k in done:
+            if k[1] <= self.edge.isoformat():
+                del self.windows[k]                          # behind the edge: forgotten
 
     def status(self):
         return "edge %s - filled %d - pending %d - holes %d - pages %d" % (self.edge, self.filled, self.pending, self.holes, self.pages)
 
 
 def role(drive_root, args):
-    """This lane's role, for the fleet hosting it with --also registration:N."""
-    return Registration(HERE, args)
+    """This lane's role, for the fleet hosting it with --also registration:N - its own knobs, the host's --edge and --pending-age."""
+    return Registration(HERE, lane.role_args(args, ("edge", "pending_age"), edge="", days=30, every=900, pace=0.3, pending_age="1 hour"))
 
 
 def main():
@@ -362,7 +368,7 @@ def main():
     ap.add_argument("--every", type=int, default=900, help="seconds between walks of the trailing window")
     ap.add_argument("--pace", type=float, default=0.3, help="seconds between the details of one page")
     ap.add_argument("--drive", default="", help="only for --also documentation:N")
-    ap.add_argument("--fresh-days", type=int, default=30, help="only for --also documentation:N")
+    ap.add_argument("--fresh-days", type=int, default=richmond.IMAGE_LAG_DAYS, help="only for --also documentation:N (the 7-day scan lag)")
     lane.add_common_args(ap)
     ap.set_defaults(width=4)
     args = ap.parse_args()

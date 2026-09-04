@@ -188,7 +188,7 @@ def fresh(registry, days):
 
 # ── THE INDEX: ACRIS's own published extract on NYC Open Data (Socrata) - the audit's baseline ──
 # One master per corpus (real property, personal property), refreshed monthly and weeks behind:
-# the good_through_date column says how far.  Measured 2026-09-04: real 17,049,742 distinct ids and
+# the good_through_date column says how far.  Measured 2026-09-03: real 17,049,742 distinct ids and
 # personal 4,544,590, both good through 2026-07-31; both hold the film bands (FT_ + a borough digit
 # 1-4 + a digit; BK_ + a two-digit year 66-81) and the digital ids (2002-12 on).  A different host
 # from the web endpoint, so reading it is never a second door at ACRIS.  Rows repeat (15,348

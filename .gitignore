@@ -21,6 +21,8 @@ _working/
 *.parked
 *.part
 *.lock
+*.tmp
+*.db-journal
 refusals/
 synchronization.edge.json
 synchronization.edge.tmp

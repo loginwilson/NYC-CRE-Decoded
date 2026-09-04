@@ -101,7 +101,8 @@ class Documentation:
                 break
             with crew.lock:
                 crew.stats["reask"] += 1
-            time.sleep(0.6 * (attempt + 1))
+            if attempt < 2:
+                time.sleep(0.6 * (attempt + 1))          # 0.6 s, then 1.2 s; no wait after the last miss
         if total is None:
             raise lane.Retry("viewer page did not identify itself after 3 asks (%d bytes, ct=%s)" % (len(body), ct))
         if total <= 0:

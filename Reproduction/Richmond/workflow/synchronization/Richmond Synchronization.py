@@ -203,6 +203,11 @@ class Synchronization:
                 lane._log(ctx, "synchronization: %s window %s..%s failed three asks - a hole; the next heal asks again" % (key[0], key[1], key[2]))
         new_ids = {}
         moved = None
+        # the edge never jumps a window still out or holed: only windows before the earliest open one may move it
+        answered = {r["doc_id"] for r in results}
+        open_starts = ([k[1] for k in self.inflight if k not in answered and k[0] != CONTROL]
+                       + [k[1] for k in self.reask if k[0] != CONTROL])
+        earliest_open = min(open_starts) if open_starts else None
         for r in results:
             key, (kind, rows) = r["doc_id"], r["value"]
             self.inflight.pop(key, None)
@@ -222,7 +227,7 @@ class Synchronization:
                 if d not in self.seen:
                     new_ids[d] = row.get("recorded", "")
             end = dt.date.fromisoformat(key[2])
-            if end <= self.today():
+            if end <= self.today() and (earliest_open is None or key[2] < earliest_open):
                 moved = max(moved or end, end)
         if new_ids:
             try:
@@ -256,8 +261,8 @@ def _iso(recorded):
 
 
 def role(drive_root, args):
-    """This lane's role, for the fleet hosting it with --also synchronization:N."""
-    return Synchronization(HERE, args)
+    """This lane's role, for the fleet hosting it with --also synchronization:N - its own knobs, the host's --edge."""
+    return Synchronization(HERE, lane.role_args(args, ("edge",), edge="", every=10, heal_every=900, heal_days=30, pace=0.3))
 
 
 def main():
@@ -268,7 +273,7 @@ def main():
     ap.add_argument("--heal-days", type=int, default=30, help="the trailing window re-read by the heal (at most the county's 30-day cap)")
     ap.add_argument("--pace", type=float, default=0.3, help="seconds between the pages of one window")
     ap.add_argument("--drive", default="", help="only for --also documentation:N")
-    ap.add_argument("--fresh-days", type=int, default=30, help="only for --also documentation:N")
+    ap.add_argument("--fresh-days", type=int, default=richmond.IMAGE_LAG_DAYS, help="only for --also documentation:N (the 7-day scan lag)")
     lane.add_common_args(ap)
     ap.set_defaults(width=4)
     args = ap.parse_args()

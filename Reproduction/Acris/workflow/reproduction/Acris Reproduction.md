@@ -11,7 +11,9 @@
 > that reproduces), **ACRIS UPDATE** (the board that tracks it), and
 > **ACRIS AUDIT** (the enumeration safety check — NOT part of the cycle).
 
-## 0 · THE FLEET PROGRAM — `Acris Reproduction.py` (2026-09-04)
+> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `SCHEMA.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `SCHEMA.md`, the lane md and `SCHEMA.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `fleet.py` roster is `Reproduction/fleet.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_lane.py`) are the lane programs under `workflow/`.
+
+## 0 · THE FLEET PROGRAM — `Acris Reproduction.py` (2026-09-03)
 
 The cycle's lanes as one launch: `Reproduction/Acris/workflow/reproduction/Acris Reproduction.py`
 in the NYC-CRE-Decoded tree. Each lane is its own program with its own lock, park, control file
@@ -36,7 +38,7 @@ relaunches what a relaunch can cure and never relaunches what a person must deci
 | one fleet per machine | `reproduction.lock`; the lanes' own locks refuse a double, so a lane running by hand is left alone | trap 8 |
 | cross-station | the same file on workstation 2 with `--drive NYCCRED2`; `status` reads `reproduction.acris_heartbeats` | SCHEMA.md |
 
-Proven 2026-09-04 by a simulation over fake lane programs: the order and the gap; crashes
+Proven 2026-09-03 by a simulation over fake lane programs: the order and the gap; crashes
 relaunched and the cap; a refusal stilling every lane; the drive's return; a lane already running
 refused and left; the mega lane; width, stop and status. Not yet run on the real lanes: that waits
 for the data move.

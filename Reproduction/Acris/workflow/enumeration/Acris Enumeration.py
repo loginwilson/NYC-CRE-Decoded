@@ -701,7 +701,9 @@ def main():
         code = 0
     except Exception as e:
         rep("CRASH %s: %s" % (type(e).__name__, lane.reason(e)))
-        raise
+        import traceback
+        traceback.print_exc()
+        code = 5                                     # the process leaves with 5 (a raise made it exit 1)
     finally:
         c.close()
         rep("exit %d" % code)

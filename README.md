@@ -27,7 +27,7 @@ Two sources, `acris` and `richmond`. Per source one workflow table, one row per 
 
 **Two workstations, no overlap.** The table is the only to-do list. A lane calls `claim()` for a slice of empty cells with its name and an expiry on them, atomic and skip-locked so two machines never receive the same document; it fills them with `land()` once a minute, which drops the claims; expired claims go back on the list. Each running lane writes `heartbeat()` once a minute. Synchronization runs at home; registration and documentation on any machine.
 
-**The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells filled against rows), tab 2 is the lanes (each cell filled against rows), both with 60-second and 5-minute rate, increase, percent and eta, landed, needed, percent of total, status and as-of. The status follows the lane's own heartbeat: `active` (fresh heartbeat, landed rising) · `pending` (no fresh heartbeat, not complete: paused or parked) · `stalled` (the lane parked on a refusal after its tries) · `complete` (100 %).
+**The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells filled against rows), tab 2 is the lanes (each cell filled against rows), both with 60-second and 5-minute rate, increase, percent and eta, landed, needed, percent of total, status and as-of. The status follows the lane's own heartbeat: `active` (fresh heartbeat, landed rising) · `pending` (no fresh heartbeat, not complete: paused or parked) · `stalled` (the lane's last word is a refusal or a wall; a refusal parks at once) · `complete` (100 %).
 
 ## Layout
 

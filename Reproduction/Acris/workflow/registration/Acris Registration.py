@@ -79,7 +79,8 @@ class Registration:
                 break
             with crew.lock:
                 crew.stats["reask"] += 1                 # a page that is not about our document: ask again
-            time.sleep(0.5 * (attempt + 1))
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1))          # 0.5 s, then 1 s; no wait after the last miss
         else:
             raise lane.Retry("page does not echo the id after 3 asks (%d bytes, ct=%s)" % (len(body), ct))
         rec = acris.parse_acris(html)

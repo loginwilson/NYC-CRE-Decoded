@@ -17,7 +17,7 @@ One machine: the edge is local state. `--width` defaults to 4 walkers (the day w
 
 | rule | what the lane does | origin |
 |---|---|---|
-| the edge | `synchronization.edge.json` holds the last day whose listing was walked. A start without it needs `--edge`, never a guess. The edge moves only after a window's ids are in the table, so a crash re-walks and loses nothing | the acris lane's edge; the census's last swept day |
+| the edge | `synchronization.edge.json` holds the last day whose listing was walked. A start without it needs `--edge`, never a guess. The edge moves only over windows whose ids are in the table and never past a window still in flight or holed, so a crash re-walks from the last contiguous day and loses nothing | the acris lane's edge; the census's last swept day |
 | the day | today's listing every `--every` seconds; a new filing lands within seconds | rc_lane's probe every 10 s (RICHMOND REPRODUCTION.md §1) |
 | the heal | the trailing `--heal-days` (30, inclusive) every `--heal-every` seconds (15 min); never a window longer than the county's cap | rc_lane's rd heal, 15 min over 30 days; the 30-day cap answers a silent zero beyond it |
 | catch-up | on a start, the days between the edge and the heal window are walked first, in windows of at most 30 days | the census's resumable windows |
@@ -47,8 +47,8 @@ A date edge sees what the county lists for the dates it re-reads. A document lis
 
 ## Working files
 
-Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`, `synchronization.outbox.jsonl`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted or the probe broken · 4 wall · 5 crash.
+Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted or the probe broken · 4 wall · 5 crash.
 
 ## History
 
-2026-09-04 — written from `rc_lane.py` (the probe and the heal cadence), `rc_window.py` (the listing route, the row pattern, the control) and the richmond audit's window rules, every line read. Proven offline against a fake crew and a fake cloud (the control first, the catch-up from the edge, the heal window inclusive of thirty days, ids landed once, the edge moving only after the rows are in, a hole after three failed asks, a control that fails three asks re-asked, a broken control parking the lane, the fail-closed edge file) and by a simulated walk against the live cloud with throwaway ids and no county request: a catch-up window, a heal window, the day window with a filing appearing mid-run, a window failing every ask recorded as a hole, the edge file at today, the counters moved by exactly the rows inserted. Not yet proven: a real listing read from the lane, which waits for the data move.
+2026-09-03 — written from `rc_lane.py` (the probe and the heal cadence), `rc_window.py` (the listing route, the row pattern, the control) and the richmond audit's window rules, every line read. Proven offline against a fake crew and a fake cloud (the control first, the catch-up from the edge, the heal window inclusive of thirty days, ids landed once, the edge moving only after the rows are in, a hole after three failed asks, a control that fails three asks re-asked, a broken control parking the lane, the fail-closed edge file) and by a simulated walk against the live cloud with throwaway ids and no county request: a catch-up window, a heal window, the day window with a filing appearing mid-run, a window failing every ask recorded as a hole, the edge file at today, the counters moved by exactly the rows inserted. Not yet proven: a real listing read from the lane, which waits for the data move.

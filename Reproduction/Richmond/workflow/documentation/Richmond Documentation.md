@@ -7,7 +7,7 @@ The documentation lane of the richmond reproduction, as one program: `Richmond D
     python "Richmond Documentation.py" --drive NYCCRED1          home
     python3 "Richmond Documentation.py" --drive NYCCRED2         workstation 2
 
-The same file runs on every workstation. `--drive` names the drive by its label. `--width` defaults to 16 (the proven pull width on the courts host). While it runs, `documentation.control` beside it takes `width=N` or `stop`. `--also registration:4` hosts the registration crew in the same process through its own entry. `--limit N` is a test run. A lane that parked itself refuses to start again until `--unpark`.
+The same file runs on every workstation. `--drive` names the drive by its label. `--width` defaults to 8 (the measured pull width on the courts host). While it runs, `documentation.control` beside it takes `width=N` or `stop`. `--also registration:4` hosts the registration crew in the same process through its own entry. `--limit N` is a test run. A lane that parked itself refuses to start again until `--unpark`.
 
 ## Two hosts, three outcomes
 
@@ -44,7 +44,7 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 
 | knob | value | how it was measured, how it fails |
 |---|---|---|
-| width | 16 | the courts-host pull width that measured 10+ docs/s with one kept-alive connection per worker; richmond has no metronome — latency is the backpressure |
+| width | 8 | rc_bench 2026-08-25, one variable: 8 pullers → 28.23 docs/s, 16 → 18.76 (past the pipe, self-contending); richmond has no metronome — latency is the backpressure |
 | fresh-days | 7 (`richmond.IMAGE_LAG_DAYS`) | 10 of 10 documents recorded on a Friday read no-image then and present after the weekend; the nightly maturation used the same 7 |
 | cooldown | 600 s | the hold before the one probe; long enough that a rate reaction on the courts host has passed |
 | token | mint and pull back to back | tokens minted ahead expired (~10 min): 786 dead tokens one morning, 2026-08-22 |
@@ -65,4 +65,4 @@ A RESTRICTED document is recorded `absent` (checked; the courts host refuses it 
 
 ## History
 
-2026-09-04 — written from the lane that ran before it (`rc_lane.py`: the mint's three outcomes, the per-host pools, the token expiry, the honest-UA finding on the courts host, the refusal verdict, `_no_image` and `_in_lag`; `rc_pdf_pull.py`; `rc_source.py`), every line read. Proven offline (`test_richmond_doc_offline.py`: the three outcomes, the path rule, the lag, a pdf minted and pulled and written whole, the session prepared once, no image → pending/absent/asked again, the mint's 503/403/wire/refusal shapes, the pull's html/500/429, the verdict both ways, the restricted list surviving a restart) and by a simulation against the live cloud with throwaway rows and no request to either host (`test_richmond_doc_sim.py`: paths, a pending and an absent landed through the documentation lane, the lane and phase counters moving by the newly filled cells, cleanup + reconcile). Not yet proven: a real mint and pull.
+2026-09-03 — written from the lane that ran before it (`rc_lane.py`: the mint's three outcomes, the per-host pools, the token expiry, the honest-UA finding on the courts host, the refusal verdict, `_no_image` and `_in_lag`; `rc_pdf_pull.py`; `rc_source.py`), every line read. Proven offline (`test_richmond_doc_offline.py`: the three outcomes, the path rule, the lag, a pdf minted and pulled and written whole, the session prepared once, no image → pending/absent/asked again, the mint's 503/403/wire/refusal shapes, the pull's html/500/429, the verdict both ways, the restricted list surviving a restart) and by a simulation against the live cloud with throwaway rows and no request to either host (`test_richmond_doc_sim.py`: paths, a pending and an absent landed through the documentation lane, the lane and phase counters moving by the newly filled cells, cleanup + reconcile). Not yet proven: a real mint and pull.

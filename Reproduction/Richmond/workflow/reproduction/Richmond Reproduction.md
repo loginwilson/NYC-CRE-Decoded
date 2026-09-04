@@ -12,6 +12,44 @@
 > **RICHMOND AUDIT** (the enumeration safety check — NOT part of the
 > cycle; run it whenever you want a proof).
 
+> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `SCHEMA.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `SCHEMA.md`, the lane md and `SCHEMA.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `fleet.py` roster is `Reproduction/fleet.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_lane.py`) are the lane programs under `workflow/`.
+
+## 0 · THE FLEET PROGRAM — `Richmond Reproduction.py` (2026-09-03)
+
+The cycle's lanes as one launch: `Reproduction/Richmond/workflow/reproduction/Richmond Reproduction.py`
+in the NYC-CRE-Decoded tree, a thin site over the shared `Reproduction/fleet.py` (the same machinery
+runs the acris fleet). Each lane is its own program with its own lock, park, control file and log; the
+fleet launches them in the cycle's order, one door at a time, and watches them. It relaunches what a
+relaunch can cure and never relaunches what a person must decide.
+
+    python "Richmond Reproduction.py" --drive NYCCRED1 --edge 2026-08-25     home: synchronization x4, registration x4, documentation x8 - one process per lane, 20 s apart; --edge on the FIRST start only
+    python "Richmond Reproduction.py" --drive NYCCRED2 --lanes documentation:8
+                                                                           workstation 2: documentation only (see "one station" below)
+    python "Richmond Reproduction.py" status                                 this machine's lanes, and every workstation's heartbeats in the cloud
+    python "Richmond Reproduction.py" stop [lane]                            `stop` into the control file(s), a 90 s grace, then force
+    python "Richmond Reproduction.py" width documentation=24                 into the lane's control file (read within a minute)
+
+| rule | what the fleet does | origin |
+|---|---|---|
+| one process per lane | the default; `--mega` is the exception | the GIL is the throughput wall (acris §3) |
+| one door per lane, `--entry-gap` apart | lanes launched 20 s apart; births inside a lane are its own `--stagger` | three doors, never one moment |
+| one station for the walkers | synchronization and registration WALK the county's listing (the grant is per listing page, so no claim can split that work); two walkers of the same window would spend the county's requests twice. Workstation 2 runs documentation only, which claims its slice from the table | Richmond Registration.md, "one machine" |
+| the edge is a date | `--edge YYYY-MM-DD` goes to synchronization and registration on a first start (each keeps its own `*.edge.json` afterwards); a later `--edge` that disagrees with the file is refused | the two walkers' edge files |
+| widths | 4 / 4 / 8: the county has no metronome, latency is its backpressure; 8 pullers measured 28.23 docs/s against 18.76 at 16 (rc_bench 2026-08-25, one variable) | §3 calibrations |
+| pending window | documentation's `--fresh-days` defaults to the measured 7-day scan lag | rc_source IMAGE_LAG_DAYS |
+| what each exit means | 0 done · 1 refused to start: left alone · 2 REFUSED: every lane told to stop, exit 2, a person decides · 3 redials exhausted: relaunch after 300 s (the lane already waited out its own dead window) · 4 wall: parked by the lane, left · 5 crash: relaunch after 60 s · 6 drive gone: wait for the drive, relaunch with `--unpark` | fleet.py |
+| the relaunch cap | more than `--relaunch-cap` (3) launches of one lane in an hour parks it with the reason | every start is a stampede of handshakes |
+| a parked lane is never relaunched | the drive's return is the one exception, because the fleet can verify it | the park is the lane's word, or a person's |
+| logs appended, never truncated | `<lane>/<lane>.log` with a fleet banner at every launch | 2026-09-03 |
+| one fleet per machine | `reproduction.lock`; the lanes' own locks refuse a double, so a lane running by hand is left alone | trap 8 |
+| cross-station | `status` reads `reproduction.richmond_heartbeats` | SCHEMA.md |
+
+Proven 2026-09-03 by the fleet simulation over fake `Richmond <Lane>.py` programs (the same
+simulation that proved the acris fleet, pointed at this site): the order and the gap; crashes
+relaunched and the cap; a refusal stilling every lane; the drive's return; a lane already running
+refused and left; the mega lane; width, stop and status. Not yet run on the real lanes: that waits
+for the data move.
+
 ## 1 · THE CYCLE (login's words — this IS richmond reproduction)
 
 **synchronization** — doc ids flow into the db, with the MONITOR (the

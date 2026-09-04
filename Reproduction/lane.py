@@ -47,6 +47,8 @@ import socket
 import sys
 import threading
 import time
+import traceback
+import types
 import urllib.request
 
 import requests
@@ -154,6 +156,17 @@ def sibling_role(source, name, here, drive_root, args):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.role(drive_root, args)
+
+
+def role_args(args, shared=(), **defaults):
+    """A hosted crew's own arguments (--also): its OWN defaults, overlaid only with the shared names the host
+    carries (--edge, --pending-age, --fresh-days ...).  A host's --every is the host's, never the guest's
+    (audit 2026-09-03: a guest read its knobs off the host's namespace and crashed at start)."""
+    ns = types.SimpleNamespace(**defaults)
+    for k in shared:
+        if hasattr(args, k):
+            setattr(ns, k, getattr(args, k))
+    return ns
 
 
 def roles_for(source, args, here, drive_root, own):
@@ -506,16 +519,22 @@ def _redial(ctx, c):
     if c.tries >= ctx.args.tries:
         ctx.park("PARKED: %d redials in a row failed (%s) at %s" % (c.tries, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=3)
         return
+    _log(ctx, "%s: DEAD TRANSPORT (%d transport errors in a row, nothing landed since %ds) - hanging up"
+         % (c.role.lane, c.transport_streak, int(now - c.last_success)))
+    c.leave()
+    _land(ctx, c)                                       # what the crew had already fetched lands now
+    while not net_up() and not ctx.stopping.is_set():
+        _log(ctx, "%s: network is DOWN - waiting, no try spent" % c.role.lane)      # wifi is not a block
+        time.sleep(60)
+    if ctx.stopping.is_set():
+        return
     c.tries += 1
-    c.last_redial = now
-    _log(ctx, "%s: DEAD TRANSPORT (%d transport errors in a row, nothing landed since %ds) - hanging up, redial %d/%d after %ds"
-         % (c.role.lane, c.transport_streak, int(now - c.last_success), c.tries, ctx.args.tries, ctx.args.redial_wait))
+    c.last_redial = time.time()
+    _log(ctx, "%s: redial %d/%d after %ds - the dead window, no line open" % (c.role.lane, c.tries, ctx.args.tries, ctx.args.redial_wait))
     try:
         c.cloud.heartbeat(0, "hang-up: redial %d/%d at %s" % (c.tries, ctx.args.tries, time.strftime("%H:%M")))
     except Exception:
         pass
-    c.leave()
-    _land(ctx, c)                                       # what the crew had already fetched lands now
     word = "hang-up: waiting to redial %d/%d" % (c.tries, ctx.args.tries)
     waited = 0
     while waited < ctx.args.redial_wait and not ctx.stopping.is_set():
@@ -526,9 +545,6 @@ def _redial(ctx, c):
                 c.cloud.heartbeat(0, word)              # the board keeps seeing the lane while it waits
             except Exception:
                 pass
-    while not net_up() and not ctx.stopping.is_set():
-        _log(ctx, "%s: network is DOWN - waiting, no try spent" % c.role.lane)
-        time.sleep(60)
     if ctx.stopping.is_set():
         return
     wait_for_pool(ctx, c)
@@ -629,7 +645,8 @@ def run(roles, args, here):
     except Exception as e:
         ctx.exit_code, ctx.exit_reason = 5, "CRASH %s: %s at %s" % (type(e).__name__, reason(e), time.strftime("%H:%M"))
         ctx.stopping.set()
-        raise                                            # the traceback still prints; the board still gets the word
+        traceback.print_exc()                            # the traceback prints and the process leaves with 5 - a raise here
+                                                         # made the interpreter exit 1, which the fleet reads as "refused to start"
     finally:
         for c in crews:
             c.leave()

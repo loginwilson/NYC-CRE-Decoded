@@ -208,8 +208,8 @@ class Synchronization:
 
 
 def role(drive_root, args):
-    """This lane's role, for the fleet hosting it with --also synchronization:N."""
-    return Synchronization(HERE, args)
+    """This lane's role, for the fleet hosting it with --also synchronization:N - its own knobs, the host's --edge."""
+    return Synchronization(HERE, lane.role_args(args, ("edge",), edge=0, every=60, watch=8, bite=1000, widen=64, widen_after=5))
 
 
 def main():

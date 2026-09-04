@@ -271,7 +271,8 @@ def role(drive_root, args):
     """This lane's role, for a sibling lane hosting it with --also documentation:N."""
     if not drive_root:
         raise SystemExit("documentation needs --drive <label>: the drive its files are written to")
-    return Documentation(HERE, drive_root, getattr(args, "fresh_days", richmond.IMAGE_LAG_DAYS), getattr(args, "cooldown", 600))
+    a = lane.role_args(args, ("fresh_days", "cooldown"), fresh_days=richmond.IMAGE_LAG_DAYS, cooldown=600)
+    return Documentation(HERE, drive_root, a.fresh_days, a.cooldown)
 
 
 def main():
@@ -281,7 +282,7 @@ def main():
                     help="a document recorded within this many days with no image is pending, not absent (the measured scan lag)")
     ap.add_argument("--cooldown", type=int, default=600, help="seconds every worker holds while a 401/403 from the courts host is arbitrated")
     lane.add_common_args(ap)
-    ap.set_defaults(width=16)
+    ap.set_defaults(width=8)          # rc_bench 2026-08-25: 8 pullers 28.23 docs/s, 16 -> 18.76 (self-contending past the pipe)
     args = ap.parse_args()
     args.lane = "documentation"
 

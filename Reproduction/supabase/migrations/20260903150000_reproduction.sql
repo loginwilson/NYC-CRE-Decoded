@@ -23,7 +23,7 @@
 --
 -- THE COUNTING RULE (speed): the board never counts 21.6M rows once a minute.  land() adds what it landed to
 -- the lane's and the phase's `landed` as it lands (exact, a few rows per minute); reconcile() recounts from the
--- partial indexes on demand (hourly, and after every load) and overwrites, so the counters can never drift for
+-- partial indexes on demand (on demand: after a load, after a hand edit - never on the tick) and overwrites, so the counters can never drift for
 -- long.  The 60-second and 5-minute rates are the board's subtraction of `landed` between its own ticks.
 --
 -- The path is always labelled as the One Touch (D:\...).  A second workstation mounts its drive under the same
@@ -360,7 +360,7 @@ comment on function reproduction.heartbeat is 'a running lane''s sign of life fr
 
 -- reconcile(source) -> recount landed and needed from the table itself and overwrite the counters.
 -- Uses the primary key and the four partial indexes only (index-only scans), so it costs seconds on the full
--- table and nothing on the lanes.  The board calls it hourly and after every load; land() keeps the counters
+-- table and nothing on the lanes.  The board calls it on demand only and after every load; land() keeps the counters
 -- current between calls.  Never repairs a number: it measures.
 create or replace function reproduction.reconcile(p_source text)
 returns table (what text, landed bigint, needed bigint)
@@ -388,4 +388,4 @@ begin
     union all select 'registration', n_rows - n_reg, n_rows
     union all select 'documentation', n_rows - n_doc, n_rows;
 end $$;
-comment on function reproduction.reconcile is 'recount landed and needed for the phase and the three lanes from the indexes and overwrite the counters; hourly and after loads';
+comment on function reproduction.reconcile is 'recount landed and needed for the phase and the three lanes from the indexes and overwrite the counters; on demand - after loads and hand edits, never on the tick';
