@@ -28,12 +28,16 @@ document - and hands it to run().  run() owns everything else:
   drive                      a role may define check(ctx); documentation parks when its drive is gone
                              (a pulled USB left the old lane fetching with every write failing, trap 5)
 
-THE REDIAL (2026-09-03, proven 21:37): a cut line is never re-dialed by the worker.  A burst of transport
-errors inside HANGUP_WINDOW_S (10 s) is the far side cutting the lines: the crew hangs up AT ONCE
-(Crew.hung_up -> _redial), waits --redial-wait (600 s, the dead window) with no line open, and re-enters
+THE REDIAL (2026-09-03, proven 21:37; the wait re-set 2026-09-04): a cut line is never re-dialed by the
+worker.  A burst of transport errors inside HANGUP_WINDOW_S (10 s) is the far side cutting the lines: the
+crew hangs up AT ONCE (Crew.hung_up -> _redial), waits --redial-wait (1,800 s) times the try number with no
+line open - 30 minutes before the first re-entry, 60 before the second, 90 before the third - and re-enters
 ONCE, staggered, after exit_pool() shows five draws in one block.  A worker that hit the wire pauses
-HANGUP_PAUSE_S (5 s) before its next request.  Before this rule the old lane re-handshaked 40-wide on every
-request for the five minutes its slow breaker needed - the 40x5 pattern - and each relaunch was cut sooner.
+HANGUP_PAUSE_S (5 s) before its next request.  A cut is ACRIS's ordinary session end, not a block: on
+2026-09-03 it closed all forty lines five times after 38-189 minutes and every re-entry made a minute after
+the slow breaker was served; on 2026-09-04 re-entries 10 and 18 minutes after a cut were refused at once and
+ones after 30 and 52 minutes were served for an hour at the golden rate.  Never a re-entry inside a minute:
+the 19:43 storm (nine relaunches in 96 minutes, each cut sooner) is what that looks like.
 
 Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused (notice page) · 3 redials
 exhausted · 4 wall · 5 crash · 6 drive gone.  Every stop writes its reason as the lane's last word.
@@ -134,7 +138,7 @@ def add_common_args(ap):
     ap.add_argument("--pending-age", default="1 hour",
                     help="re-check a pending once its last check is this old; pendings ride ahead of the backfill, and when"
                          " the lane is up to date every claim is pendings (one request per pending per interval)")
-    ap.add_argument("--redial-wait", type=int, default=600, help="seconds to wait after a hang-up before re-entering")
+    ap.add_argument("--redial-wait", type=int, default=1800, help="seconds of silence after a hang-up before the first re-entry; the second try waits twice this, the third three times")
     ap.add_argument("--tries", type=int, default=3, help="redials per incident before parking")
     ap.add_argument("--no-pool-check", action="store_true", help="skip the exit-pool check at entry (tests only)")
     ap.add_argument("--entry-gap", type=float, default=20.0, help="seconds between one crew's entry and the next (--also)")
@@ -530,14 +534,15 @@ def _redial(ctx, c):
         return
     c.tries += 1
     c.last_redial = time.time()
-    _log(ctx, "%s: redial %d/%d after %ds - the dead window, no line open" % (c.role.lane, c.tries, ctx.args.tries, ctx.args.redial_wait))
+    wait = ctx.args.redial_wait * c.tries               # the ladder (2026-09-04): 30, then 60, then 90 minutes
+    _log(ctx, "%s: redial %d/%d after %ds - the dead window, no line open" % (c.role.lane, c.tries, ctx.args.tries, wait))
     try:
         c.cloud.heartbeat(0, "hang-up: redial %d/%d at %s" % (c.tries, ctx.args.tries, time.strftime("%H:%M")))
     except Exception:
         pass
     word = "hang-up: waiting to redial %d/%d" % (c.tries, ctx.args.tries)
     waited = 0
-    while waited < ctx.args.redial_wait and not ctx.stopping.is_set():
+    while waited < wait and not ctx.stopping.is_set():
         time.sleep(10)
         waited += 10
         if waited % 60 == 0:

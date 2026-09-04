@@ -24,7 +24,7 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 | whole or nothing | the pdf is written to a `.part` file and renamed; the store never holds a truncated pdf | 2026-09-03 |
 | failures never stop it | a fetch error leaves the document empty for a later pass and writes the reason to `documentation.fails.jsonl`; a transport error gets one more try after a 5 s pause | login 2026-09-03, "a fetch error never stops a lane"; stale keep-alives after an idle spell |
 | refusal | HTTP 200 carrying the Bandwidth Notice is the only block: park at once, write the reason, exit 2, no retry, no rotation; the page is preserved under `refusals/` | fetch_pages / live_delta detectors; the 08-26 false positive |
-| hang-up | every line dropped at once (transport errors, nothing landing) is dead transport: hang up, wait `--redial-wait`, wait for the wire, re-enter through one fresh entry; three tries per incident, then park, exit 3 | §17 addenda 15–16, the dead window of 6–10 min; login 2026-09-03 01:0x, three tries |
+| hang-up | every line dropped at once (transport errors, nothing landing) is dead transport - ACRIS's ordinary session end, not a block: hang up, wait `--redial-wait` times the try number (30, 60, 90 minutes) with no line open, wait for the wire, re-enter through one fresh entry; three tries per incident, then park, exit 3; never a re-entry inside a minute | §17 addenda 15–19: five cuts on the golden day after 38–189 min, each prompt re-entry served; on 09-04 re-entries at 10 and 18 min refused, at 30 and 52 served; login 2026-09-03 01:0x, three tries |
 | wifi is not a block | a network outage waits without spending a try | login 2026-09-03 01:0x |
 | wall | forty consecutive 503 or 429 on the crew with no success between: park, exit 4 | trap 2 |
 | drive | once a minute the drive must still be there; a pulled drive parks the lane, exit 6 | trap 5 |
@@ -43,7 +43,7 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 | fresh-days | 30 | a document recorded inside the window with no image is `pending`, past it `absent` |
 | pending-age | 1 hour | one request per pending per interval; the old lane used 5 minutes in a hot queue |
 | claim | 12 × width, 20-minute ttl | a slice turns over in about two minutes at 40 workers; an expired claim goes back on the list |
-| redial-wait | 600 s | after a drop every connection from here gets EOF for 6–10 min; a redial at +6 burned, one at +12 lived |
+| redial-wait | 1,800 s × the try number | the wait the door accepts after a cut varies by day: about 7 min served five times on 09-03; 10 and 18 min refused on 09-04, 30 and 52 served; each refused try lengthens the next |
 | tries | 3 per incident | an incident closes after 30 minutes of service |
 | re-asks | 3, then a later pass | the soft refusal resolves on a calm retry; a fourth ask is spent budget |
 | wall | 40 consecutive 503/429 | per crew; another crew's successes never silence it |
@@ -57,5 +57,7 @@ Beside this file, never in git: `documentation.lock` (the running pid), `documen
 `Reproduction/lane.py` (the entry and the policies every lane shares), `Reproduction/cloud.py` (claim, land, heartbeat, the outbox), `Reproduction/storage.py` (the drive by label, the One Touch layout), `Reproduction/Acris/acris.py` (the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, the page count, where a document files).
 
 ## History
+
+2026-09-04 — the wait after a cut re-set from 600 s to 1,800 s times the try number, from the night of 09-03/04: the golden-day lane file (byte-identical to the file that ran five of the six golden runs) was refused 18 minutes after a cut and served after 30, at the golden rate; the golden day itself was six runs with five cuts (ACRIS REPRODUCTION.md addendum 19). The old lane's supervisor and runbook carry the same window.
 
 2026-09-03 — written from the lane that ran before it (the document floor of `acris_reproduction.py`, `acris_pdf.py`, `night_supervisor.py`), every line read. Proven offline (the drive lookup, the path rule, freshness, the page count, the refusal detector against a real notice page preserved that morning) and by three simulated runs against the live cloud with throwaway rows and no ACRIS request: the loop (claim → fetch → land → counters → claims released → heartbeat → outbox → a width change → a limit stop), the guards (a second start refused, a parked lane refused, a zero-width crew refused), and the two stop policies (hang-up → redial → redial → park, exit 3; refusal → park at once, exit 2, restart refused). Not yet proven: a real fetch. The cloud table holds no rows until the data moves in, which is the last step, after every lane's code is done and connected.

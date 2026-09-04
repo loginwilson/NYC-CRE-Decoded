@@ -45,7 +45,7 @@ In every lane folder a pair named for the source and the lane: `Acris Documentat
 ## Rules that do not bend
 
 - One entry per client: one pooled session, one connection per worker at birth, keep-alive after, no further handshakes. Never a handshake burst.
-- A block is HTTP 200 plus the Bandwidth Notice page, nothing else. A redial into a notice is refused; the notice lifts on its own clock. A hang-up (the far side closing every line at once) is redialed by the supervisor: wifi down waits, otherwise three tries per incident, then park with the reason. A fetch error never stops a lane.
+- A block is HTTP 200 plus the Bandwidth Notice page, nothing else. A redial into a notice is refused; the notice lifts on its own clock. A hang-up (the far side closing every line at once) is ACRIS's ordinary session end, not a block: the lane hangs up, waits 30 minutes with no line open (60 before a second try, 90 before a third), and re-enters once; wifi down waits; three tries per incident, then park with the reason. Never a re-entry inside a minute. A fetch error never stops a lane.
 - Never kill a lane on a fail count; its own detectors decide. Never edit running code.
 - Never repair a number to make a check pass. Report the failure.
 - Env files, databases, documents and bulk inputs never enter git. The One Touch is storage only; code lives here.
