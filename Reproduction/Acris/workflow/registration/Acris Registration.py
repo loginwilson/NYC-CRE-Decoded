@@ -23,12 +23,14 @@ The rules are kept from the register floor that ran before this one:
   failures    a fetch error never stops the lane: the document stays empty for a later pass and the
               reason is written to registration.fails.jsonl
   refusal     HTTP 200 + the Bandwidth Notice page = a block: park at once, no retry, no rotation
-  hang-up     every line dropped at once = dead transport: redial (wifi down waits; 3 tries per
-              incident, --redial-wait apart), then park with the reason
+  hang-up     the session closed (every worker hit the wire inside 60 s, nothing landed for 10 s): hang up
+              at once, drop the cut batch, wait --redial-wait (60 s with the backoff) with no line open, claim
+              a fresh batch, re-enter once with births 5 s apart; 4 re-entries per incident, then park
   wall        40 consecutive 503/429 with no success between: park with the reason
   width       --width at launch; `width=30` or `stop` in registration.control while it runs
-  mega lane   --also documentation:40 --drive NYCCRED1 hosts the documentation crew in this process,
-              entered --entry-gap later through its own session (one entry per floor, as measured)
+  mega lane   --also documentation:10 --drive NYCCRED1 hosts the documentation crew in this process through
+              its own session, one ramp at a time, --entry-gap apart (one entry per floor, as measured);
+              each crew runs the cycle on its own
   pending     a registry pending goes back to the backfill like a document pending: re-checked once
               its last check is --pending-age old, ahead of the empties
   no overlap  claim() hands this workstation its own slice; land() fills the cells once a minute,
@@ -40,8 +42,8 @@ Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash. 
 to start until --unpark.
 
 The shared pieces it imports: ../../../lane.py (the entry and the policies), ../../../cloud.py (claim,
-land, heartbeat), ../../acris.py (the ACRIS rules: URLs minted from the id, the one user-agent, the
-refusal detector, the page parser).
+land, heartbeat), ../../rulebook/acris.py (the ACRIS rules: URLs minted from the id, the one user-agent,
+the refusal detector, the page parser).
 """
 import argparse
 import pathlib

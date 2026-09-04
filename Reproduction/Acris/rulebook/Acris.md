@@ -26,7 +26,7 @@ ACRIS refuses with HTTP 200 carrying its Bandwidth Notice page - never a status 
 - Two shapes are a refusal: any of the notice's own phrases (`NOTICE_SIGNALS`: "further access to acris is denied", "acris bandwidth notice", "automated scripts/robots", "exceeded the bandwidth limits", "subscription data services"; or the title "Bandwidth Notice"), or the word bandwidth in the first 2,000 characters of a page that carries no document id.
 - The body is **preserved** as `refusals/refusal-<stamp>.html` beside this file before the exception is raised, so the verdict can be audited. A detector that halted a night on a wifi interstitial had thrown its evidence away (2026-08-26).
 
-A connection cut is not a refusal: the far side closing lines is the hang-up, handled by `lane.py` (hang up at once, one re-entry after the window). Only the notice page is a block, and a block lifts on its own clock - never probed.
+A connection cut is not a refusal: the far side closing lines is the hang-up, handled by `lane.py` as the cycle - a closed line is redialed by its worker; the whole width closed inside a minute with nothing landing is the session's end: hang up at once, drop the cut batch, 60 s of silence, one re-entry on a fresh batch. Only the notice page is a block, and a block lifts on its own clock - never probed.
 
 ## The page count and the imageless verdict
 
@@ -86,3 +86,5 @@ Beside this file, never in git: `refusals/` - the body of every refusal ever det
 ## History
 
 2026-09-03 - the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the index measured the same day (real 17,049,742 / personal 4,544,590, good through 2026-07-31). Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
+
+2026-09-04 (night) - the review of every acris file against the cycle: nothing in this module changed; the callers' table and the refusal paragraph were read against the reviewed lane module. The six refusal pages preserved beside the module's old location were folded into `refusals/` here.

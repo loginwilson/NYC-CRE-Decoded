@@ -7,7 +7,7 @@ The documentation lane of the acris reproduction, as one program: `Acris Documen
     python "Acris Documentation.py" --drive NYCCRED1          home (the drive is labelled OneTouch today; the word follows the label)
     python3 "Acris Documentation.py" --drive NYCCRED2         workstation 2
 
-The same file runs on every workstation. `--drive` names the drive by its label; the program finds where it is mounted on Windows or Mac. `--width` defaults to 40. While it runs, `documentation.control` beside it takes `width=30` (workers above the number park after their document, missing ones are born staggered) or `stop`. `--also registration:40` hosts another lane's crew in the same process through its own entry, twenty seconds later. `--limit N` is a test run. A lane that parked itself refuses to start again until `--unpark`.
+The same file runs on every workstation. `--drive` names the drive by its label; the program finds where it is mounted on Windows or Mac. `--width` defaults to 40. While it runs, `documentation.control` beside it takes `width=30` (workers above the number park after their document, missing ones are born staggered) or `stop`. `--also registration:40` hosts another lane's crew in the same process through its own entry, twenty seconds later. `--limit N` is a test run. A lane that parked itself refuses to start again until `--unpark`. In the fleet's batch (`../reproduction/Acris Reproduction.py`) this lane runs 10 wide beside registration 10 and synchronization 9 plus its monitor, each crew on its own entry, one ramp at a time.
 
 ## The rules
 
@@ -24,7 +24,7 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 | whole or nothing | the pdf is written to a `.part` file and renamed; the store never holds a truncated pdf | 2026-09-03 |
 | failures never stop it | a fetch error leaves the document empty for a later pass and writes the reason to `documentation.fails.jsonl`; a transport error gets one more try after a 5 s pause | login 2026-09-03, "a fetch error never stops a lane"; stale keep-alives after an idle spell |
 | refusal | HTTP 200 carrying the Bandwidth Notice is the only block: park at once, write the reason, exit 2, no retry, no rotation; the page is preserved under `refusals/` | fetch_pages / live_delta detectors; the 08-26 false positive |
-| hang-up | the session closed: every worker a transport error inside 60 s (a partial close is redialed worker by worker and the width comes back). ACRIS's ordinary session end, not a block: hang up at once, land what the crew holds, wait `--redial-wait` (60 s) with no line open, wait for the wire, re-enter once on a fresh batch, births 5 s apart. A refused re-entry doubles the next wait (cap 80 min), a served one halves it back; four tries per incident, then park, exit 3 | login 2026-09-04: "batch, enter, stagger, redial until close, exit, rebatch, cycle"; proven unattended 14:51-14:58 (§17 addendum 19); the closing waves and the 19:43 storm are what a re-entry inside them looks like |
+| hang-up | the session closed: every worker a transport error inside 60 s and nothing landed for 10 s (a partial close is redialed worker by worker while the other lines keep landing, and the width comes back). ACRIS's ordinary session end, not a block: hang up at once, land what the crew holds, drop the cut batch (its claims expire on their own and come back in a later pass), wait `--redial-wait` (60 s) with no line open, wait for the wire, claim a fresh batch, re-enter once, births 5 s apart - without blocking any other crew in the process. A refused re-entry (cut inside five minutes with under 300 landed) doubles the next wait (cap 80 min), a served one halves it back; four re-entries per incident, then park, exit 3 | login 2026-09-04: "batch, enter, stagger, redial until close, exit, rebatch, cycle"; proven unattended 14:51-14:58 (§17 addendum 19); the closing waves and the 19:43 storm are what a re-entry inside them looks like |
 | wifi is not a block | a network outage waits without spending a try | login 2026-09-03 01:0x |
 | wall | forty consecutive 503 or 429 on the crew with no success between: park, exit 4 | trap 2 |
 | drive | once a minute the drive must still be there; a pulled drive parks the lane, exit 6 | trap 5 |
@@ -44,7 +44,8 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 | pending-age | 1 hour | one request per pending per interval; the old lane used 5 minutes in a hot queue |
 | claim | 12 × width, 20-minute ttl | a slice turns over in about two minutes at 40 workers; an expired claim goes back on the list |
 | redial-wait | 60 s, ×2 per refused re-entry, ÷2 per served one | the door served a fresh-batch re-entry 60 s after the last dead line cleared (09-04 14:54) and 5 min after a close (12:45); what it refuses is a re-entry into its own closing waves on the old batch (13:03) and a storm (09-03 19:43) |
-| tries | 4 per incident | an incident closes after ten minutes of service; the wait doubles each try, so four tries span 1, 2, 4 and 8 minutes at the base |
+| hang-up quiet | 10 s | a partial close keeps landing on the lines still open; a closed session lands nothing - the whole width inside 60 s counts only once nothing has landed for 10 s |
+| tries | 4 re-entries per incident | an incident closes once a re-entry lands 300 or lives five minutes; the wait doubles each refused try, so four span 1, 2, 4 and 8 minutes at the base |
 | re-asks | 3, then a later pass | the soft refusal resolves on a calm retry; a fourth ask is spent budget |
 | wall | 40 consecutive 503/429 | per crew; another crew's successes never silence it |
 
@@ -57,6 +58,8 @@ Beside this file, never in git: `documentation.lock` (the running pid), `documen
 `Reproduction/lane.py` (the entry and the policies every lane shares), `Reproduction/cloud.py` (claim, land, heartbeat, the outbox), `Reproduction/storage.py` (the drive by label, the One Touch layout), `Reproduction/Acris/rulebook/acris.py` (the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, the page count, where a document files).
 
 ## History
+
+2026-09-04 (night) — the review of every acris file against the cycle (login: "assure it reflects the current approach that works"). Found and fixed in the shared lane module: the re-entry was resuming the cut batch from the same queue - now the cut batch is dropped at the hang-up and a fresh batch is claimed right before the ramp; the whole width means every worker inside 60 s with nothing landed for 10 s (a partial close keeps landing); served means 300 landings or five minutes; births run on their own thread and the wait is a state the loop re-enters, so a crew's wait or ramp never stalls another crew in the process; the fleet passed 0.5-s births, a 600-s wait and 3 tries to every lane - it now passes the knobs only when given, and its batch is login's 9 plus the monitor / 10 / 10. Nothing of this lane's own changed. Proven again offline and by the simulations.
 
 2026-09-04 (evening) — THE CYCLE (login's design, proven unattended at 14:51-14:58): the hang-up is the whole width failing inside a minute, not the first wave; the wait after it is 60 s with a backoff (×2 refused, ÷2 served); the re-entry claims a fresh batch; four tries. Replaces the 1,800-s ladder of the morning.
 

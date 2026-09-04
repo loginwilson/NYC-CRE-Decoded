@@ -18,13 +18,15 @@ The rules are kept from the lane that ran before this one:
   retries     a viewer page without a page count is re-asked 3x in place (a soft refusal, not a
               verdict); a short document (fewer pages than promised) is never a pdf
   refusal     HTTP 200 + the Bandwidth Notice page = a block: park at once, no retry, no rotation
-  hang-up     every line dropped at once = dead transport: redial (wifi down waits; 3 tries per
-              incident, --redial-wait apart), then park with the reason
+  hang-up     the session closed (every worker hit the wire inside 60 s, nothing landed for 10 s): hang up
+              at once, drop the cut batch, wait --redial-wait (60 s with the backoff) with no line open, claim
+              a fresh batch, re-enter once with births 5 s apart; 4 re-entries per incident, then park
   wall        40 consecutive 503/429 with no success between: park with the reason
   width       --width at launch; while running, write `width=30` into documentation.control (workers
               above the number park, missing ones are born staggered); `stop` there stops cleanly
-  mega lane   --also registration:40 hosts another lane's crew in this process, entered --entry-gap
-              later through its own session (one entry per floor, as measured)
+  mega lane   --also registration:10 hosts another lane's crew in this process through its own session,
+              one ramp at a time, --entry-gap apart (one entry per floor, as measured); each crew runs
+              the cycle on its own
   pending     goes back to the backfill: a pending is re-checked once its last check is --pending-age old,
               ahead of the empties; when the lane is up to date every claim is pendings, cycling through
               them, so a scan that appears is recorded on the next pass and a document that ages past
@@ -39,8 +41,8 @@ Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused · 3 redi
 5 crash · 6 drive gone.  A parked lane refuses to start until --unpark.
 
 The shared pieces it imports: ../../../lane.py (the entry and the policies), ../../../cloud.py (claim,
-land, heartbeat), ../../../storage.py (the drive by label, the One Touch layout), ../../acris.py (the
-ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, where a document files).
+land, heartbeat), ../../../storage.py (the drive by label, the One Touch layout), ../../rulebook/acris.py
+(the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, where a document files).
 """
 import argparse
 import os

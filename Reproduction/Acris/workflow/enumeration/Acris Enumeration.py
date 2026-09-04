@@ -42,11 +42,15 @@ acris_bulk_rd.py, bulk.py):
   never repair a number                  a difference is reported, listed and left
   the index is an audit, not a source    the ids it dropped were found by the walk; nothing here
                                          inserts - the lists are for a person
-  the probe is a door                    one pooled session, --width connections born --stagger apart,
-                                         no pacer; HTTP 200 + the notice page = refused: stop, no retry,
-                                         no rotation, enumeration.parked until --unpark; a number that
-                                         fails three asks is UNKNOWN, never void; every line dropped at
-                                         once = hang-up: stop, run again later (the journal resumes);
+  the probe is a door, on the cycle      one pooled session, --width connections born --stagger (5 s)
+                                         apart, no pacer; HTTP 200 + the notice page = refused: stop, no
+                                         retry, no rotation, enumeration.parked until --unpark; a number
+                                         that fails three asks is UNKNOWN, never void (a wire error is
+                                         never an ask); every line hit the wire inside 60 s with nothing
+                                         answered for 10 s = the session closed: hang up, wait
+                                         --redial-wait (60 s; x2 refused, /2 served), re-enter once on
+                                         what is still unanswered; --tries (4) refused re-entries in a row
+                                         stop it with exit 3 and the journal resumes on the next run;
                                          refuses to start while any lane's heartbeat is fresh - an
                                          enumeration sweep of the web endpoint never runs beside the cycle
 
@@ -374,9 +378,15 @@ class Probe:
         self.reasons = {}
         self.reqs = 0
         self.transport_streak = 0
+        self.transport_hits = []          # (time, worker) of recent wire errors: every worker inside 60 s is the session closed
         self.last_success = time.time()
         self.refused = None
         self.stop = threading.Event()
+        self.workers = []
+        self.tries = 0                    # re-entries in the current incident
+        self.wait_s = args.redial_wait    # the backoff state: x2 per refused re-entry, /2 per served one
+        self.last_redial = 0.0
+        self.answered_at_redial = 0
         self.journal_path = HERE / "enumeration.probe.json"
         self.journal = json.loads(self.journal_path.read_text(encoding="utf-8")) if self.journal_path.exists() else {}
         self.journal.setdefault("numbers", {})
@@ -425,10 +435,16 @@ class Probe:
                     self.refused = str(e)
                 self.stop.set()
                 return
-            except Exception as e:                      # Transport, HTTPStatus, Retry, anything: asked again, then unknown
+            except lane.Transport as e:                 # the wire, never an answer: asked again after a pause; every worker hit = the session closed
+                now = time.time()
                 with self.lock:
-                    if isinstance(e, lane.Transport):
-                        self.transport_streak += 1
+                    self.transport_streak += 1
+                    self.transport_hits.append((now, born))
+                    self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= lane.HANGUP_WINDOW_S]
+                if not self.stop.is_set():
+                    self.q.put((crfn, attempt))
+                self.stop.wait(lane.HANGUP_PAUSE_S)
+            except Exception as e:                      # HTTPStatus, Retry, anything else: asked again, then unknown
                 if attempt + 1 < 3 and not self.stop.is_set():
                     self.q.put((crfn, attempt + 1))
                 else:
@@ -437,21 +453,95 @@ class Probe:
                         self.reasons[crfn] = "%s: %s" % (type(e).__name__, str(e)[:120])
 
     def resolve(self, crfn):
-        """Synchronous, for the gallop: True when a document sits at the number.  Three asks, then it
-        is unknown and the year's top cannot be proven (raises)."""
+        """Synchronous, for the gallop: True when a document sits at the number.  Three asks; three wire failures
+        in a row are the session closed for the gallop (the walkers are idle then): one re-entry, three more asks;
+        then it is unknown and the year's top cannot be proven (raises)."""
         last = None
-        for _ in range(3):
-            try:
-                doc_id = self.ask(crfn)
-                with self.lock:
-                    self.answers[crfn] = doc_id
-                return doc_id is not None
-            except lane.Refused:
-                raise
-            except Exception as e:
-                last = e
-                time.sleep(1)
+        for round_ in (1, 2):
+            wire = 0
+            for _ in range(3):
+                try:
+                    doc_id = self.ask(crfn)
+                    with self.lock:
+                        self.answers[crfn] = doc_id
+                        self.last_success = time.time()
+                    return doc_id is not None
+                except lane.Refused:
+                    raise
+                except lane.Transport as e:
+                    last = e
+                    wire += 1
+                    time.sleep(lane.HANGUP_PAUSE_S)
+                except Exception as e:
+                    last = e
+                    time.sleep(1)
+            if wire < 3 or round_ == 2:
+                break
+            self._reenter("the session closed under the gallop (three wire failures at crfn %d)" % crfn)
         raise lane.Retry("crfn %d: three asks failed (%s)" % (crfn, str(last)[:120]))
+
+    # ── the cycle for the probe: the whole width, the hang-up, the wait, one re-entry ──
+    def hung_up(self):
+        now = time.time()
+        with self.lock:
+            self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= lane.HANGUP_WINDOW_S]
+            if not self.transport_hits or now - self.last_success <= lane.HANGUP_QUIET_S:
+                return False
+            return len({b for _, b in self.transport_hits}) >= max(1, self.width) or len(self.transport_hits) >= self.width
+
+    def _enter(self):
+        """ONE entry: a fresh pooled session, the connections born --stagger apart."""
+        self.stop = threading.Event()
+        self.transport_hits = []
+        self.transport_streak = 0
+        self.last_success = time.time()
+        self.session = lane.make_session(self.width, acris.UA)
+        self.workers = []
+        for i in range(self.width):
+            t = threading.Thread(target=self.worker, args=(i + 1,), daemon=True, name="probe-%d" % (i + 1))
+            t.start()
+            self.workers.append(t)
+            if i < self.width - 1:
+                self.stop.wait(self.args.stagger)
+
+    def _leave(self):
+        self.stop.set()
+        for t in self.workers:
+            t.join(timeout=60)
+        try:
+            self.session.close()
+        except Exception:
+            pass
+
+    def _reenter(self, why):
+        """The cycle: hang up at once, wait --redial-wait with no line open (x2 after a refused re-entry, /2 after
+        a served one), re-enter once on what is still unanswered (the queue keeps it); --tries refused re-entries
+        in a row stop the probe with exit 3 and the journal resumes on the next run."""
+        now = time.time()
+        answered = len(self.answers) - self.answered_at_redial
+        if self.tries and (answered >= lane.SERVED_LANDINGS or now - self.last_redial >= lane.SERVED_S):
+            self.tries = 0
+            self.wait_s = max(self.wait_s // 2, self.args.redial_wait)
+        elif self.tries:
+            self.wait_s = min(self.wait_s * 2, 4800)
+        if self.tries >= self.args.tries:
+            self.stop.set()
+            raise lane.Transport("%s; %d re-entries in a row were refused" % (why, self.tries))
+        self.rep("PROBE: %s - hanging up; re-entry %d/%d in %ds on what is still unanswered, no line open"
+                 % (why, self.tries + 1, self.args.tries, self.wait_s))
+        self._leave()
+        self.save()
+        end = time.time() + self.wait_s
+        while time.time() < end:
+            time.sleep(min(10, max(0.0, end - time.time())))
+        while not lane.net_up():
+            self.rep("PROBE: the network is DOWN - waiting a minute, no try spent")
+            time.sleep(60)
+        self.tries += 1
+        self.last_redial = time.time()
+        self.answered_at_redial = len(self.answers)
+        self._enter()
+        self.rep("PROBE: re-entered (%d/%d), %d connections, births %.1fs apart" % (self.tries, self.args.tries, self.width, self.args.stagger))
 
     # ── the gallop past the index's top (acris_census.year_edge, seeded at the index's own top) ──
     def year_top(self, year, seed):
@@ -528,11 +618,9 @@ class Probe:
                          % ("{:,}".format(len(todo) - len(pending)), "{:,}".format(len(todo)), counts["void"], counts["held"],
                             counts["MISSING"], counts["unknown"], reqs / max(1.0, now - t0)))
                 last_line = now
-            with self.lock:
-                hung = self.transport_streak >= 3 * self.width and now - self.last_success > 60
-            if hung:
-                self.stop.set()
-                raise lane.Transport("every line dropped at once (%d transport errors, nothing answered for 60 s)" % self.transport_streak)
+            if self.hung_up():
+                self._reenter("the session closed (every line hit the wire inside %ds, nothing answered for %ds)"
+                              % (lane.HANGUP_WINDOW_S, int(now - self.last_success)))
         with self.lock:
             if self.refused:
                 raise lane.Refused(self.refused)
@@ -592,16 +680,9 @@ class Probe:
             raise SystemExit("nothing to probe: %s names no year%s" % (holes_path.name, (" in --years %s" % self.args.years) if self.args.years else ""))
         lock = HERE / "enumeration.lock"
         lane.take_lock(lock)
-        self.rep("THE PROBE: %d years, one entry of %d connections, births %.1fs apart - stops on the notice page"
+        self.rep("THE PROBE: %d years, one entry of %d connections, births %.1fs apart - the cycle on a close, stops on the notice page"
                  % (len(years), self.width, self.args.stagger))
-        self.session = lane.make_session(self.width, acris.UA)
-        workers = []
-        for i in range(self.width):
-            t = threading.Thread(target=self.worker, args=(i + 1,), daemon=True, name="probe-%d" % (i + 1))
-            t.start()
-            workers.append(t)
-            if i < self.width - 1:
-                time.sleep(self.args.stagger)
+        self._enter()
         code = 0
         try:
             # 1. every named hole
@@ -667,7 +748,9 @@ def main():
     ap.add_argument("--years", default="", help="census/probe: 2016 · 2016,2024 · 2003-2010 (default: every CRFN year)")
     ap.add_argument("--retop", action="store_true", help="probe: gallop each year's top again even if the journal holds one")
     ap.add_argument("--width", type=int, default=10, help="probe: connections (default 10)")
-    ap.add_argument("--stagger", type=float, default=0.5, help="probe: seconds between worker births")
+    ap.add_argument("--stagger", type=float, default=5.0, help="probe: seconds between worker births (the ramp the door serves, 2026-09-04)")
+    ap.add_argument("--redial-wait", type=int, default=60, help="probe: seconds of silence after the session closes before the re-entry (x2 refused, /2 served)")
+    ap.add_argument("--tries", type=int, default=4, help="probe: refused re-entries in a row before it stops with exit 3 (the journal resumes)")
     ap.add_argument("--unpark", action="store_true", help="probe: run although the source declined last time (a person has decided)")
     ap.add_argument("--host", default="", help="this workstation's name (default: the machine name)")
     args = ap.parse_args()

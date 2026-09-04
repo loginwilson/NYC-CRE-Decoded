@@ -12,6 +12,12 @@ Lanes together - the rules:
                          ran 2.7 docs/s against 8 to 11 alone (2026-08-27).  Three lanes, three processes, three GILs
   one door per lane      every lane enters the source through its own pooled session, and the fleet launches lanes
                          --entry-gap apart: three doors, never one moment.  Births inside a lane are its --stagger
+  the cycle              each lane runs login's cycle on its own session (lane.py): enter once, births --stagger (5 s)
+                         apart, a closed line redialed by its worker, hang up when the whole width is closed, drop the
+                         cut batch, wait --redial-wait (60 s; x2 refused, /2 served), re-enter once on a fresh batch.
+                         The fleet passes --stagger, --redial-wait and --tries only when given, so the lanes' own
+                         defaults are the one truth; a session close is never the fleet's business - exit 3 comes
+                         only after four refused re-entries in a row
   the order              synchronization first (it hands the edge), then registration, then documentation - or the
                          order written in --lanes
   the watch              the fleet stays up and reads its children every few seconds.  What each exit means:
@@ -26,10 +32,13 @@ Lanes together - the rules:
                          reason: every start is a stampede of handshakes, and a cure that keeps failing is not a cure
   a parked lane          is never relaunched by the fleet (the park is the lane's word, or a person's); the drive
                          coming back is the one exception, because the fleet can verify it
-  the window             a lane's own redial already waits out the dead window (lane.py, --redial-wait) before it
-                         leaves with 3; the fleet's wait comes on top, so a relaunch never lands inside a window
-  mega lane              --mega hosts every crew inside the first lane's process through --also; one child to watch.
-                         Only for a box that must stay small: the GIL rule above is why it is not the default
+  the window             a lane's own cycle already waits out the door's closing window (--redial-wait with the
+                         backoff) before it leaves with 3; the fleet's wait comes on top, so a relaunch never lands
+                         inside a window
+  mega lane              --mega hosts every crew inside the first lane's process through --also (login's frankenstein
+                         run); one child to watch.  Inside it every crew keeps its own session, enters one ramp at a
+                         time --entry-gap apart, and cycles on its own.  The GIL rule above is why one process per
+                         lane is the default
   one fleet per machine  reproduction.lock; the lanes keep their own locks, so a lane already running by hand is
                          refused (exit 1) and left alone - never doubled
   logs                   each lane's output is appended to <lane>/<lane>.log beside its file (never truncated:
@@ -131,8 +140,10 @@ class Fleet:
     def argv(self, name, width, unpark=False, also=()):
         a = self.args
         argv = [sys.executable, "-u", str(self.site.lane_file(name)), "--width", str(width), "--host", self.host,
-                "--stagger", str(a.stagger), "--entry-gap", str(a.entry_gap), "--pending-age", a.pending_age,
-                "--redial-wait", str(a.redial_wait), "--tries", str(a.tries)]
+                "--entry-gap", str(a.entry_gap), "--pending-age", a.pending_age]
+        for flag, val in (("--stagger", a.stagger), ("--redial-wait", a.redial_wait), ("--tries", a.tries)):
+            if val is not None:
+                argv += [flag, str(val)]                       # only when given: the lane's own defaults are the cycle's
         crews = (name,) + tuple(n for n, _ in also)
         if "documentation" in crews:
             if not a.drive:
@@ -452,10 +463,10 @@ def build_parser(site, description, edge_type, edge_help, fresh_days_default):
     ap.add_argument("--fresh-days", type=int, default=fresh_days_default, help="documentation: a document recorded within this many days with no image is pending, not absent")
     ap.add_argument("--edge", type=edge_type, default=edge_type(), help=edge_help)
     ap.add_argument("--entry-gap", type=int, default=20, help="seconds between lane launches (and between crews inside a mega lane)")
-    ap.add_argument("--stagger", type=float, default=0.5, help="seconds between worker births inside a lane")
+    ap.add_argument("--stagger", type=float, default=None, help="seconds between worker births inside a lane (default: the lane's own, 5 s)")
     ap.add_argument("--pending-age", default="1 hour")
-    ap.add_argument("--redial-wait", type=int, default=600)
-    ap.add_argument("--tries", type=int, default=3)
+    ap.add_argument("--redial-wait", type=int, default=None, help="seconds of silence before a re-entry (default: the lane's own, 60 s with the backoff)")
+    ap.add_argument("--tries", type=int, default=None, help="re-entries per incident before a lane parks (default: the lane's own, 4)")
     ap.add_argument("--limit", type=int, default=0, help="each lane stops after this many documents (a test run)")
     ap.add_argument("--unpark", action="store_true", help="start parked lanes too (a person has decided)")
     ap.add_argument("--no-pool-check", action="store_true", help="the lanes skip the exit-pool check at entry (tests only)")

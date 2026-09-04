@@ -32,10 +32,13 @@ The rules, kept from the sync floor that ran before this one:
   the cell     the doc_id only; registration reads the recorded details in its own pass (the same page,
                one more request per new document - the cell rule is worth it)
   refusal      HTTP 200 + the Bandwidth Notice page = a block: park at once, no retry, no rotation
-  hang-up      every line dropped at once = dead transport: redial (wifi down waits; 3 tries per
-               incident, --redial-wait apart), then park with the reason
+  hang-up      the session closed (every walker hit the wire inside 60 s, nothing answered for 10 s): hang
+               up at once, drop the cut window from the queue (rebatch: the numbers are forgotten as in
+               flight and the monitor asks them again from the edge), wait --redial-wait (60 s with the
+               backoff) with no line open, re-enter once with births 5 s apart; 4 re-entries, then park
   wall         40 consecutive 503/429 with no success between: park with the reason
-  width        --width walkers at launch (default 20); `width=N` or `stop` in synchronization.control
+  width        --width walkers at launch (default 20 alone; 9 + the monitor in the fleet's batch); `width=N`
+               or `stop` in synchronization.control
   one door     synchronization.lock: a second start on this machine is refused while the first lives
   one machine  the edge lives on one workstation; run this lane at home only
 
@@ -45,6 +48,7 @@ import argparse
 import json
 import os
 import pathlib
+import queue
 import sys
 import time
 
@@ -202,6 +206,20 @@ class Synchronization:
                 self.attempts.pop(k, None)
         lane._log(ctx, "synchronization: %d documents found, %d new - edge %d -> %d - %s"
                   % (len(lives), n, old, self.edge, "BEHIND, walking a bite" if self.behind else "level"))
+
+    def rebatch(self, crew, ctx):
+        """THE REBATCH for a walker crew (the cycle, login 2026-09-04): the cut window is dropped from the queue and
+        forgotten as in flight, so the next feed asks the same numbers again from the edge - which never moved past an
+        unanswered number.  The walk's fresh batch is the window itself."""
+        n = 0
+        while True:
+            try:
+                crfn, _, _ = crew.q.get_nowait()
+            except queue.Empty:
+                break
+            self.inflight.discard(crfn)
+            n += 1
+        return n
 
     def status(self):
         return "edge %d - %s - inserted %d - holes %d" % (self.edge, "behind" if self.behind else "level", self.inserted, self.holes)

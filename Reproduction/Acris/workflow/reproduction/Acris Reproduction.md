@@ -20,9 +20,9 @@ in the NYC-CRE-Decoded tree. Each lane is its own program with its own lock, par
 and log; the fleet launches them in the cycle's order, one door at a time, and watches them. It
 relaunches what a relaunch can cure and never relaunches what a person must decide.
 
-    python "Acris Reproduction.py" --drive NYCCRED1                     synchronization x20, registration x40, documentation x40 - one process per lane, 20 s apart
+    python "Acris Reproduction.py" --drive NYCCRED1                     the batch: synchronization x9 (plus its monitor = login's 10), registration x10, documentation x10 - one process per lane, each on its own entry, each running the cycle
     python "Acris Reproduction.py" --drive NYCCRED1 --lanes registration:40,documentation:40
-    python "Acris Reproduction.py" --drive NYCCRED1 --mega              the crews in ONE process (the first lane's --also) - only for a box that must stay small
+    python "Acris Reproduction.py" --drive NYCCRED1 --mega              the frankenstein run: the same crews in ONE process (the first lane's --also), one entry per crew, one ramp at a time, each crew cycling on its own
     python "Acris Reproduction.py" status                               this machine's lanes, and every workstation's heartbeats in the cloud
     python "Acris Reproduction.py" stop [lane]                          `stop` into the control file(s), a 90 s grace, then force
     python "Acris Reproduction.py" width documentation=60               into the lane's control file (read within a minute)
@@ -30,7 +30,8 @@ relaunches what a relaunch can cure and never relaunches what a person must deci
 | rule | what the fleet does | origin |
 |---|---|---|
 | one process per lane | the default; `--mega` is the exception | §3: the GIL is the throughput wall |
-| one door per lane, `--entry-gap` apart | lanes launched 20 s apart; births inside a lane are its own `--stagger` | §3: three doors, never one moment |
+| one door per lane, `--entry-gap` apart | lanes launched 20 s apart; inside a mega lane one ramp at a time, 20 s apart; births inside a lane are its own `--stagger` (5 s) | §3: three doors, never one moment; run 3 of 08-28: one session for mixed floors served empty viewer pages |
+| the cycle, per lane | each lane runs login's cycle on its own session (`lane.py`): enter once, births 5 s apart, a closed line redialed by its worker, hang up when the whole width is closed, drop the cut batch, 60 s of silence (×2 refused, ÷2 served), one re-entry on a fresh batch. The fleet passes `--stagger`, `--redial-wait` and `--tries` only when given, so the lanes' own defaults are the one truth; a session close is never the fleet's business - exit 3 comes only after four refused re-entries in a row | login 2026-09-04: batch, enter, stagger, redial until close, exit, rebatch, cycle |
 | what each exit means | 0 done · 1 refused to start (another door, parked, arguments): left alone · 2 REFUSED: every lane told to stop, exit 2, a person decides · 3 redials exhausted: relaunch after 300 s · 4 wall: parked by the lane, left · 5 crash: relaunch after 60 s · 6 drive gone: wait for the drive, relaunch with `--unpark` | fleet.py's guard could not tell a crash from a refusal (2026-08-30); the drive drop of 2026-09-03 |
 | the relaunch cap | more than `--relaunch-cap` (3) launches of one lane in an hour parks it with the reason | every start is a stampede of handshakes |
 | a parked lane is never relaunched | the drive's return is the one exception, because the fleet can verify it | the park is the lane's word, or a person's |
@@ -41,7 +42,8 @@ relaunches what a relaunch can cure and never relaunches what a person must deci
 Proven 2026-09-03 by a simulation over fake lane programs: the order and the gap; crashes
 relaunched and the cap; a refusal stilling every lane; the drive's return; a lane already running
 refused and left; the mega lane; width, stop and status. Not yet run on the real lanes: that waits
-for the data move.
+for the data move. Re-proven 2026-09-04 (night) after the review: the batch's widths, the knobs left to the
+lanes, the mega lane.
 
 ## 1 · THE CYCLE — "acris 101"
 

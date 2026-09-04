@@ -12,16 +12,21 @@ document - and hands it to run().  run() owns everything else:
                              pass and the reason is written to <lane>.fails.jsonl
   refusal                    HTTP 200 + the Bandwidth Notice = the source's decision: park at once,
                              no retry, no rotation, exit
-  hang-up                    every line dropped at once (transport errors, nothing landing) = dead
-                             transport: close the pool, wait (wifi down waits without spending a try),
-                             re-enter with staggered births; 3 tries per incident, then park
+  hang-up                    the session closed: every worker hit the wire inside 60 s and nothing has
+                             landed for 10 s (a partial close is redialed worker by worker).  Hang up at
+                             once, land what the crew holds, DROP the cut batch, wait --redial-wait
+                             (60 s; x2 after a refused re-entry, /2 after a served one) with no line
+                             open - wifi down waits without spending a try - then re-enter ONCE on a
+                             fresh batch with staggered births; 4 re-entries per incident, then park
   wall                       40 consecutive 503/429 on a crew with no success between: park
   width                      <lane>.control holds `width=N` (or `<lane>=N` per crew) and `stop`; read
                              once a minute; workers above N park after their current document, the
                              missing ones are born staggered, one connection each
-  mega lane                  several roles in one process: each crew enters through ITS OWN session,
-                             --entry-gap apart (mixing floors through one session made acris serve
-                             empty viewer pages for documents whose images exist, run 3, 2026-08-28)
+  mega lane                  several roles in one process (the fleet's --mega, login's frankenstein
+                             run): each crew enters through ITS OWN session, one ramp at a time and
+                             --entry-gap apart, and runs the cycle on its own - one crew's wait never
+                             stalls another (mixing floors through one session made acris serve empty
+                             viewer pages for documents whose images exist, run 3, 2026-08-28)
   one door                   <lane>.lock holds the running pid; a second start on the same machine is
                              refused while that pid lives (two processes on one lane = two doors = the
                              ban condition, trap 8); a stale lock from a crash is taken over
@@ -31,11 +36,15 @@ document - and hands it to run().  run() owns everything else:
 THE CYCLE (login 2026-09-04: "batch, enter, stagger, redial until close, exit, rebatch, cycle"; proven
 unattended 14:51-14:58): one entry, workers born --stagger (5 s) apart; a worker whose line the far side
 closes redials it on its next request, pausing HANGUP_PAUSE_S (5 s) first; when the far side has closed the
-WHOLE width - every worker a transport error inside HANGUP_WINDOW_S (60 s) - the crew hangs up AT ONCE
-(Crew.hung_up -> _redial), lands what it holds, waits --redial-wait (60 s) with no line open, and re-enters
-ONCE on a fresh batch (a re-entry claims new ids; the cut batch's claims expire on their own), staggered,
-after exit_pool() shows five draws in one block.  The wait is a state: a re-entry the door refuses (cut
-before it settles) doubles the next wait, capped at 80 minutes; a served one halves it back to the base.
+WHOLE width - every worker a transport error inside HANGUP_WINDOW_S (60 s) and nothing landed for
+HANGUP_QUIET_S (10 s) - the crew hangs up AT ONCE (Crew.hung_up -> _hangup), lands what it holds, DROPS the
+cut batch (_rebatch: the queue is emptied; the dropped claims expire on their own and come back in a later
+pass; a role that walks a range re-asks its window), waits --redial-wait (60 s) with no line open, claims a
+fresh batch and re-enters ONCE (_await_entry), staggered, after exit_pool() shows five draws in one block.
+The wait is a state: a re-entry the door refuses (cut inside five minutes with fewer than SERVED_LANDINGS
+landed) doubles the next wait, capped at 80 minutes; a served one halves it back to the base.  Neither the
+wait nor the ramp blocks the process: births run on their own thread and the main loop keeps feeding and
+landing every other crew.
 A cut is ACRIS's ordinary session end, not a block: it closed every session of 2026-09-04 after 12-59
 minutes and served the fresh-batch re-entry 60 s after the last dead line cleared (14:54, 0 fails by minute
 4).  What it refuses is a re-entry made while its own closing waves are still running on the old batch, and
@@ -205,8 +214,9 @@ def net_up():
     return False
 
 
-HANGUP_WINDOW_S, HANGUP_PAUSE_S = 60, 5     # the whole width failing inside 60 s is the session closed; a cut worker pauses 5 s then redials
-SERVED_LANDINGS = 300                       # a re-entry that landed this many was served then closed by the door (a 5-s ramp lands ~900 by minute 4); fewer = refused
+HANGUP_WINDOW_S, HANGUP_PAUSE_S = 60, 5     # every worker failing inside 60 s is the session closed; a cut worker pauses 5 s then redials
+HANGUP_QUIET_S = 10                         # ... and nothing landed for 10 s: a partial close keeps landing on the lines still open
+SERVED_LANDINGS, SERVED_S = 300, 300        # a re-entry that landed this many, or lived five minutes, was served then closed by the door; fewer and sooner = refused
 MAX_WIDTH = 128          # the pool's ceiling; a connection is opened only when a worker first asks
 
 
@@ -280,6 +290,11 @@ class Crew:
         self.wait_s = None                # the backoff state: set from --redial-wait at the first hang-up; x2 per refused re-entry, /2 per served one
         self.ok_at_redial = 0             # landings when the last re-entry was made: served or refused is decided by landings, never by age
         self.last_redial = 0.0
+        self.reentry_at = None            # set at start and by a hang-up: when the crew may enter; the main loop enters it (nothing blocks)
+        self.entries = 0                  # entries made in the life of the process: the first, then every re-entry
+        self.ramp = None                  # the births thread of the current entry
+        self.ramp_end = 0.0               # when the last ramp completed: the next crew enters --entry-gap after it
+        self.born = 0                     # workers born in the current entry
         self.idle_until = 0.0             # when the to-do list came back empty, do not ask again before this
         self.progress_at = time.time()    # when the last PROGRESS line was printed (the rate divides by real time)
 
@@ -337,8 +352,8 @@ class Crew:
                 now = time.time()
                 with self.lock:
                     self.transport_streak += 1
-                    self.transport_hits.append(now)
-                    self.transport_hits = [t for t in self.transport_hits if now - t <= HANGUP_WINDOW_S]
+                    self.transport_hits.append((now, born))
+                    self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= HANGUP_WINDOW_S]
                 if attempt == 0 and not self.stop.is_set():
                     self.q.put((doc_id, registry, 1))     # one more try: a stale keep-alive after an idle spell fails once
                 else:
@@ -356,36 +371,56 @@ class Crew:
                 return
 
     def hung_up(self):
-        """The far side closed the session: every worker hit the wire inside HANGUP_WINDOW_S (login 2026-09-04:
-        "you will know its time to rebatch when ALL lanes are closed").  A partial close is not this - those
-        workers redial one by one and the crew keeps its width (2026-09-04 12:27: 17 lines closed, all 40 back
-        in 30 s).  A healthy crew fails a handful of requests an hour; a closed session fails the whole width
-        inside a minute (measured 2026-09-04 14:51: 40 errors in 60 s)."""
+        """The far side closed the session: every worker hit the wire inside HANGUP_WINDOW_S and nothing has landed
+        for HANGUP_QUIET_S (login 2026-09-04: "you will know its time to rebatch when ALL lanes are closed").  A
+        partial close is not this - those workers redial one by one while the other lines keep landing, and the
+        crew keeps its width (2026-09-04 12:27: 17 lines closed, all 40 back in 30 s).  A healthy crew fails a
+        handful of requests an hour; a closed session fails the whole width inside a minute (measured 2026-09-04
+        14:51: 40 errors in 60 s) and lands nothing after.  During a ramp the whole width is the workers born."""
         now = time.time()
         with self.lock:
-            self.transport_hits = [t for t in self.transport_hits if now - t <= HANGUP_WINDOW_S]
-            return len(self.transport_hits) >= max(1, self.width)     # never hung up on no error at all
+            self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= HANGUP_WINDOW_S]
+            if not self.transport_hits or now - self.last_success <= HANGUP_QUIET_S:
+                return False
+            whole = max(1, min(self.width, self.born))
+            return len({b for _, b in self.transport_hits}) >= whole or len(self.transport_hits) >= self.width
 
     def enter(self, stagger):
-        """ONE entry: a fresh pooled session, workers born `stagger` apart - one handshake each, then
-        keep-alive for the life of the crew."""
+        """ONE entry: a fresh pooled session, workers born `stagger` apart on their own thread - one handshake
+        each, then keep-alive for the life of the crew.  Returns at once: the main loop keeps feeding and
+        landing while the ramp runs (a 40-wide ramp is about 200 s)."""
         self.stop = threading.Event()
         self.transport_hits = []
         self.session = make_session(self.width, self.role.ua)
         self.workers = []
-        for i in range(self.width):
-            t = threading.Thread(target=self.worker, args=(i + 1,), daemon=True, name="%s-%d" % (self.role.lane, i + 1))
-            t.start()
-            self.workers.append(t)
-            if i < self.width - 1:
-                time.sleep(stagger)
+        self.born = 0
+        self.entries += 1
         self.transport_streak = 0
         self.wall_streak = 0
         self.last_success = time.time()
+        self.ramp = threading.Thread(target=self._births, args=(1, self.width, stagger), daemon=True, name="%s-births" % self.role.lane)
+        self.ramp.start()
+
+    def _births(self, lo, hi, stagger):
+        for i in range(lo, hi + 1):
+            if self.stop.is_set():
+                break
+            t = threading.Thread(target=self.worker, args=(i,), daemon=True, name="%s-%d" % (self.role.lane, i))
+            t.start()
+            self.workers.append(t)
+            self.born = max(self.born, i)
+            if i < hi:
+                self.stop.wait(stagger)
+        self.ramp_end = time.time()
+
+    def ramping(self):
+        return self.ramp is not None and self.ramp.is_alive()
 
     def leave(self):
         self.stop.set()
-        for t in self.workers:
+        if self.ramp is not None:
+            self.ramp.join(timeout=30)
+        for t in list(self.workers):
             t.join(timeout=120)
         try:
             self.session.close()
@@ -393,17 +428,15 @@ class Crew:
             pass
 
     def resize(self, new_width, stagger):
-        """Workers above the new width park after their current document; missing ones are born."""
+        """Workers above the new width park after their current document; missing ones are born staggered on
+        the births thread, never blocking the loop."""
         old, self.width = self.width, new_width
         if new_width > old:
-            for i in range(old, new_width):
-                t = threading.Thread(target=self.worker, args=(i + 1,), daemon=True, name="%s-%d" % (self.role.lane, i + 1))
-                t.start()
-                self.workers.append(t)
-                time.sleep(stagger)
+            self.ramp = threading.Thread(target=self._births, args=(old + 1, new_width, stagger), daemon=True, name="%s-births" % self.role.lane)
+            self.ramp.start()
 
     def alive(self):
-        return sum(1 for t in self.workers if t.is_alive())
+        return sum(1 for t in list(self.workers) if t.is_alive())
 
 
 class Context:
@@ -517,59 +550,90 @@ def _progress(ctx, c, t0, last):
     line = fmt % (el / 60, c.role.lane, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["filled"]),
                   "{:,}".format(s["absent"]), "{:,}".format(s["pending"]), s["short"], s["fail"], s["reask"],
                   c.alive(), c.width, len(c.held), c.outbox.count(), docs)
+    if c.reentry_at is not None:
+        line += " - re-entry in %ds" % max(0, int(c.reentry_at - now))
+    elif c.ramping():
+        line += " - ramping %d/%d" % (c.born, c.width)
     status = getattr(c.role, "status", None)
     _log(ctx, line + (" - " + status() if status else ""))
     return s
 
 
-def _redial(ctx, c):
-    """Dead transport: leave, wait, re-enter.  Wifi down waits without spending a try."""
+def _rebatch(ctx, c):
+    """THE REBATCH (login 2026-09-04: "pull out, rebatch, then launch"): the cut batch is dropped so the
+    re-entry asks for NEW work.  A claim lane empties its queue - the dropped claims expire on their own
+    (--ttl) and come back in a later pass; a role that walks a range (synchronization) brings its own
+    rebatch (the window is re-asked from the edge, which never moved past an unanswered number).  Without
+    this the re-entry resumed the cut batch from the same queue, which is what the door's closing waves
+    refuse (2026-09-04 13:03)."""
+    if hasattr(c.role, "rebatch"):
+        return c.role.rebatch(c, ctx)
+    n = 0
+    while True:
+        try:
+            item = c.q.get_nowait()
+        except queue.Empty:
+            break
+        c.held.discard(item[0])
+        n += 1
+    return n
+
+
+def _hangup(ctx, c, why):
+    """The session closed (or the wire died): hang up at once, land what the crew holds, drop the cut batch
+    and set the wait; the main loop re-enters the crew when it is due (_await_entry).  Nothing blocks:
+    every other crew keeps feeding and landing."""
     now = time.time()
     if c.wait_s is None:
         c.wait_s = ctx.args.redial_wait
-    if c.tries and c.stats["ok"] - c.ok_at_redial >= SERVED_LANDINGS:
-        c.tries = 0                      # the last re-entry was SERVED (it landed a real batch) and the door then closed it: the incident closed
+    if c.tries and (c.stats["ok"] - c.ok_at_redial >= SERVED_LANDINGS or now - c.last_redial >= SERVED_S):
+        c.tries = 0                      # the last re-entry was SERVED (a real batch landed, or five minutes lived) and the door then closed it: the incident closed
         c.wait_s = max(c.wait_s // 2, ctx.args.redial_wait)
     elif c.tries:
-        c.wait_s = min(c.wait_s * 2, 4800)   # the last re-entry was REFUSED at the door (a few dozen landings at most): the next wait doubles
+        c.wait_s = min(c.wait_s * 2, 4800)   # the last re-entry was REFUSED at the door (cut inside its ramp): the next wait doubles
     if c.tries >= ctx.args.tries:
-        ctx.park("PARKED: %d redials in a row failed (%s) at %s" % (c.tries, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=3)
+        ctx.park("PARKED: %d re-entries in a row refused (%s) at %s" % (c.tries, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=3)
         return
-    _log(ctx, "%s: DEAD TRANSPORT (%d transport errors in a row, nothing landed since %ds) - hanging up"
-         % (c.role.lane, c.transport_streak, int(now - c.last_success)))
+    _log(ctx, "%s: %s - hanging up" % (c.role.lane, why))
     c.leave()
     _land(ctx, c)                                       # what the crew had already fetched lands now
-    while not net_up() and not ctx.stopping.is_set():
-        _log(ctx, "%s: network is DOWN - waiting, no try spent" % c.role.lane)      # wifi is not a block
-        time.sleep(60)
-    if ctx.stopping.is_set():
-        return
-    c.tries += 1
-    c.last_redial = time.time()
-    c.ok_at_redial = c.stats["ok"]
-    wait = c.wait_s                                     # the cycle's wait (2026-09-04): 60 s at the base, doubled per refused re-entry
-    _log(ctx, "%s: redial %d/%d after %ds - the dead window, no line open" % (c.role.lane, c.tries, ctx.args.tries, wait))
+    dropped = _rebatch(ctx, c)
+    c.reentry_at = time.time() + c.wait_s
+    _log(ctx, "%s: %d of the cut batch dropped (their claims expire on their own) - re-entry %d/%d on a fresh batch in %ds, no line open"
+         % (c.role.lane, dropped, c.tries + 1, ctx.args.tries, c.wait_s))
     try:
-        c.cloud.heartbeat(0, "hang-up: redial %d/%d at %s" % (c.tries, ctx.args.tries, time.strftime("%H:%M")))
+        c.cloud.heartbeat(0, "hang-up: re-entry %d/%d at %s" % (c.tries + 1, ctx.args.tries, time.strftime("%H:%M", time.localtime(c.reentry_at))))
     except Exception:
         pass
-    word = "hang-up: waiting to redial %d/%d" % (c.tries, ctx.args.tries)
-    waited = 0
-    while waited < wait and not ctx.stopping.is_set():
-        time.sleep(10)
-        waited += 10
-        if waited % 60 == 0:
-            try:
-                c.cloud.heartbeat(0, word)              # the board keeps seeing the lane while it waits
-            except Exception:
-                pass
-    if ctx.stopping.is_set():
+
+
+def _await_entry(ctx, crews, c):
+    """A crew waiting to enter (the first entry, or a re-entry after a hang-up) enters when its wait is over,
+    no other crew is ramping, the last ramp ended --entry-gap ago, the wire is up and the exit pool is
+    settled.  The fresh batch is claimed right before the ramp so the first-born workers have work; the
+    try is spent here, at the re-entry itself - never while the wire is down."""
+    now = time.time()
+    if now < c.reentry_at or ctx.stopping.is_set():
         return
+    if any(o is not c and o.ramping() for o in crews):
+        return                                              # one ramp at a time: three doors, never one moment
+    if now - max([o.ramp_end for o in crews] + [0.0]) < ctx.args.entry_gap:
+        return
+    if not net_up():
+        c.reentry_at = now + 60
+        _log(ctx, "%s: network is DOWN - waiting a minute, no try spent" % c.role.lane)      # wifi is not a block
+        return
+    _feed(ctx, c)
     wait_for_pool(ctx, c)
     if ctx.stopping.is_set():
         return
+    if c.entries:
+        c.tries += 1
+        c.last_redial = time.time()
+        c.ok_at_redial = c.stats["ok"]
     c.enter(ctx.args.stagger)
-    _log(ctx, "%s: re-entered, %d workers, one entry" % (c.role.lane, c.width))
+    c.reentry_at = None
+    _log(ctx, "%s: %s - %d workers, births %.0fs apart, one entry" % (c.role.lane, "entered" if c.entries == 1 else "re-entered (%d/%d)" % (c.tries, ctx.args.tries), c.width, ctx.args.stagger))
 
 
 def run(roles, args, here):
@@ -610,20 +674,18 @@ def run(roles, args, here):
             raise SystemExit("the cloud table is unreachable (%s) - nothing to claim, not entering ACRIS" % reason(e))
         _land(ctx, c)                                  # anything left in the outbox from last time
         _feed(ctx, c)
+        c.reentry_at = time.time()                     # every crew starts waiting to enter: the loop enters them one ramp at a time, --entry-gap apart
     t0 = time.time()
     last = {c.role.lane: dict(c.stats) for c in crews}
     tick = time.time()
     quiet = {c.role.lane: 0 for c in crews}
     try:
-        for i, c in enumerate(crews):
-            if i:
-                time.sleep(args.entry_gap)
-            wait_for_pool(ctx, c)
-            c.enter(args.stagger)
-            _log(ctx, "%s: entered, %d workers" % (c.role.lane, c.width))
         while not ctx.stopping.is_set():
             time.sleep(1)
             for c in crews:
+                if c.reentry_at is not None:
+                    _await_entry(ctx, crews, c)             # the first entry, or a re-entry after a hang-up: one ramp at a time
+                    continue                                # no feed, no detectors while the crew has no line open
                 _feed(ctx, c)
                 with c.lock:
                     n = len(c.results)
@@ -633,8 +695,12 @@ def run(roles, args, here):
                 if c.wall_streak >= 40:
                     ctx.park("wall: %d consecutive 503/429 on %s at %s - not retrying, not rotating"
                              % (c.wall_streak, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=4)
-                if c.hung_up() or (c.transport_streak >= 3 * c.width and time.time() - c.last_success > 60):
-                    _redial(ctx, c)                       # at once on a cut: no re-handshake storm, wait out the window, ONE entry
+                if c.hung_up():                               # at once on a close: no re-handshake storm, the wait, ONE entry on a fresh batch
+                    _hangup(ctx, c, "the session closed (every worker hit the wire inside %ds, nothing landed for %ds)"
+                            % (HANGUP_WINDOW_S, int(time.time() - c.last_success)))
+                elif c.transport_streak >= 3 * c.width and time.time() - c.last_success > 60:
+                    _hangup(ctx, c, "dead transport (%d transport errors in a row, nothing landed for %ds)"
+                            % (c.transport_streak, int(time.time() - c.last_success)))
                 if args.limit and c.stats["ok"] >= args.limit and c.q.empty():
                     ctx.exit_code, ctx.exit_reason = 0, "limit %d reached" % args.limit
                     ctx.stopping.set()
@@ -649,9 +715,9 @@ def run(roles, args, here):
                     asked = s["reqs"] - last[c.role.lane]["reqs"]
                     moved = s["ok"] - last[c.role.lane]["ok"]
                     quiet[c.role.lane] = quiet[c.role.lane] + 1 if (asked > 0 and moved == 0) else 0
-                    if quiet[c.role.lane] >= 5:      # five minutes asking, nothing landing = our wire
+                    if quiet[c.role.lane] >= 5 and c.reentry_at is None:      # five minutes asking, nothing landing = our wire
                         quiet[c.role.lane] = 0
-                        _redial(ctx, c)
+                        _hangup(ctx, c, "five minutes asking, nothing landing (our wire)")
                     last[c.role.lane] = s
                     try:
                         c.cloud.heartbeat(c.alive(), None)

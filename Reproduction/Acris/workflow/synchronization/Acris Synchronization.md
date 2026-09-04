@@ -26,14 +26,14 @@ Home only: the edge lives on one workstation. `--width` defaults to 20 walkers. 
 | a live page is a full page | a detail parsed from fewer than 20 KB is suspect truncation and is asked again, never reported live | acris_edge, `_MIN_DETAIL` |
 | the cell | the `doc_id` only. The page fetched is the registry page, and registration will fetch it again for the recorded details: one more request per new document. The cell rule is worth it | login 2026-09-03: each lane fills its own cell and nothing else |
 | the counters | a new row moves `needed` for the phase and every lane, and synchronization's `landed`, in the same transaction as the insert | the counting rule |
-| one entry, one door, refusal, hang-up, wall, width | shared with every lane; see Acris Documentation.md | lane.py |
+| one entry, one door, refusal, hang-up, wall, width | shared with every lane; see Acris Documentation.md. The cycle for a walker crew: every walker a transport error inside 60 s with nothing answered for 10 s is the session closed - hang up at once, drop the cut window from the queue and forget it as in flight (`rebatch`), 60 s of silence with the backoff, one re-entry with births 5 s apart, and the monitor asks the same numbers again from the edge, which never moved past an unanswered number | lane.py; login 2026-09-04, the cycle |
 | one machine | the edge is local state; the lane runs at home | SCHEMA.md |
 
 ## Calibrations
 
 | knob | value | how it was measured, how it fails |
 |---|---|---|
-| width | 20 | the crew of walkers behind one entry; the counter moves about 1,300 documents a day, in bursts |
+| width | 20 alone; 9 plus the monitor in the fleet's batch | the crew of walkers behind one entry; the counter moves about 1,300 documents a day, in bursts; the monitor is the main thread's feed, not a connection |
 | every | 60 s | a watch of 8 requests a minute while level; a filing is seen within a minute |
 | watch | 8 | the old monitor's number; also the trailing-blank rule that decides behind or level |
 | bite | 1,000 | walked by 20 walkers in about a minute; a bite of 131 KB pages is about 130 MB |
@@ -50,5 +50,7 @@ A forward-only counter inherits every gap it already has and reports clean forev
 Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
 
 ## History
+
+2026-09-04 — the review against the cycle: `rebatch` added (the cut window dropped and forgotten as in flight, asked again from the edge after the re-entry); the lane module's amendments apply. Proven by the simulation again the same night.
 
 2026-09-03 — written from the sync floor of `acris_reproduction.py` (monitor, crew, land, edge) and `acris_edge.py` (the probe), every line read. Proven offline (the probe URL, the id from a live page, the stub, the truncation guard, the edge file's fail-closed start) and by a simulated walk against the live cloud with throwaway numbers and no ACRIS request: a burst behind the edge walked in bites, personal-property blanks passed, a failing number recorded as a hole and passed, the edge moved only after the rows were in, the level watch and the wider look. Not yet proven: a real probe, which waits for the data move. The old edge file's last movement was 2026-08-31; the table has been behind since, which the audit will show.
