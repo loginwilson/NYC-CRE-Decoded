@@ -26,6 +26,8 @@ synchronization.edge.json
 synchronization.edge.tmp
 enumeration.*.json
 enumeration.*.txt
+update.state.json
+update.state.tmp
 
 # python
 __pycache__/
