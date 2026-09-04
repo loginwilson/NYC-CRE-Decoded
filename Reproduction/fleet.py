@@ -24,7 +24,7 @@ Lanes together - the rules:
                            0  stopped cleanly (control file, --limit, a signal)   done, not relaunched
                            1  refused to start (another door open, parked, bad arguments)   left alone, logged
                            2  REFUSED by the source (the notice page)   every other lane is told to stop; exit 2; a person decides
-                           3  redials exhausted (the wire stayed dead)   relaunched after --relaunch-wait
+                           3  four re-entries in a row refused: the lane PARKED itself   never relaunched; a person decides
                            4  wall (40 consecutive 503/429)   parked by the lane; left alone
                            5  crash   relaunched after a short wait
                            6  drive gone (documentation)   the fleet waits for the drive and relaunches with --unpark when it is back
@@ -64,8 +64,8 @@ import cloud
 import lane
 import storage
 
-WAIT_AFTER = {3: 300, 5: 60}                                     # seconds before a relaunch, by exit code
-MEANING = {0: "stopped cleanly", 1: "refused to start", 2: "REFUSED by the source", 3: "redials exhausted",
+WAIT_AFTER = {3: 300, 5: 60}                                     # seconds before a relaunch, by exit code (3 never relaunches in practice: the lane parked itself)
+MEANING = {0: "stopped cleanly", 1: "refused to start", 2: "REFUSED by the source", 3: "parked itself: four re-entries in a row refused",
            4: "wall - parked by the lane", 5: "crash", 6: "drive gone"}
 
 
