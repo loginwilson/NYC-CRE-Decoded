@@ -65,7 +65,7 @@ Ids the table holds that the index does not are classified, never counted agains
 
 ## Working files
 
-Beside this file, never in git: `enumeration.report.txt` (the last run's report, also printed), `enumeration.log` (every run appended), `enumeration.missing.txt` (index ids the table lacks), `enumeration.extra.txt` (table ids the index lacks, with their class), `enumeration.holes.json` (the census: per year the index count, the top, the holes), `enumeration.probe.json` (the probe's journal: every number's verdict, every year's top), `enumeration.probe-missing.txt` (documents the probe found that the table lacks), `enumeration.lock`, `enumeration.parked`, `Reproduction/Acris/rulebook/refusals/`. The board never shows enumeration: its report is the file, and its verdict is the exit code.
+Beside this file, never in git: `enumeration.report.txt` (the last run's report, also printed), `enumeration.log` (every run appended), `enumeration.missing.txt` (index ids the table lacks), `enumeration.extra.txt` (table ids the index lacks, with their class), `enumeration.holes.json` (the census: per year the index count, the top, the holes), `enumeration.probe.json` (the probe's journal: every number's verdict, every year's top), `enumeration.probe-missing.txt` (documents the probe found that the table lacks), `enumeration.lock`, `enumeration.parked`, `Reproduction/Acris/refusals/`. The board never shows enumeration: its report is the file, and its verdict is the exit code.
 
 ## Open
 

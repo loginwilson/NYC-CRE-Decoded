@@ -52,7 +52,7 @@ import requests.adapters
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # documentation -> workflow -> Richmond -> Reproduction
 sys.path.insert(0, str(PHASE))
-sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
+sys.path.insert(0, str(PHASE / "Richmond"))
 
 import lane                                                     # noqa: E402
 import richmond                                                 # noqa: E402

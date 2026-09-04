@@ -51,7 +51,7 @@ import time
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # registration -> workflow -> Acris -> Reproduction
 sys.path.insert(0, str(PHASE))
-sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
+sys.path.insert(0, str(PHASE / "Acris"))
 
 import acris                                                    # noqa: E402
 import lane                                                     # noqa: E402

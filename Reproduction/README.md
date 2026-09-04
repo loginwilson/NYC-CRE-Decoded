@@ -1,10 +1,10 @@
 # Reproduction
 
-The phase. `SCHEMA.md` is the concept in login's words; `supabase/` holds the phase's migrations, the push script, the SQL executor and the live test. One folder per source holds three folders and nothing loose: `rulebook/` (`<source>.py`, the rules every lane of that source shares - URLs minted from the id, the one user-agent, the refusal detector, where a document files - and `<Source>.md`, that module's authority), `workflow/` and `update/`. Supabase side: schema `reproduction`.
+The phase. `SCHEMA.md` is the concept in login's words; `supabase/` holds the phase's migrations, the push script, the SQL executor and the live test. One folder per source holds `<source>.py` (the rules every lane of that source shares: URLs minted from the id, the one user-agent, the refusal detector, where a document files), `workflow/` and `update/`. Supabase side: schema `reproduction`.
 
 ```
 <Source>/
-  rulebook/           <source>.py · <Source>.md                                          the source's rules as one module, and its authority
+  <source>.py
   workflow/
     reproduction/     <Source> Reproduction.md · <Source> Reproduction.py     the source's written authority and the whole cycle run as a fleet
     enumeration/      <Source> Enumeration.md · <Source> Enumeration.py       the audit, not a cycle lane

@@ -59,7 +59,7 @@ import requests
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # enumeration -> workflow -> Richmond -> Reproduction
 sys.path.insert(0, str(PHASE))
-sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
+sys.path.insert(0, str(PHASE / "Richmond"))
 
 import cloud                                                    # noqa: E402
 import lane                                                     # noqa: E402

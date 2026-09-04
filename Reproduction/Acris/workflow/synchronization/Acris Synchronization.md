@@ -47,7 +47,7 @@ A forward-only counter inherits every gap it already has and reports clean forev
 
 ## Working files
 
-Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
+Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`, `Reproduction/Acris/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
 
 ## History
 
