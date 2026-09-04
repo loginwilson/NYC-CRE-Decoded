@@ -195,6 +195,17 @@ class Cloud:
                          % (self.source, where), (n,) + params, True)
         return {r[0]: r[1] for r in rows}
 
+    def todo(self, ids, pending_age="1 hour"):
+        """The subset of ids whose registry needs work: empty, or pending and last checked longer ago than
+        pending_age.  For a lane whose source grants details only behind its listing (richmond), so the
+        lane walks the listing and asks the table which of the ids it passes are its work."""
+        if not ids:
+            return set()
+        rows = self._run("select doc_id from reproduction.%s where doc_id = any(%%s) and (registry is null or"
+                         " (registry = '\"pending\"'::jsonb and updated_at < now() - %%s::interval))" % self.source,
+                         (list(ids), pending_age), True)
+        return {r[0] for r in rows}
+
     def held(self, ids):
         """The subset of ids the table holds."""
         if not ids:

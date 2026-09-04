@@ -77,6 +77,92 @@ def doc_id(internal_id):
     return "RC_%s" % str(internal_id).strip()
 
 
+# ── THE DETAIL PAGE - the recorded details, behind the grant ─────────────────────────────
+# A detail unlocks only after the SAME SESSION fetched the listing page the id appears on (measured
+# 2026-08-21): a cold GET answers HTTP 200 and a shell (4,212 bytes) or "INVALID REQUEST: UNAUTHORIZED
+# SEARCH ACCESS" (2,180 bytes) - never a refusal, never an absence: our grant did not take.  So a reader
+# fetches the page, then the details of that page's ids, in that order, in one session.  The parser is
+# the one that landed 2.4M details (rc_rd_walk.parse_detail + rc_source.image_state), kept verbatim.
+IMAGE_LAG_DAYS = 7          # "No Image Available At This Time" inside this lag is pending, outside it absent
+
+
+def detail_url(internal_id):
+    return "%s/Search/viewDocumentInfo/%s" % (BASE, str(internal_id).strip())
+
+
+def is_detail(html):
+    """The page carries the recorded details; the shell and the unauthorized answer do not."""
+    return "RECORDED DETAILS" in re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+
+
+def image_state(flat, recorded=""):
+    """present | pending | absent | unknown - the ONE definition every reader shares.  The page publishes
+    two things; the third state is derived from age against the lag (login 2026-08-25: "the lag determines
+    the state").  Unrecognised is unknown, never a conclusion: ask again."""
+    if "View Imaged Document" in flat or "ViewVscms" in flat:
+        return "present"
+    if "No Image Available At This Time" not in flat:
+        return "unknown"
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", str(recorded or "").strip())
+    if not m:
+        return "pending"                      # an unreadable date is always pending, never absent
+    try:
+        t = dt.date(int(m.group(3)), int(m.group(1)), int(m.group(2)))
+    except ValueError:
+        return "pending"
+    return "pending" if (dt.date.today() - t).days < IMAGE_LAG_DAYS else "absent"
+
+
+def parse_detail(html):
+    """RECORDED DETAILS + BLOCKS AND LOTS + PARTIES in the corpus schema, or None for a page that is not a
+    detail (the shell, the unauthorized answer).  Parcels carry the BBL (borough 5 + block(5) + lot(4));
+    parties keep the person/company COLUMN (the page tells where the clerk typed the name, not whether the
+    party is a person - inferring the type manufactures a fact)."""
+    raw = re.sub(r"&nbsp;?", " ", html)
+    flat = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", raw))
+    if "RECORDED DETAILS" not in flat:
+        return None
+
+    def fld(label):
+        m = re.search(label + r":\s*([^:]*?)\s*(?=[A-Z][a-z]+ ?[A-Z]?[a-z]*:|BLOCKS)", flat)
+        return m.group(1).strip() if m else ""
+
+    rec = {
+        # the label is "Document No.:" on modern pages (a PERIOD before the colon) and "Document No:" on old
+        # ones; a plain "Document No" + ":" matched only the old form and every same-day 2026 doc froze with
+        # instrument '' (2026-08-22)
+        "instrument": fld(r"Document No\.?"),
+        "book": fld("Book"),
+        "page": fld("Page"),
+        "doc_type": fld("Document Type"),
+        "recorded": fld("Date Recorded"),
+        "amount": fld("Consideration Amount"),
+        "status": re.sub(r"\s*View Imaged Document.*$", "", fld("Status")),
+        "image_state": image_state(flat, fld("Date Recorded")),
+        "parcels": [{"bbl": "5%s%s" % (b.zfill(5), l.zfill(4))} for b, l in re.findall(r"Block (\d+), Lot (\d+)", flat)],
+        "parties": [],
+    }
+    in_parties = False
+    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", raw, re.S):
+        cells = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", c)).strip() for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, re.S)]
+        if not cells:
+            continue
+        if cells[:3] == ["Name", "Company", "Party"]:
+            in_parties = True
+            continue
+        if in_parties and len(cells) >= 3 and (cells[0] or cells[1]):
+            person, company, role = cells[0], cells[1], cells[2]
+            rec["parties"].append({"name": person or company, "role": role, "column": "name" if person else "company",
+                                   "person": person, "company": company})
+    return rec
+
+
+def premature(rec):
+    """A document registered the day it was recorded can carry no instrument number yet: the detail is not
+    mature, and the registry is pending until it is (rc_rd_refresh, 2026-08-22)."""
+    return not (rec or {}).get("instrument")
+
+
 def windows(start=START, end=None, days=WINDOW_DAYS):
     """[(start, end)] inclusive date windows of at most `days` days from start to end (today)."""
     end = end or dt.date.today()

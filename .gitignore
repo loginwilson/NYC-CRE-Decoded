@@ -24,6 +24,8 @@ _working/
 refusals/
 synchronization.edge.json
 synchronization.edge.tmp
+registration.edge.json
+registration.edge.tmp
 enumeration.*.json
 enumeration.*.txt
 update.state.json
