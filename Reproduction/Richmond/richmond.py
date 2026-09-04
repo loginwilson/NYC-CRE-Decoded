@@ -8,6 +8,8 @@ authority); the dates in the comments say when.
 import datetime as dt
 import re
 
+import lane
+
 BASE = "https://www.richmondcountyclerk.com"
 
 # IDENTIFY HONESTLY.  The county serves the listing identically to any user-agent (measured
@@ -30,8 +32,9 @@ _ROW = re.compile(
 _PAGES = re.compile(r'Page\s*<span[^>]*>(\d+)</span>\s*of\s*(\d+)')
 
 
-class Refused(RuntimeError):
-    """The county declined (captcha, access denied, block page).  Stop; do not retry, do not rotate."""
+class Refused(lane.Refused):
+    """The county declined (captcha, access denied, block page).  Stop; do not retry, do not rotate.
+    A lane.Refused, so a crew parks on it exactly as on the ACRIS notice page."""
 
 
 class ProbeBroken(RuntimeError):
