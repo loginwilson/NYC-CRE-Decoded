@@ -1,6 +1,6 @@
 # Richmond Synchronization
 
-The synchronization lane of the richmond reproduction, as one program: `Richmond Synchronization.py`. It keeps the table live at the county's date edge: one monitor and a few walkers behind one entry. The monitor reads today's listing every ten seconds and lands every new internal id as a new row, the `doc_id` cell and nothing else, within seconds of the county listing it; every quarter hour it re-reads the trailing thirty days so a filing the county lists late lands too; on a start after downtime it walks the days it missed. This file is the lane's own authority; the cycle's is `../reproduction/Richmond Reproduction.md`; the source's shared rules are in `Reproduction/Richmond/richmond.py`.
+The synchronization lane of the richmond reproduction, as one program: `Richmond Synchronization.py`. It keeps the table live at the county's date edge: one monitor and a few walkers behind one entry. The monitor reads today's listing every ten seconds and lands every new internal id as a new row, the `doc_id` cell and nothing else, within seconds of the county listing it; every quarter hour it re-reads the trailing thirty days so a filing the county lists late lands too; on a start after downtime it walks the days it missed. This file is the lane's own authority; the cycle's is `../reproduction/Richmond Reproduction.md`; the source's shared rules are in `Reproduction/Richmond/rulebook/richmond.py` (its document is `Richmond.md` beside it).
 
 ## Why the date edge
 

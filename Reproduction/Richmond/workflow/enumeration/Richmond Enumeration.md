@@ -1,6 +1,6 @@
 # Richmond Enumeration
 
-The enumeration lane of the richmond reproduction, as one program: `Richmond Enumeration.py`. It is the audit, not a cycle lane: it counts the source, compares with the table, and the difference must be 0. It never writes a cell and has no table in the cloud. This file is the lane's own authority; the cycle's is `../reproduction/Richmond Reproduction.md`; the source's shared rules are in `Reproduction/Richmond/richmond.py`.
+The enumeration lane of the richmond reproduction, as one program: `Richmond Enumeration.py`. It is the audit, not a cycle lane: it counts the source, compares with the table, and the difference must be 0. It never writes a cell and has no table in the cloud. This file is the lane's own authority; the cycle's is `../reproduction/Richmond Reproduction.md`; the source's shared rules are in `Reproduction/Richmond/rulebook/richmond.py` (its document is `Richmond.md` beside it).
 
 ## The law
 

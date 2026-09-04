@@ -69,7 +69,7 @@ import requests
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # enumeration -> workflow -> Acris -> Reproduction
 sys.path.insert(0, str(PHASE))
-sys.path.insert(0, str(PHASE / "Acris"))
+sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import acris                                                    # noqa: E402
 import cloud                                                    # noqa: E402

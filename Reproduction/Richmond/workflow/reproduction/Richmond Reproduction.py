@@ -32,7 +32,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 WORKFLOW = HERE.parent                            # reproduction -> workflow
 PHASE = HERE.parents[2]                           # reproduction -> workflow -> Richmond -> Reproduction
 sys.path.insert(0, str(PHASE))
-sys.path.insert(0, str(PHASE / "Richmond"))
+sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
 import fleet                                                    # noqa: E402
 import richmond                                                 # noqa: E402

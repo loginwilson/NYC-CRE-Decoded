@@ -50,11 +50,11 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 
 ## Working files
 
-Beside this file, never in git: `documentation.lock` (the running pid), `documentation.control` (`width=N`, `stop`), `documentation.parked` (the reason a person must read), `documentation.outbox.jsonl` (landings the cloud has not taken), `documentation.fails.jsonl` (every fetch error with its reason), `Reproduction/Acris/refusals/` (the page a refusal was called on - one folder for every acris lane). Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash · 6 drive gone.
+Beside this file, never in git: `documentation.lock` (the running pid), `documentation.control` (`width=N`, `stop`), `documentation.parked` (the reason a person must read), `documentation.outbox.jsonl` (landings the cloud has not taken), `documentation.fails.jsonl` (every fetch error with its reason), `Reproduction/Acris/rulebook/refusals/` (the page a refusal was called on - one folder for every acris lane). Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash · 6 drive gone.
 
 ## What it imports
 
-`Reproduction/lane.py` (the entry and the policies every lane shares), `Reproduction/cloud.py` (claim, land, heartbeat, the outbox), `Reproduction/storage.py` (the drive by label, the One Touch layout), `Reproduction/Acris/acris.py` (the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, the page count, where a document files).
+`Reproduction/lane.py` (the entry and the policies every lane shares), `Reproduction/cloud.py` (claim, land, heartbeat, the outbox), `Reproduction/storage.py` (the drive by label, the One Touch layout), `Reproduction/Acris/rulebook/acris.py` (the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, the page count, where a document files).
 
 ## History
 

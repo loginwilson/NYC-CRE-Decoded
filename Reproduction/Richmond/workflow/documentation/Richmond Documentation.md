@@ -57,7 +57,7 @@ Beside this file, never in git: `documentation.lock`, `documentation.control`, `
 
 ## What it imports
 
-`Reproduction/lane.py`, `Reproduction/cloud.py`, `Reproduction/storage.py`, `Reproduction/Richmond/richmond.py` (the mint url and its referer, the three outcomes, the pull headers, the lag, the path rule, the refusal detector).
+`Reproduction/lane.py`, `Reproduction/cloud.py`, `Reproduction/storage.py`, `Reproduction/Richmond/rulebook/richmond.py` (the mint url and its referer, the three outcomes, the pull headers, the lag, the path rule, the refusal detector).
 
 ## Open decision
 
