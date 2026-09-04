@@ -13,7 +13,7 @@ No drive: the registry is text and lives in the cloud table only. `--width` defa
 
 | rule | what the lane does | origin |
 |---|---|---|
-| one entry | one pooled session, one connection per worker at birth staggered 0.5 s apart, keep-alive after, no further handshakes | login 2026-09-03; the 08-28 pooled runs |
+| one entry | one pooled session, one connection per worker at birth, births 5 s apart, keep-alive after, no further handshakes | login 2026-09-03; the 08-28 pooled runs |
 | one door | a second start on the same machine is refused while the first lives (`registration.lock`) | trap 8 |
 | the URL | `DocumentDetail?doc_id=<id>`, minted from the id, the search page as referer; no navigation step | login: "mints url via stems" |
 | the echo | the page must print `DOCUMENT ID: <id>` before it is believed; a page that does not is asked three times in place (0.5 s, then 1 s between asks), then left for a later pass — never a failure count, never a verdict | trap 1: under load 63% of a floor's requests came back as a short or generic page, and the same ids served full pages seconds later |
@@ -22,7 +22,7 @@ No drive: the registry is text and lives in the cloud table only. `--width` defa
 | no verdict from the lane | the lane writes a registry or nothing. A page that never echoes the id is indistinguishable, per request, from the transient; only persistence across passes tells them apart, and the lane keeps no count. The words `pending` / `absent` for a registry are a decision to record here when it is taken (see Open) | trap 1; §12 "the 322 are the same 322" |
 | failures never stop it | a fetch error leaves the document empty for a later pass and writes the reason to `registration.fails.jsonl`; a transport error gets one more try after a 5 s pause | login 2026-09-03 |
 | refusal | HTTP 200 carrying the Bandwidth Notice is the only block: park at once, exit 2, no retry, no rotation; the page is preserved under `Reproduction/Acris/refusals/` | the detectors; the 08-26 false positive |
-| hang-up | dead transport - ACRIS's ordinary session end, not a block: hang up, wait `--redial-wait` times the try number (30, 60, 90 minutes), wait for the wire, re-enter through one fresh entry; three tries per incident, then park, exit 3; never inside a minute | §17 addenda 15–19; login 2026-09-03 01:0x; the ladder 2026-09-04 |
+| hang-up | the session closed (every worker a transport error inside 60 s): hang up at once, wait `--redial-wait` (60 s, ×2 per refused re-entry, ÷2 per served), re-enter once on a fresh batch, births 5 s apart; four tries per incident, then park, exit 3 | the cycle, login 2026-09-04; see Acris Documentation.md |
 | wall | forty consecutive 503 or 429 with no success between: park, exit 4 | trap 2 |
 | pending goes back to the backfill | a registry pending is re-checked once its last check is `--pending-age` old, ahead of the empties | login 2026-09-03 23:5x |
 | no overlap | claim, land once a minute through `registration.outbox.jsonl`, heartbeat every minute | SCHEMA.md |
@@ -37,7 +37,7 @@ No drive: the registry is text and lives in the cloud table only. `--width` defa
 | re-asks | 3 at 0.5 s steps | the transient resolves on a calm retry; a fourth ask is spent budget |
 | claim | 12 × width, 20-minute ttl | a slice turns over in about a minute at 40 workers |
 | pending-age | 1 hour | shared knob; registry pendings are rare |
-| redial-wait, tries, wall | 1,800 s × the try number, 3, 40 | shared with documentation; see Acris Documentation.md |
+| redial-wait, tries, wall | 60 s with the backoff, 4, 40 | shared with documentation; see Acris Documentation.md |
 
 ## Open
 

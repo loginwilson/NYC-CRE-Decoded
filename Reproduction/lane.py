@@ -28,16 +28,18 @@ document - and hands it to run().  run() owns everything else:
   drive                      a role may define check(ctx); documentation parks when its drive is gone
                              (a pulled USB left the old lane fetching with every write failing, trap 5)
 
-THE REDIAL (2026-09-03, proven 21:37; the wait re-set 2026-09-04): a cut line is never re-dialed by the
-worker.  A burst of transport errors inside HANGUP_WINDOW_S (10 s) is the far side cutting the lines: the
-crew hangs up AT ONCE (Crew.hung_up -> _redial), waits --redial-wait (1,800 s) times the try number with no
-line open - 30 minutes before the first re-entry, 60 before the second, 90 before the third - and re-enters
-ONCE, staggered, after exit_pool() shows five draws in one block.  A worker that hit the wire pauses
-HANGUP_PAUSE_S (5 s) before its next request.  A cut is ACRIS's ordinary session end, not a block: on
-2026-09-03 it closed all forty lines five times after 38-189 minutes and every re-entry made a minute after
-the slow breaker was served; on 2026-09-04 re-entries 10 and 18 minutes after a cut were refused at once and
-ones after 30 and 52 minutes were served for an hour at the golden rate.  Never a re-entry inside a minute:
-the 19:43 storm (nine relaunches in 96 minutes, each cut sooner) is what that looks like.
+THE CYCLE (login 2026-09-04: "batch, enter, stagger, redial until close, exit, rebatch, cycle"; proven
+unattended 14:51-14:58): one entry, workers born --stagger (5 s) apart; a worker whose line the far side
+closes redials it on its next request, pausing HANGUP_PAUSE_S (5 s) first; when the far side has closed the
+WHOLE width - every worker a transport error inside HANGUP_WINDOW_S (60 s) - the crew hangs up AT ONCE
+(Crew.hung_up -> _redial), lands what it holds, waits --redial-wait (60 s) with no line open, and re-enters
+ONCE on a fresh batch (a re-entry claims new ids; the cut batch's claims expire on their own), staggered,
+after exit_pool() shows five draws in one block.  The wait is a state: a re-entry the door refuses (cut
+before it settles) doubles the next wait, capped at 80 minutes; a served one halves it back to the base.
+A cut is ACRIS's ordinary session end, not a block: it closed every session of 2026-09-04 after 12-59
+minutes and served the fresh-batch re-entry 60 s after the last dead line cleared (14:54, 0 fails by minute
+4).  What it refuses is a re-entry made while its own closing waves are still running on the old batch, and
+a relaunch storm (2026-09-03 19:43: nine in 96 minutes, each cut sooner).  A notice page is never re-entered.
 
 Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused (notice page) · 3 redials
 exhausted · 4 wall · 5 crash · 6 drive gone.  Every stop writes its reason as the lane's last word.
@@ -132,14 +134,14 @@ def add_common_args(ap):
     """The knobs every cycle lane shares; a lane file adds its own (documentation: --drive, --fresh-days)."""
     ap.add_argument("--width", type=int, default=40, help="workers = connections (default 40)")
     ap.add_argument("--host", default="", help="this workstation's name in the cloud (default: the machine name)")
-    ap.add_argument("--stagger", type=float, default=0.5, help="seconds between worker births")
+    ap.add_argument("--stagger", type=float, default=5.0, help="seconds between worker births: a ramp of about 200 s at width 40 (2026-09-04: 0.5-s entries were cut, 5-s and 20-s entries served on the same door)")
     ap.add_argument("--claim", type=int, default=0, help="documents taken per claim (default 12 x width)")
     ap.add_argument("--ttl", default="20 minutes", help="how long a claim is ours before it goes back on the list")
     ap.add_argument("--pending-age", default="1 hour",
                     help="re-check a pending once its last check is this old; pendings ride ahead of the backfill, and when"
                          " the lane is up to date every claim is pendings (one request per pending per interval)")
-    ap.add_argument("--redial-wait", type=int, default=1800, help="seconds of silence after a hang-up before the first re-entry; the second try waits twice this, the third three times")
-    ap.add_argument("--tries", type=int, default=3, help="redials per incident before parking")
+    ap.add_argument("--redial-wait", type=int, default=60, help="seconds of silence after the session closes before the fresh-batch re-entry; a refused re-entry doubles the next wait (cap 4,800 s), a served one halves it back to this base")
+    ap.add_argument("--tries", type=int, default=4, help="re-entries per incident before parking (the wait doubles each time: 1, 2, 4, 8 minutes at the base)")
     ap.add_argument("--no-pool-check", action="store_true", help="skip the exit-pool check at entry (tests only)")
     ap.add_argument("--entry-gap", type=float, default=20.0, help="seconds between one crew's entry and the next (--also)")
     ap.add_argument("--also", action="append", default=[], metavar="LANE:WIDTH", help="host another lane's crew too, e.g. registration:40")
@@ -203,7 +205,8 @@ def net_up():
     return False
 
 
-HANGUP_WINDOW_S, HANGUP_PAUSE_S = 10, 5     # a burst of transport errors inside 10 s is a cut line; a cut worker pauses 5 s
+HANGUP_WINDOW_S, HANGUP_PAUSE_S = 60, 5     # the whole width failing inside 60 s is the session closed; a cut worker pauses 5 s then redials
+SERVED_LANDINGS = 300                       # a re-entry that landed this many was served then closed by the door (a 5-s ramp lands ~900 by minute 4); fewer = refused
 MAX_WIDTH = 128          # the pool's ceiling; a connection is opened only when a worker first asks
 
 
@@ -274,6 +277,8 @@ class Crew:
         self.fails = lane_ctx.here / ("%s.fails.jsonl" % role.lane)
         self.held = set()                 # claimed, not yet landed
         self.tries = 0                    # redials in the current incident
+        self.wait_s = None                # the backoff state: set from --redial-wait at the first hang-up; x2 per refused re-entry, /2 per served one
+        self.ok_at_redial = 0             # landings when the last re-entry was made: served or refused is decided by landings, never by age
         self.last_redial = 0.0
         self.idle_until = 0.0             # when the to-do list came back empty, do not ask again before this
         self.progress_at = time.time()    # when the last PROGRESS line was printed (the rate divides by real time)
@@ -351,13 +356,15 @@ class Crew:
                 return
 
     def hung_up(self):
-        """The far side cut the lines: a burst of transport errors inside HANGUP_WINDOW_S.  A healthy crew
-        fails a handful of requests an hour; a cut fails every worker within seconds (measured 2026-09-03:
-        ESTABLISHED -> CLOSE_WAIT in one tick, then SSL EOF on every line)."""
+        """The far side closed the session: every worker hit the wire inside HANGUP_WINDOW_S (login 2026-09-04:
+        "you will know its time to rebatch when ALL lanes are closed").  A partial close is not this - those
+        workers redial one by one and the crew keeps its width (2026-09-04 12:27: 17 lines closed, all 40 back
+        in 30 s).  A healthy crew fails a handful of requests an hour; a closed session fails the whole width
+        inside a minute (measured 2026-09-04 14:51: 40 errors in 60 s)."""
         now = time.time()
         with self.lock:
             self.transport_hits = [t for t in self.transport_hits if now - t <= HANGUP_WINDOW_S]
-            return len(self.transport_hits) >= max(4, self.width // 3)
+            return len(self.transport_hits) >= max(1, self.width)     # never hung up on no error at all
 
     def enter(self, stagger):
         """ONE entry: a fresh pooled session, workers born `stagger` apart - one handshake each, then
@@ -518,8 +525,13 @@ def _progress(ctx, c, t0, last):
 def _redial(ctx, c):
     """Dead transport: leave, wait, re-enter.  Wifi down waits without spending a try."""
     now = time.time()
-    if c.tries and now - c.last_redial > 1800 and c.stats["ok"] > 0:
-        c.tries = 0                      # the incident closed: half an hour of service since the last redial
+    if c.wait_s is None:
+        c.wait_s = ctx.args.redial_wait
+    if c.tries and c.stats["ok"] - c.ok_at_redial >= SERVED_LANDINGS:
+        c.tries = 0                      # the last re-entry was SERVED (it landed a real batch) and the door then closed it: the incident closed
+        c.wait_s = max(c.wait_s // 2, ctx.args.redial_wait)
+    elif c.tries:
+        c.wait_s = min(c.wait_s * 2, 4800)   # the last re-entry was REFUSED at the door (a few dozen landings at most): the next wait doubles
     if c.tries >= ctx.args.tries:
         ctx.park("PARKED: %d redials in a row failed (%s) at %s" % (c.tries, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=3)
         return
@@ -534,7 +546,8 @@ def _redial(ctx, c):
         return
     c.tries += 1
     c.last_redial = time.time()
-    wait = ctx.args.redial_wait * c.tries               # the ladder (2026-09-04): 30, then 60, then 90 minutes
+    c.ok_at_redial = c.stats["ok"]
+    wait = c.wait_s                                     # the cycle's wait (2026-09-04): 60 s at the base, doubled per refused re-entry
     _log(ctx, "%s: redial %d/%d after %ds - the dead window, no line open" % (c.role.lane, c.tries, ctx.args.tries, wait))
     try:
         c.cloud.heartbeat(0, "hang-up: redial %d/%d at %s" % (c.tries, ctx.args.tries, time.strftime("%H:%M")))
