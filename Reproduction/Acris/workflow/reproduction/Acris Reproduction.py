@@ -1,0 +1,487 @@
+"""ACRIS REPRODUCTION - the fleet: the source's lanes together, one program.
+
+Each lane is its own program (Acris Synchronization.py, Acris Registration.py, Acris Documentation.py)
+with its own lock, park, control file and log.  This program launches them together, in order, one
+door at a time, and watches them: it relaunches what a relaunch can cure and never relaunches what a
+person must decide.
+
+    python "Acris Reproduction.py" --drive NYCCRED1                       the cycle: synchronization x20, registration x40,
+                                                                          documentation x40 - one process per lane, launched --entry-gap apart
+    python "Acris Reproduction.py" --drive NYCCRED1 --lanes registration:40,documentation:40
+    python "Acris Reproduction.py" --drive NYCCRED1 --mega                the same crews in ONE process (one entry per crew, --entry-gap apart)
+    python "Acris Reproduction.py" status                                 this machine's lanes, and every workstation's heartbeats in the cloud
+    python "Acris Reproduction.py" stop [lane]                            `stop` into the control file(s); waits for the lanes to leave; then force
+    python "Acris Reproduction.py" width documentation=60                 a width into a lane's control file (read within a minute)
+
+This file's own authority is Acris Reproduction.md beside it (the cycle's authority; section 0 is this program).
+
+Lanes together - the rules:
+
+  one process per lane   the GIL is the throughput wall: registration beside documentation in one interpreter
+                         ran 2.7 docs/s against 8 to 11 alone (2026-08-27).  Three lanes, three processes, three GILs
+  one door per lane      every lane enters ACRIS through its own pooled session, and the fleet launches lanes
+                         --entry-gap apart: three doors, never one moment.  Births inside a lane are its --stagger
+  the order              synchronization first (it hands the edge), then registration, then documentation - or the
+                         order written in --lanes
+  the watch              the fleet stays up and reads its children every few seconds.  What each exit means:
+                           0  stopped cleanly (control file, --limit, a signal)   done, not relaunched
+                           1  refused to start (another door open, parked, bad arguments)   left alone, logged
+                           2  REFUSED by the source (the notice page)   every other lane is told to stop; exit 2; a person decides
+                           3  redials exhausted (the wire stayed dead)   relaunched after --relaunch-wait
+                           4  wall (40 consecutive 503/429)   parked by the lane; left alone
+                           5  crash   relaunched after a short wait
+                           6  drive gone (documentation)   the fleet waits for the drive and relaunches with --unpark when it is back
+                         a lane relaunched more than --relaunch-cap times in an hour is parked by the fleet with the
+                         reason: every start is a stampede of handshakes, and a cure that keeps failing is not a cure
+  a parked lane          is never relaunched by the fleet (the park is the lane's word, or a person's); the drive
+                         coming back is the one exception, because the fleet can verify it
+  mega lane              --mega hosts every crew inside the first lane's process through --also; one child to watch.
+                         Only for a box that must stay small: the GIL rule above is why it is not the default
+  one fleet per machine  reproduction.lock; the lanes keep their own locks, so a lane already running by hand is
+                         refused (exit 1) and left alone - never doubled
+  logs                   each lane's output is appended to <lane>/<lane>.log beside its file (never truncated:
+                         a live lane's log was truncated once, 2026-09-03), with a fleet banner at every launch
+  stop                   `stop` into each control file; the lanes finish their minute and leave; after --stop-wait
+                         seconds what is left is terminated
+  cross-station          `status` reads reproduction.acris_heartbeats: every lane on every workstation, its width,
+                         its age, its last word - a second workstation runs the same file with its own --drive
+
+Exit codes: 0 stopped · 2 a lane was refused (everything stilled) · 5 crash.
+"""
+import argparse
+import json
+import os
+import pathlib
+import signal
+import socket
+import subprocess
+import sys
+import time
+
+HERE = pathlib.Path(__file__).resolve().parent
+WORKFLOW = HERE.parent                            # reproduction -> workflow
+PHASE = HERE.parents[2]                           # reproduction -> workflow -> Acris -> Reproduction
+sys.path.insert(0, str(PHASE))
+sys.path.insert(0, str(PHASE / "Acris"))
+
+import cloud                                                    # noqa: E402
+import lane                                                     # noqa: E402
+import storage                                                  # noqa: E402
+
+SOURCE = "Acris"
+LANES = ("synchronization", "registration", "documentation")    # the cycle's order
+WIDTHS = {"synchronization": 20, "registration": 40, "documentation": 40}
+WAIT_AFTER = {3: 300, 5: 60}                                     # seconds before a relaunch, by exit code
+MEANING = {0: "stopped cleanly", 1: "refused to start", 2: "REFUSED by the source", 3: "redials exhausted",
+           4: "wall - parked by the lane", 5: "crash", 6: "drive gone"}
+
+
+def lane_file(name):
+    return WORKFLOW / name / ("%s %s.py" % (SOURCE, name.capitalize()))
+
+
+def lane_dir(name):
+    return WORKFLOW / name
+
+
+def parse_lanes(spec):
+    """'registration:40,documentation:40' -> [(name, width)]; '' -> the whole cycle in its order."""
+    if not spec:
+        return [(n, WIDTHS[n]) for n in LANES]
+    out = []
+    for part in spec.split(","):
+        name, _, w = part.strip().partition(":")
+        name = name.strip().lower()
+        if name not in LANES:
+            raise SystemExit("--lanes takes %s (got %r)" % (", ".join(LANES), name))
+        if any(n == name for n, _ in out):
+            raise SystemExit("--lanes names %s twice" % name)
+        try:
+            w = int(w) if w else WIDTHS[name]
+        except ValueError:
+            raise SystemExit("--lanes takes LANE:WIDTH (got %r)" % part)
+        if w <= 0 or w > lane.MAX_WIDTH:
+            raise SystemExit("%s: width %d - a crew has 1 to %d workers" % (name, w, lane.MAX_WIDTH))
+        out.append((name, w))
+    return out
+
+
+class Fleet:
+    def __init__(self, args):
+        self.args = args
+        self.host = args.host or socket.gethostname()
+        self.lanes = parse_lanes(args.lanes)
+        self.log_path = HERE / "reproduction.log"
+        self.children = {}            # name -> dict(proc, width, started, log, launches [times])
+        self.waiting = {}             # name -> (relaunch_at, why, unpark)
+        self.stopping = False
+        self.exit_code = 0
+
+    # ── the fleet's own words ──
+    def log(self, msg):
+        line = "%s  %s" % (time.strftime("%H:%M:%S"), msg)
+        print(line, flush=True)
+        try:
+            with self.log_path.open("a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except OSError:
+            pass
+
+    # ── one lane's command line ──
+    def argv(self, name, width, unpark=False, also=()):
+        a = self.args
+        argv = [sys.executable, "-u", str(lane_file(name)), "--width", str(width), "--host", self.host,
+                "--stagger", str(a.stagger), "--entry-gap", str(a.entry_gap), "--pending-age", a.pending_age,
+                "--redial-wait", str(a.redial_wait), "--tries", str(a.tries)]
+        needs_drive = name == "documentation" or any(n == "documentation" for n, _ in also)
+        if needs_drive:
+            if not a.drive:
+                raise SystemExit("documentation needs --drive <label> (NYCCRED1 at home, NYCCRED2 on workstation 2)")
+            argv += ["--drive", a.drive, "--fresh-days", str(a.fresh_days)]
+        if (name == "synchronization" or any(n == "synchronization" for n, _ in also)) and a.edge:
+            argv += ["--edge", str(a.edge)]
+        for n, w in also:
+            argv += ["--also", "%s:%d" % (n, w)]
+        if a.limit:
+            argv += ["--limit", str(a.limit)]
+        if unpark or a.unpark:
+            argv.append("--unpark")
+        return argv
+
+    def launch(self, name, width, unpark=False, also=()):
+        argv = self.argv(name, width, unpark, also)
+        log = lane_dir(name) / ("%s.log" % name)
+        with log.open("a", encoding="utf-8") as f:                      # appended, never truncated
+            f.write("\n=== fleet launch %s on %s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), self.host,
+                                                          " ".join(argv[2:]).replace(str(WORKFLOW), "...")))
+        out = log.open("ab")
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+        proc = subprocess.Popen(argv, cwd=str(lane_dir(name)), stdout=out, stderr=subprocess.STDOUT, creationflags=flags)
+        c = self.children.get(name) or {"launches": []}
+        c.update({"proc": proc, "width": width, "started": time.time(), "log": out, "also": also})
+        c["launches"].append(time.time())
+        self.children[name] = c
+        self.log("%s: launched pid %d, width %d%s%s" % (name, proc.pid, width,
+                 (" + " + ", ".join("%s x%d" % (n, w) for n, w in also)) if also else "", " (--unpark)" if unpark else ""))
+        return proc
+
+    # ── the watch ──
+    def run(self):
+        lock = HERE / "reproduction.lock"
+        lane.take_lock(lock)
+        a = self.args
+        self.log("fleet up on %s - %s - %s" % (self.host, ", ".join("%s x%d" % (n, w) for n, w in self.lanes),
+                                                 "one process (mega lane)" if a.mega else "one process per lane, launched %ds apart" % a.entry_gap))
+
+        def _signalled(signum, _frame):
+            self.log("signal %d - stopping the lanes" % signum)
+            self.stopping = True
+        for sig in (getattr(signal, "SIGTERM", None), getattr(signal, "SIGINT", None), getattr(signal, "SIGBREAK", None)):
+            if sig is not None:
+                try:
+                    signal.signal(sig, _signalled)
+                except Exception:
+                    pass
+        try:
+            if a.mega:
+                first, width = self.lanes[0]
+                self.launch(first, width, also=tuple(self.lanes[1:]))
+            else:
+                for i, (name, width) in enumerate(self.lanes):
+                    if i:
+                        self._sleep(a.entry_gap)
+                        if self.stopping:
+                            break
+                    self.launch(name, width)
+            last_line = time.time()
+            while not self.stopping:
+                self._sleep(3)
+                self._poll()
+                self._relaunch_due()
+                if not self.children and not self.waiting:
+                    self.log("every lane has left - fleet done")
+                    break
+                if time.time() - last_line >= 60:
+                    last_line = time.time()
+                    self._status_line()
+            if self.stopping:
+                self.stop_lanes(a.stop_wait)
+        except KeyboardInterrupt:
+            self.log("stopped by hand - stopping the lanes")
+            self.stop_lanes(a.stop_wait)
+        except SystemExit:
+            self.stop_lanes(a.stop_wait)
+            raise
+        except Exception as e:
+            self.exit_code = 5
+            self.log("CRASH %s: %s - stopping the lanes" % (type(e).__name__, lane.reason(e)))
+            self.stop_lanes(a.stop_wait)
+            raise
+        finally:
+            for c in self.children.values():
+                try:
+                    c["log"].close()
+                except Exception:
+                    pass
+            try:
+                lock.unlink()
+            except OSError:
+                pass
+            self.log("fleet end - exit %d" % self.exit_code)
+        return self.exit_code
+
+    def _sleep(self, seconds):
+        end = time.time() + seconds
+        while time.time() < end and not self.stopping:
+            time.sleep(min(1.0, end - time.time()))
+
+    def _poll(self):
+        for name in list(self.children):
+            c = self.children[name]
+            rc = c["proc"].poll()
+            if rc is None:
+                continue
+            try:
+                c["log"].close()
+            except Exception:
+                pass
+            del self.children[name]
+            self._exited(name, c, rc)
+
+    def _exited(self, name, c, rc):
+        up = time.time() - c["started"]
+        meaning = MEANING.get(rc, "exit %d" % rc)
+        self.log("%s: pid %d left after %.0f min - %s (%d)" % (name, c["proc"].pid, up / 60, meaning, rc))
+        parked = lane_dir(name) / ("%s.parked" % name)
+        if rc == 0 or rc == 1:
+            return                                                    # done, or a person's / another door's - left alone
+        if rc == 2:
+            self.log("%s was REFUSED by the source: stilling every lane; a person decides (%s)" % (name, parked.name))
+            self.exit_code = 2
+            self.stopping = True
+            return
+        if rc == 4:
+            return                                                    # parked by the lane: its word
+        if rc == 6:
+            self.waiting[name] = (0, "the drive is gone - waiting for it", True)
+            return
+        # 3, 5 and anything else: a relaunch is the cure, within the cap
+        hour_ago = time.time() - 3600
+        n = sum(1 for t in c["launches"] if t > hour_ago)
+        if n > self.args.relaunch_cap:
+            why = "parked by the fleet %s: %d launches in an hour, the last left with %s (%d)" % (time.strftime("%Y-%m-%d %H:%M"), n, meaning, rc)
+            try:
+                parked.write_text(why + "\n", encoding="utf-8")
+            except OSError:
+                pass
+            self.log("%s: %s - not relaunched; a person decides" % (name, why))
+            return
+        wait = WAIT_AFTER.get(rc, WAIT_AFTER[5]) if not self.args.relaunch_wait else self.args.relaunch_wait
+        self.waiting[name] = (time.time() + wait, meaning, False)
+        self.log("%s: relaunch in %d s (%s; launch %d of %d this hour)" % (name, wait, meaning, n, self.args.relaunch_cap))
+        self.children[name] = {"launches": c["launches"], "proc": None, "log": None, "width": c["width"], "also": c["also"], "started": 0}
+        del self.children[name]
+        self._remember(name, c)
+
+    def _remember(self, name, c):
+        self._history = getattr(self, "_history", {})
+        self._history[name] = c
+
+    def _relaunch_due(self):
+        for name in list(self.waiting):
+            at, why, unpark = self.waiting[name]
+            hist = getattr(self, "_history", {}).get(name) or {"launches": [], "width": dict(self.lanes).get(name, WIDTHS[name]), "also": ()}
+            parked = lane_dir(name) / ("%s.parked" % name)
+            if unpark:
+                # the drive: relaunch only when it is back
+                try:
+                    storage.find_drive(self.args.drive)
+                except SystemExit:
+                    continue
+                self.log("%s: the drive %r is back - relaunching with --unpark" % (name, self.args.drive))
+            else:
+                if time.time() < at:
+                    continue
+                if parked.exists():
+                    self.log("%s: parked meanwhile (%s) - not relaunched" % (name, parked.read_text(encoding="utf-8").strip()[:100]))
+                    del self.waiting[name]
+                    continue
+            del self.waiting[name]
+            width = dict(self.lanes).get(name, hist.get("width", WIDTHS[name]))
+            self.children[name] = {"launches": hist.get("launches", [])}
+            self.launch(name, width, unpark=unpark, also=hist.get("also", ()))
+
+    def _status_line(self):
+        parts = []
+        for name, c in self.children.items():
+            parts.append("%s pid %d up %.0f min" % (name, c["proc"].pid, (time.time() - c["started"]) / 60))
+        for name, (at, why, unpark) in self.waiting.items():
+            parts.append("%s waiting (%s)" % (name, why))
+        self.log("fleet: " + (" - ".join(parts) if parts else "nothing running"))
+
+    # ── stopping ──
+    def stop_lanes(self, wait):
+        names = list(self.children)
+        if not names:
+            return
+        for name in names:
+            write_control(name, "stop")
+        self.log("stop written to %s - waiting up to %d s for the lanes to leave" % (", ".join(names), wait))
+        end = time.time() + wait
+        while time.time() < end and any(c["proc"].poll() is None for c in self.children.values()):
+            time.sleep(1)
+        self._poll()
+        for name, c in list(self.children.items()):
+            if c["proc"].poll() is None:
+                self.log("%s: still running after %d s - terminating pid %d" % (name, wait, c["proc"].pid))
+                try:
+                    c["proc"].terminate()
+                    c["proc"].wait(timeout=15)
+                except Exception:
+                    try:
+                        c["proc"].kill()
+                    except Exception:
+                        pass
+        self._poll()
+
+
+# ── the commands that touch running lanes: control files, locks, the cloud ─────────────
+def write_control(name, text):
+    p = lane_dir(name) / ("%s.control" % name)
+    p.write_text(text + "\n", encoding="utf-8")
+    return p
+
+
+def lock_pid(name):
+    p = lane_dir(name) / ("%s.lock" % name)
+    try:
+        pid = int(p.read_text(encoding="utf-8").strip() or "0")
+    except (OSError, ValueError):
+        return 0
+    return pid if lane.pid_alive(pid) else 0
+
+
+def last_line(path):
+    try:
+        data = path.read_bytes()[-4000:].replace(b"\x00", b"")
+    except OSError:
+        return ""
+    lines = [l for l in data.decode("utf-8", "replace").splitlines() if l.strip()]
+    return lines[-1].strip() if lines else ""
+
+
+def status(args):
+    host = args.host or socket.gethostname()
+    print("acris lanes on %s:" % host)
+    for name in LANES:
+        pid = lock_pid(name)
+        parked = lane_dir(name) / ("%s.parked" % name)
+        ctl = lane_dir(name) / ("%s.control" % name)
+        state = "RUNNING pid %d" % pid if pid else "not running"
+        if parked.exists():
+            state += " - PARKED: %s" % parked.read_text(encoding="utf-8").strip()[:90]
+        if ctl.exists() and ctl.read_text(encoding="utf-8").strip():
+            state += " - control: %s" % ctl.read_text(encoding="utf-8").strip()[:40]
+        print("  %-16s %s" % (name, state))
+        ll = last_line(lane_dir(name) / ("%s.log" % name))
+        if ll:
+            print("  %-16s   %s" % ("", ll[:150]))
+    fleet_pid = lock_pid_at(HERE / "reproduction.lock")
+    print("  %-16s %s" % ("fleet", "RUNNING pid %d" % fleet_pid if fleet_pid else "not running"))
+    print("heartbeats in the cloud (every workstation, last %s):" % args.within)
+    try:
+        c = cloud.Cloud("acris", "reproduction", host, app="acris reproduction status")
+        c.connect()
+        rows = c.alive(args.within)
+        c.close()
+    except Exception as e:
+        print("  the cloud is unreachable (%s)" % lane.reason(e))
+        return 5
+    if not rows:
+        print("  none")
+    for lane_name, h, width, age, last_event in rows:
+        print("  %-16s %-14s width %-4s %4ds ago  %s" % (lane_name, h, width, age, (last_event or "")[:90]))
+    return 0
+
+
+def lock_pid_at(path):
+    try:
+        pid = int(path.read_text(encoding="utf-8").strip() or "0")
+    except (OSError, ValueError):
+        return 0
+    return pid if lane.pid_alive(pid) else 0
+
+
+def stop(args):
+    names = [args.target] if args.target else list(LANES)
+    for n in names:
+        if n not in LANES:
+            raise SystemExit("stop takes one of %s" % ", ".join(LANES))
+    running = {n: lock_pid(n) for n in names if lock_pid(n)}
+    if not running:
+        print("nothing running on this machine for %s" % ", ".join(names))
+        return 0
+    for n in running:
+        write_control(n, "stop")
+    print("stop written for %s - waiting up to %d s for the lanes to leave" % (", ".join(running), args.stop_wait))
+    end = time.time() + args.stop_wait
+    while time.time() < end and any(lane.pid_alive(p) for p in running.values()):
+        time.sleep(1)
+    for n, pid in running.items():
+        if lane.pid_alive(pid):
+            print("  %s: still running after %d s - terminating pid %d" % (n, args.stop_wait, pid))
+            if sys.platform == "win32":
+                subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        else:
+            print("  %s: left" % n)
+    return 0
+
+
+def width(args):
+    name, _, w = (args.target or "").partition("=")
+    name = name.strip().lower()
+    if name not in LANES or not w.strip().isdigit():
+        raise SystemExit("width takes LANE=N, e.g. documentation=60")
+    w = int(w)
+    if w <= 0 or w > lane.MAX_WIDTH:
+        raise SystemExit("a crew has 1 to %d workers" % lane.MAX_WIDTH)
+    p = write_control(name, "width=%d" % w)
+    print("width=%d written to %s - %s reads it within a minute%s" % (w, p.name, name, "" if lock_pid(name) else " (it is not running now)"))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description="acris reproduction: the source's lanes together")
+    ap.add_argument("command", nargs="?", default="run", choices=["run", "status", "stop", "width"])
+    ap.add_argument("target", nargs="?", default="", help="stop: a lane name; width: LANE=N")
+    ap.add_argument("--lanes", default="", help="LANE:WIDTH,... in launch order (default: synchronization:20,registration:40,documentation:40)")
+    ap.add_argument("--mega", action="store_true", help="every crew in one process through the first lane's --also")
+    ap.add_argument("--drive", default="", help="documentation's drive label (NYCCRED1 at home, NYCCRED2 on workstation 2)")
+    ap.add_argument("--fresh-days", type=int, default=30)
+    ap.add_argument("--edge", type=int, default=0, help="synchronization's first start: the last CRFN whose document the table holds")
+    ap.add_argument("--entry-gap", type=int, default=20, help="seconds between lane launches (and between crews inside a mega lane)")
+    ap.add_argument("--stagger", type=float, default=0.5, help="seconds between worker births inside a lane")
+    ap.add_argument("--pending-age", default="1 hour")
+    ap.add_argument("--redial-wait", type=int, default=600)
+    ap.add_argument("--tries", type=int, default=3)
+    ap.add_argument("--limit", type=int, default=0, help="each lane stops after this many documents (a test run)")
+    ap.add_argument("--unpark", action="store_true", help="start parked lanes too (a person has decided)")
+    ap.add_argument("--relaunch-wait", type=int, default=0, help="seconds before relaunching a crashed lane (default: 60 after a crash, 300 after exhausted redials)")
+    ap.add_argument("--relaunch-cap", type=int, default=3, help="relaunches per lane per hour before the fleet parks it")
+    ap.add_argument("--stop-wait", type=int, default=90, help="seconds to wait for lanes to leave before terminating them")
+    ap.add_argument("--within", default="10 minutes", help="status: heartbeats this recent")
+    ap.add_argument("--host", default="")
+    args = ap.parse_args()
+    if args.command == "status":
+        sys.exit(status(args))
+    if args.command == "stop":
+        sys.exit(stop(args))
+    if args.command == "width":
+        sys.exit(width(args))
+    sys.exit(Fleet(args).run())
+
+
+if __name__ == "__main__":
+    main()
