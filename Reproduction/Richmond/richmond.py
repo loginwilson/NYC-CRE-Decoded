@@ -174,3 +174,83 @@ def windows(start=START, end=None, days=WINDOW_DAYS):
         out.append((d, e))
         d = e + dt.timedelta(days=1)
     return out
+
+
+# ── THE IMAGE - minted on the clerk, served by the courts ────────────────────────────────
+# TWO HOSTS.  The clerk MINTS: GET /ViewVscmsDocument/ViewContent?p_endorsementId=<internal id> with
+# redirects OFF answers a 302 whose Location is a self-authenticating token url on the NY State courts
+# viewer (iapps.courts.state.ny.us/vscms_public/viewer?token=v2...) - the pdf never lives on the clerk.
+# THREE OUTCOMES, never two (login 2026-08-25: "we have the url, if it doesnt show, its absent, if it
+# shows a fetch its pdf, and if its absent but the recorded date of the doc id is in the lag period it
+# gets pending"), measured 2026-08-26 on one session:
+#     RC_2825613 (image up)  -> 302  https://iapps.courts.state.ny.us/vscms_public/viewer?token=v2...
+#     RC_2820269 (no image)  -> 302  /Search/SearchError          (the clerk's OWN error page)
+# so the test is "an ABSOLUTE url we can fetch", never "any Location at all"; 200 (no redirect) and 404
+# are dead ends too; 403/429/5xx say nothing about the DOCUMENT - ours, asked again.  The mint takes a
+# bare id: NO grant rule here (the detail's grant is the listing page; the image's is the token).
+# The token EXPIRES (~10 min measured 2026-08-22): mint and pull in one breath, never a buffer of tokens.
+# THE COURTS HOST GATES ON THE USER-AGENT - measured 2026-08-22, one variable, everything else identical:
+#     python-requests/2.34.2 (library default)  -> ReadTimeout at 45 s, 2/2   (a HANG, not a refusal)
+#     this project's honest UA                  -> 200 + the full pdf in 1.5 s, 2/2
+# so the pull carries the same honest UA (a browser string was measured to buy nothing and would make the
+# client dishonest).  A pdf is a pdf only when the body starts with %PDF.
+IAPPS = "https://iapps.courts.state.ny.us"
+PULL_HEADERS = {"Referer": BASE + "/", "Accept": "application/pdf,*/*"}
+_DATE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
+
+
+def mint_url(internal_id):
+    return "%s/ViewVscmsDocument/ViewContent?p_endorsementId=%s" % (BASE, str(internal_id).strip())
+
+
+def mint_referer(internal_id):
+    return "%s/Search/ViewDocumentInfo/%s" % (BASE, str(internal_id).strip())
+
+
+def classify_mint(status, location):
+    """The mint's answer -> ('present', token url) | ('noimage', None) | ('error', None)."""
+    if status in (301, 302, 303, 307, 308):
+        loc = (location or "").strip()
+        if loc[:8].lower().startswith(("http://", "https://")):
+            return "present", loc
+        return "noimage", None                     # a relative Location (/Search/SearchError) is the clerk's error page
+    if status in (200, 404):
+        return "noimage", None                     # the endpoint answered and handed us no image location
+    return "error", None                           # 403/429/5xx: about us, never about the document
+
+
+def is_pdf(data):
+    return len(data) >= 5 and data[:4] == b"%PDF"
+
+
+def recorded_date(registry):
+    """The recorded date in the registry (M/D/YYYY, as the clerk prints it) as a date, or None."""
+    if not isinstance(registry, dict):
+        return None
+    m = _DATE.match(str(registry.get("recorded", "") or "").strip())
+    if not m:
+        return None
+    try:
+        return dt.date(int(m.group(3)), int(m.group(1)), int(m.group(2)))
+    except ValueError:
+        return None
+
+
+def fresh(registry, days=IMAGE_LAG_DAYS):
+    """Inside the scan lag: a document with no image yet is pending, not absent.  An UNREADABLE date is
+    always inside the lag - guessing wrong here records a scanned document as having no scan forever;
+    staying pending costs one re-ask (rc_lane._in_lag, 2026-08-26)."""
+    rec = recorded_date(registry)
+    if rec is None:
+        return True
+    return (dt.date.today() - rec).days < int(days)
+
+
+def canonical_path(doc_id, registry):
+    """The One Touch address: richmond has no borough; year and month from the RECORDED date (the id's
+    digits are a submission sequence, not a date), else undated."""
+    import storage
+    rec = recorded_date(registry)
+    if rec is None:
+        return storage.canonical("richmond", None, "undated", "undated", doc_id)
+    return storage.canonical("richmond", None, rec.year, storage.month_folder(rec.month), doc_id)
