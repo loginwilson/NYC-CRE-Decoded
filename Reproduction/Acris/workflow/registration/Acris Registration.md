@@ -21,7 +21,7 @@ No drive: the registry is text and lives in the cloud table only. `--width` defa
 | the cell | the registry lands as the JSON object: the scalar fields (type, pages, doc_date, crfn, recorded, borough, amount, …), parties by panel, parcels as bbl with their flags, references, remarks, and `at`, the time it was read | the cell rule |
 | no verdict from the lane | the lane writes a registry or nothing. A page that never echoes the id is indistinguishable, per request, from the transient; only persistence across passes tells them apart, and the lane keeps no count. The words `pending` / `absent` for a registry are a decision to record here when it is taken (see Open) | trap 1; §12 "the 322 are the same 322" |
 | failures never stop it | a fetch error leaves the document empty for a later pass and writes the reason to `registration.fails.jsonl`; a transport error gets one more try after a 5 s pause | login 2026-09-03 |
-| refusal | HTTP 200 carrying the Bandwidth Notice is the only block: park at once, exit 2, no retry, no rotation; the page is preserved under `Reproduction/Acris/refusals/` | the detectors; the 08-26 false positive |
+| refusal | HTTP 200 carrying the Bandwidth Notice is the only block: park at once, exit 2, no retry, no rotation; the page is preserved under `Reproduction/Acris/rulebook/refusals/` | the detectors; the 08-26 false positive |
 | hang-up | dead transport - ACRIS's ordinary session end, not a block: hang up, wait `--redial-wait` times the try number (30, 60, 90 minutes), wait for the wire, re-enter through one fresh entry; three tries per incident, then park, exit 3; never inside a minute | §17 addenda 15–19; login 2026-09-03 01:0x; the ladder 2026-09-04 |
 | wall | forty consecutive 503 or 429 with no success between: park, exit 4 | trap 2 |
 | pending goes back to the backfill | a registry pending is re-checked once its last check is `--pending-age` old, ahead of the empties | login 2026-09-03 23:5x |
@@ -45,7 +45,7 @@ The same few ids (322 of the whole table on 2026-09-02) never echo on the detail
 
 ## Working files
 
-Beside this file, never in git: `registration.lock`, `registration.control`, `registration.parked`, `registration.outbox.jsonl`, `registration.fails.jsonl`, `Reproduction/Acris/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
+Beside this file, never in git: `registration.lock`, `registration.control`, `registration.parked`, `registration.outbox.jsonl`, `registration.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
 
 ## History
 

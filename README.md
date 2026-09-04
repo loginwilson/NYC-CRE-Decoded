@@ -36,11 +36,11 @@ Reproduction/
   SCHEMA.md                       the concept, in login's words
   lane.py · cloud.py · storage.py the pieces every lane shares
   supabase/migrations/            one numbered SQL file per dictated decision; supabase/db_push.ps1 applies them
-  Acris/     acris.py · workflow/{reproduction,enumeration,synchronization,registration,documentation}/ · update/
-  Richmond/  richmond.py · the same
+  Acris/     rulebook/ (acris.py · Acris.md) · workflow/{reproduction,enumeration,synchronization,registration,documentation}/ · update/
+  Richmond/  rulebook/ (richmond.py · Richmond.md) · the same
 ```
 
-In every lane folder a pair named for the source and the lane: `Acris Documentation.md` (that lane's authority) and `Acris Documentation.py` (its one program). `workflow/reproduction/` holds the source's authority and the fleet program that runs the whole cycle; `update/` holds the board pair. Everything about a source lives in its folder; everything about the phase lives at the phase level. There is nothing else at the top. A lane is launched from its own folder: go to Acris, workflow, documentation, and `python "Acris Documentation.py" --drive NYCCRED1` is the whole command.
+In every lane folder a pair named for the source and the lane: `Acris Documentation.md` (that lane's authority) and `Acris Documentation.py` (its one program). `workflow/reproduction/` holds the source's authority and the fleet program that runs the whole cycle; `update/` holds the board pair; `rulebook/` holds the source's rules as one module and that module's authority (`acris.py` · `Acris.md`). A source folder is those three folders and nothing loose. Everything about a source lives in its folder; everything about the phase lives at the phase level. There is nothing else at the top. A lane is launched from its own folder: go to Acris, workflow, documentation, and `python "Acris Documentation.py" --drive NYCCRED1` is the whole command.
 
 ## Rules that do not bend
 
