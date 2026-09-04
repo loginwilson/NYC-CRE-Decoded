@@ -28,6 +28,13 @@ document - and hands it to run().  run() owns everything else:
   drive                      a role may define check(ctx); documentation parks when its drive is gone
                              (a pulled USB left the old lane fetching with every write failing, trap 5)
 
+THE REDIAL (2026-09-03, proven 21:37): a cut line is never re-dialed by the worker.  A burst of transport
+errors inside HANGUP_WINDOW_S (10 s) is the far side cutting the lines: the crew hangs up AT ONCE
+(Crew.hung_up -> _redial), waits --redial-wait (600 s, the dead window) with no line open, and re-enters
+ONCE, staggered, after exit_pool() shows five draws in one block.  A worker that hit the wire pauses
+HANGUP_PAUSE_S (5 s) before its next request.  Before this rule the old lane re-handshaked 40-wide on every
+request for the five minutes its slow breaker needed - the 40x5 pattern - and each relaunch was cut sooner.
+
 Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused (notice page) · 3 redials
 exhausted · 4 wall · 5 crash · 6 drive gone.  Every stop writes its reason as the lane's last word.
 """
@@ -127,6 +134,7 @@ def add_common_args(ap):
                          " the lane is up to date every claim is pendings (one request per pending per interval)")
     ap.add_argument("--redial-wait", type=int, default=600, help="seconds to wait after a hang-up before re-entering")
     ap.add_argument("--tries", type=int, default=3, help="redials per incident before parking")
+    ap.add_argument("--no-pool-check", action="store_true", help="skip the exit-pool check at entry (tests only)")
     ap.add_argument("--entry-gap", type=float, default=20.0, help="seconds between one crew's entry and the next (--also)")
     ap.add_argument("--also", action="append", default=[], metavar="LANE:WIDTH", help="host another lane's crew too, e.g. registration:40")
     ap.add_argument("--limit", type=int, default=0, help="stop after this many documents (a test run)")
@@ -178,7 +186,44 @@ def net_up():
     return False
 
 
+HANGUP_WINDOW_S, HANGUP_PAUSE_S = 10, 5     # a burst of transport errors inside 10 s is a cut line; a cut worker pauses 5 s
 MAX_WIDTH = 128          # the pool's ceiling; a connection is opened only when a worker first asks
+
+
+def exit_pool(draws=5, pause=1.0):
+    """Five fresh-connection draws of the public exit (never the source).  The lane has no IP: the VPN
+    hands EACH connection an exit from a pool, so one draw is one draw; five in one /24 = the pool is
+    settled, five spanning blocks = the VPN app is mid-switch and no entry goes out."""
+    seen = []
+    for i in range(draws):
+        try:
+            r = urllib.request.urlopen(urllib.request.Request("https://api.ipify.org", headers={
+                "User-Agent": "nyc-cre-decoded lane (exit check)", "Connection": "close"}), timeout=15)
+            seen.append(r.read().decode().strip())
+        except Exception as e:
+            seen.append("fail:" + type(e).__name__)
+        if i < draws - 1:
+            time.sleep(pause)
+    blocks = sorted({".".join(x.split(".")[:3]) for x in seen if x[:1].isdigit()})
+    return seen, blocks
+
+
+def wait_for_pool(ctx, c):
+    """No entry while the exit pool spans blocks (the VPN app mid-switch) or answers nothing."""
+    if getattr(ctx.args, "no_pool_check", False):
+        return
+    while not ctx.stopping.is_set():
+        seen, blocks = exit_pool()
+        if len(blocks) == 1 and all(x[:1].isdigit() for x in seen):
+            _log(ctx, "%s: exit pool %s - one block %s, entering" % (c.role.lane, ", ".join(seen), blocks[0]))
+            return
+        _log(ctx, "%s: exit pool %s - %s; waiting 30 s, no entry" % (c.role.lane, ", ".join(seen),
+             "SPANS BLOCKS %s (the VPN app is mid-switch)" % blocks if len(blocks) > 1 else "no answer"))
+        try:
+            c.cloud.heartbeat(0, "waiting for a settled exit pool")
+        except Exception:
+            pass
+        time.sleep(30)
 
 
 def make_session(width, ua):
@@ -204,6 +249,7 @@ class Crew:
                       "filled": 0, "pending": 0, "absent": 0, "blank": 0}
         self.failed = []                  # (item, reason) since the last land - a role that walks a range re-asks these
         self.transport_streak = 0
+        self.transport_hits = []          # times of recent transport errors: a burst is a cut line
         self.wall_streak = 0
         self.last_success = time.time()
         self.cloud = Cloud(role.source, role.lane, lane_ctx.host, app="%s %s" % (role.source, role.lane))
@@ -266,12 +312,16 @@ class Crew:
                         self.wall_streak += 1
                 self.note_fail(doc_id, str(e))
             except Transport as e:
+                now = time.time()
                 with self.lock:
                     self.transport_streak += 1
+                    self.transport_hits.append(now)
+                    self.transport_hits = [t for t in self.transport_hits if now - t <= HANGUP_WINDOW_S]
                 if attempt == 0 and not self.stop.is_set():
                     self.q.put((doc_id, registry, 1))     # one more try: a stale keep-alive after an idle spell fails once
                 else:
                     self.note_fail(doc_id, str(e))
+                self.stop.wait(HANGUP_PAUSE_S)            # a cut line never re-dials at full speed (the 40x5 pattern)
             except Retry as e:
                 with self.lock:
                     if str(e).startswith("short"):
@@ -283,10 +333,20 @@ class Crew:
             if born > self.width:
                 return
 
+    def hung_up(self):
+        """The far side cut the lines: a burst of transport errors inside HANGUP_WINDOW_S.  A healthy crew
+        fails a handful of requests an hour; a cut fails every worker within seconds (measured 2026-09-03:
+        ESTABLISHED -> CLOSE_WAIT in one tick, then SSL EOF on every line)."""
+        now = time.time()
+        with self.lock:
+            self.transport_hits = [t for t in self.transport_hits if now - t <= HANGUP_WINDOW_S]
+            return len(self.transport_hits) >= max(4, self.width // 3)
+
     def enter(self, stagger):
         """ONE entry: a fresh pooled session, workers born `stagger` apart - one handshake each, then
         keep-alive for the life of the crew."""
         self.stop = threading.Event()
+        self.transport_hits = []
         self.session = make_session(self.width, self.role.ua)
         self.workers = []
         for i in range(self.width):
@@ -471,6 +531,9 @@ def _redial(ctx, c):
         time.sleep(60)
     if ctx.stopping.is_set():
         return
+    wait_for_pool(ctx, c)
+    if ctx.stopping.is_set():
+        return
     c.enter(ctx.args.stagger)
     _log(ctx, "%s: re-entered, %d workers, one entry" % (c.role.lane, c.width))
 
@@ -521,6 +584,7 @@ def run(roles, args, here):
         for i, c in enumerate(crews):
             if i:
                 time.sleep(args.entry_gap)
+            wait_for_pool(ctx, c)
             c.enter(args.stagger)
             _log(ctx, "%s: entered, %d workers" % (c.role.lane, c.width))
         while not ctx.stopping.is_set():
@@ -535,8 +599,8 @@ def run(roles, args, here):
                 if c.wall_streak >= 40:
                     ctx.park("wall: %d consecutive 503/429 on %s at %s - not retrying, not rotating"
                              % (c.wall_streak, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=4)
-                if c.transport_streak >= 3 * c.width and time.time() - c.last_success > 60:
-                    _redial(ctx, c)
+                if c.hung_up() or (c.transport_streak >= 3 * c.width and time.time() - c.last_success > 60):
+                    _redial(ctx, c)                       # at once on a cut: no re-handshake storm, wait out the window, ONE entry
                 if args.limit and c.stats["ok"] >= args.limit and c.q.empty():
                     ctx.exit_code, ctx.exit_reason = 0, "limit %d reached" % args.limit
                     ctx.stopping.set()
