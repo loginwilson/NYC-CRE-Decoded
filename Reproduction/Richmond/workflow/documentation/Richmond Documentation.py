@@ -34,7 +34,13 @@ The rules are kept from the lane that ran before this one (rc_lane.py, rc_pdf_pu
   already here  a file already under this drive is recorded without a request
   failures      a fetch error never stops the lane: the document stays empty for a later pass and the
                 reason is written to documentation.fails.jsonl
-  hang-up, wall, width, one door, drive, pending recheck, no overlap   shared with every lane (lane.py)
+  hang-up, wall, width, one door, drive, pending recheck, no overlap   shared with every lane (lane.py).
+                The hang-up is DORMANT at this county (no session close was ever measured here: the
+                drumroll rule); it fires only when the wire itself dies - hang up, drop the cut batch
+                (the claims expire and come back), wait 60 s, re-enter once, births 0.4 s apart
+  maturation    a `pending` comes back from the claim after --pending-age and is minted again; past
+                the 7-day lag it lands `absent` - the old 4 AM rc_pdf_state --apply pass lives inside
+                this lane and cannot be separated from it (RICHMOND REPRODUCTION.md, the 4 AM tasks)
 
 Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash · 6 drive gone.
 """
@@ -282,7 +288,7 @@ def main():
                     help="a document recorded within this many days with no image is pending, not absent (the measured scan lag)")
     ap.add_argument("--cooldown", type=int, default=600, help="seconds every worker holds while a 401/403 from the courts host is arbitrated")
     lane.add_common_args(ap)
-    ap.set_defaults(width=8)          # rc_bench 2026-08-25: 8 pullers 28.23 docs/s, 16 -> 18.76 (self-contending past the pipe)
+    ap.set_defaults(width=8, stagger=0.4)   # rc_bench 2026-08-25: 8 pullers 28.23 docs/s, 16 -> 18.76 (self-contending past the pipe); 0.4 s between first handshakes
     args = ap.parse_args()
     args.lane = "documentation"
 

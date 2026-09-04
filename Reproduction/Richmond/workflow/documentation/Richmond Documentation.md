@@ -38,7 +38,8 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 | restricted vs refused | a 401/403 from the courts host is ambiguous: sealed records refuse at any rate. Every worker holds `--cooldown`, then ONE probe of a **different** claimed document decides — probe served: the document is RESTRICTED, its evidence goes to `documentation.restricted.jsonl`, the cell records `absent`, it is never asked again (the list survives a restart); probe also refused: the lane is refused — park, exit 2, no retry, no rotation | rc_lane.refusal_verdict; RC_1873622 (an exhibit filed to the City) silenced a 190,594-document run on 2026-08-24 — "richmond should never have stalled" |
 | refusal on the clerk | a captcha, access-denied or block page on the mint: park at once, exit 2 | richmond.check_refused |
 | failures never stop it | a fetch error leaves the document empty for a later pass and writes the reason to `documentation.fails.jsonl` | login 2026-09-03 |
-| hang-up, wall, width, one door, drive, pending recheck, no overlap, the last word | shared with every lane: a burst of cut lines hangs up at once, waits out the window with no line open, re-enters once behind a settled exit pool; 40 consecutive 503/429 park the lane; `documentation.lock`; the drive checked every minute; pendings re-asked after `--pending-age`; the claim table hands each workstation its slice; every stop leaves its reason | lane.py; §17 addendum 17 |
+| hang-up, wall, width, one door, drive, pending recheck, no overlap, the last word | shared with every lane. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every worker a transport error inside 60 s with nothing landed for 10 s - and then hangs up at once, drops the cut batch (the claims expire and come back), waits 60 s with no line open, re-enters once behind a settled exit pool with births 0.4 s apart; four refused re-entries in a row park it. 40 consecutive 503/429 park the lane; `documentation.lock`; the drive checked every minute; pendings re-asked after `--pending-age`; the claim table hands each workstation its slice; every stop leaves its reason | lane.py; RICHMOND REPRODUCTION.md §3 (the drumroll rule) |
+| maturation | a `pending` comes back from the claim after `--pending-age` and is minted again; past the 7-day lag it lands `absent`. The old 4 AM `rc_pdf_state --apply` pass lives inside this lane and cannot be separated from it | RICHMOND REPRODUCTION.md, the 4 AM tasks section: "fold it into the lane" |
 
 ## Calibrations
 
@@ -50,10 +51,11 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 | token | mint and pull back to back | tokens minted ahead expired (~10 min): 786 dead tokens one morning, 2026-08-22 |
 | timeouts | mint 60 s; pull (10 s connect, 90 s read), streamed | a 5 MB pdf is read chunk by chunk, so the read timeout is per chunk |
 | pending-age | lane.py's default | one request per pending per interval; the old lane re-asked its pending set every 5 minutes |
+| stagger | 0.4 s | the county's measured handshake stagger: 160 cold TLS opens in one instant answered SSLError across the board; keep-alive removes every later handshake |
 
 ## Working files
 
-Beside this file, never in git: `documentation.lock`, `documentation.control`, `documentation.parked`, `documentation.outbox.jsonl`, `documentation.fails.jsonl`, `documentation.restricted.jsonl` (the verdict evidence: id, code, probe, time). Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash · 6 drive gone.
+Beside this file, never in git: `documentation.lock`, `documentation.control`, `documentation.parked`, `documentation.outbox.jsonl`, `documentation.fails.jsonl`, `documentation.restricted.jsonl` (the verdict evidence: id, code, probe, time). Exit codes: 0 stopped · 2 refused · 3 four re-entries in a row refused (the lane parked itself) · 4 wall · 5 crash · 6 drive gone.
 
 ## What it imports
 
@@ -64,5 +66,7 @@ Beside this file, never in git: `documentation.lock`, `documentation.control`, `
 A RESTRICTED document is recorded `absent` (checked; the courts host refuses it at any rate) with its evidence kept beside the lane. The old lane left such rows empty and quarantined them only in memory, so every restart re-asked them and held the lane ten minutes each. `absent` lets completion reach 100 % and the evidence file says why; if login prefers a different word for a sealed record, it is one line.
 
 ## History
+
+2026-09-04 (night) — the review against the record: the cycle this lane inherits is dormant at this county and the row says so; births set to the county's 0.4 s; the maturation pass named as inside the lane. Nothing of the lane's own work changed. Proven again offline and by the simulation.
 
 2026-09-03 — written from the lane that ran before it (`rc_lane.py`: the mint's three outcomes, the per-host pools, the token expiry, the honest-UA finding on the courts host, the refusal verdict, `_no_image` and `_in_lag`; `rc_pdf_pull.py`; `rc_source.py`), every line read. Proven offline (`test_richmond_doc_offline.py`: the three outcomes, the path rule, the lag, a pdf minted and pulled and written whole, the session prepared once, no image → pending/absent/asked again, the mint's 503/403/wire/refusal shapes, the pull's html/500/429, the verdict both ways, the restricted list surviving a restart) and by a simulation against the live cloud with throwaway rows and no request to either host (`test_richmond_doc_sim.py`: paths, a pending and an absent landed through the documentation lane, the lane and phase counters moving by the newly filled cells, cleanup + reconcile). Not yet proven: a real mint and pull.

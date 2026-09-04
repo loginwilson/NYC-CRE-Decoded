@@ -8,7 +8,7 @@ python "Richmond Registration.py"                       afterwards registration.
 python "Richmond Registration.py" --width 4 --every 900 --days 30 --pace 0.3 --pending-age "1 hour"
 ```
 
-The cycle's authority is `../reproduction/Richmond Reproduction.md`; the shared machinery (the crew and its staggered births - here every walker keeps its OWN session, the county's grant being per session - the outbox, the heartbeat, the refusal park, the hang-up and wall breakers, the width control, the lock) is `Reproduction/lane.py` and is not repeated here.
+The cycle's authority is `../reproduction/Richmond Reproduction.md`; the shared machinery (the crew and its staggered births - here every walker keeps its OWN session, the county's grant being per session - the outbox, the heartbeat, the refusal park, the hang-up and wall breakers, the width control, the lock) is `Reproduction/lane.py` and is not repeated here. The hang-up is DORMANT at this county (no session close was ever measured here - the drumroll rule, `RICHMOND REPRODUCTION.md` §3): it fires only when the wire itself dies, and then the cut pages and details are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next walk, a details item releasing its window's count so the window can close), 60 s of silence, one re-entry with births 0.4 s apart (the county's measured handshake stagger); four refused re-entries in a row park it.
 
 ## The rule that shapes this lane: the grant
 
@@ -57,9 +57,11 @@ The walk is the work list. Two workstations walking the same window would spend 
 
 ## Exit codes
 
-`0` stopped · `2` refused (parked; `--unpark` after a person decides) · `3` redials exhausted or the probe broken · `4` wall · `5` crash.
+`0` stopped · `2` refused (parked; `--unpark` after a person decides) · `3` four re-entries in a row refused, or the probe broken (the lane parked itself) · `4` wall · `5` crash.
 
-## Proof (2026-09-03)
+## Proof (2026-09-03; the review 2026-09-04)
+
+- **2026-09-04 (night)** — the review against the record: `rebatch` added (a dead wire could have left a page or a details item stuck as in flight, and a window that never closes never moves the edge); births set to the county's 0.4 s; the inherited cycle named dormant. Proven offline (`test_richmond_rebatch.py`) and by the simulation again.
 
 - **Offline** (`test_richmond_reg_offline.py`): the parser on a page in the county's shape — both `Document No.` labels, blank book/page, BBLs, the party columns, the four image states, the premature detail, the shell as `None`; the walker's order in one session (page, then details), the shell asked again, three wire failures raising `Transport`, a 503 raising `HTTPStatus`, a block page raising `Refused`; the monitor — control first, the catch-up from the edge, pages 2..N fanned out, a `details` item carrying only the ids the table needs, both a dict and a `pending` landed through the outbox, the outbox holding a landing through a cloud hiccup, the edge moving only when the window is complete, holes after three asks (page, detail, control), the next walk re-asking the holes, the broken control parking with code 3, the fail-closed edge file.
 - **Live cloud simulation** (`test_richmond_reg_sim.py`): throwaway `RC_9900000xx` rows with empty / `pending` / filled registries; `cloud.todo` returns the empty and the *due* pendings only; a landing fills the cells and moves the lane's counters; a re-ask after the pending age; cleanup + reconcile. No request to the county.

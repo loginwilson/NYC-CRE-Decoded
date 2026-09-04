@@ -37,7 +37,11 @@ The rules, kept from the walker that landed 2.4M details (rc_rd_walk.py, rc_rd_r
   the cell      the registry only; documentation reads the image in its own pass
   refusal       a captcha, access-denied or block page = the county's decision: park at once, no
                 retry, no rotation
-  hang-up, wall, width, one door   shared with every lane (lane.py)
+  hang-up, wall, width, one door   shared with every lane (lane.py).  The hang-up is DORMANT at this county
+                (no session close was ever measured here: the drumroll rule); it fires only when the
+                wire itself dies - hang up, drop the cut pages and details (asked again at the next
+                walk; the table still says which ids need work), wait 60 s, re-enter once, births
+                0.4 s apart; four re-entries in a row refused, then park
   one machine   the walk is the work list; two walkers of the same window would spend the county's
                 requests twice for the same registries. Run this lane on one workstation
 
@@ -48,6 +52,7 @@ import datetime as dt
 import json
 import os
 import pathlib
+import queue
 import sys
 import threading
 import time
@@ -242,6 +247,30 @@ class Registration:
             return False
         return len(w["answered"]) >= w["pages"]
 
+    def rebatch(self, crew, ctx):
+        """THE REBATCH for this walker (the cycle's hang-up - dormant at this county unless the wire dies): the cut
+        items are dropped from the queue and forgotten as in flight.  A page or a control is asked again at the next
+        walk; a details item releases its window's count so the window can close, and its ids are asked again then
+        because the table still says they need work."""
+        n = 0
+        while True:
+            try:
+                key, _, _ = crew.q.get_nowait()
+            except queue.Empty:
+                break
+            self.inflight.pop(key, None)
+            self.attempts.pop(key, None)
+            if key[0] == CONTROL:
+                self.control_pending = False
+            elif key[0] == "details":
+                w = self.windows.get((key[1], key[2]))
+                if w:
+                    w["details"] = max(0, w["details"] - 1)
+            else:
+                self.reask.add(key)
+            n += 1
+        return n
+
     def land(self, crew, ctx):
         with crew.lock:
             results, crew.results = crew.results, []
@@ -370,7 +399,7 @@ def main():
     ap.add_argument("--drive", default="", help="only for --also documentation:N")
     ap.add_argument("--fresh-days", type=int, default=richmond.IMAGE_LAG_DAYS, help="only for --also documentation:N (the 7-day scan lag)")
     lane.add_common_args(ap)
-    ap.set_defaults(width=4)
+    ap.set_defaults(width=4, stagger=0.4)            # 0.4 s between first handshakes: the county's measured stagger
     args = ap.parse_args()
     args.lane = "registration"
 

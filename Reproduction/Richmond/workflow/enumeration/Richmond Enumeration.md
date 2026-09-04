@@ -61,4 +61,6 @@ Beside this file, never in git: `enumeration.report.txt`, `enumeration.log`, `en
 
 ## History
 
+2026-09-04 (night) — reviewed against the record (the drumroll rule): the sweep keeps its 0.4-s first handshakes, its 0.3-s pace and no cycle - a wire death ends the run with exit 3 and the ledger resumes on the next run, which the record calls free. Nothing changed.
+
 2026-09-04 — written from `rc_window.py` (the listing route, the row pattern, the pager, the control), `rc_census.py` (the windows from 1850, the resumable sweep, the re-opened trailing window, the identity) and `richmond_audit.py` (the trailing window, the clamp, the empty denominator, the verdict), every line read. Proven offline against a fake county and a fake cloud (the parser on the county's markup shape, the pager, the namespace, the refusal shapes, the window arithmetic, the trailing window's three verdicts, the census with a failed window left unswept and resumed, the identity with a phantom, a refusal stopping the sweep) and live against the county's own listing with the still-empty table, where the trailing window must fail and does.

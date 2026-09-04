@@ -55,6 +55,12 @@ Three outcomes, never two - login 2026-08-25: "we have the url, if it doesnt sho
 - `fresh(registry, days)`: inside the scan lag, a document with no image yet is `pending`, not `absent`. An UNREADABLE date is always inside the lag - guessing wrong records a scanned document as having no scan forever; staying pending costs one re-ask (2026-08-26). `recorded_date(registry)` reads the clerk's M/D/YYYY.
 - `canonical_path(doc_id, registry)` -> `storage.canonical("richmond", None, year, month folder, doc_id)`: richmond has no borough; year and month from the RECORDED date (the id's digits are a submission sequence, not a date), else `undated/undated`.
 
+## The access shape - and why the cycle is dormant here
+
+The county was measured under the DRUMROLL RULE (`RICHMOND REPRODUCTION.md` §3): no pacer, no governor, latency is the only governor; 160 concurrent connections ran 26 hours clean; restarts are free; the only safety is stop-on-refusal. What it objects to is a handshake burst - 160 cold TLS opens in one instant answered SSLError across the board - so births are 0.4 s apart and keep-alive removes every later handshake. The walkers keep the census's polite 0.3 s between the pages of one window, measured over 2.4 million requests without a trip. The courts host hangs the library-default user-agent and serves the honest one.
+
+The lanes inherit the cycle from `lane.py` (login's acris design: one entry, staggered births, a hang-up when the whole width dies with nothing landing, a 60-s wait, one re-entry on a fresh batch). At this county it is DORMANT: no session close was ever measured here, so the hang-up fires only when the wire itself dies (wifi, a dead host) - the right thing then. The walkers drop their cut windows and pages at a hang-up and ask them again at the next heal or walk; documentation drops its claims and takes fresh ones. login 2026-09-04: "the way it works doesnt require this whole batch, enter, stagger, redial, exit, rebatch approach ... richmond can just enter and hammer" - the record agrees.
+
 ## Who calls what
 
 | lane | from the module |
@@ -75,3 +81,5 @@ None. The county's refusal shapes are not preserved as files yet: a refusal here
 ## History
 
 2026-09-03 - the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the image section (two hosts, three outcomes, the honest user-agent at the courts host) added when the documentation lane was written. Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
+
+2026-09-04 (night) - the review of every richmond file against the record (login: "finish richmond the same way"): nothing in this module changed; the access shape written down above, with the finding that the cycle is dormant at this county.

@@ -20,8 +20,11 @@ this file is the richmond site: its lanes in the cycle's order, their widths, it
 This file's own authority is Richmond Reproduction.md beside it (the cycle's authority; section 0 is
 this program).  The rules of lanes together are written once in fleet.py's docstring.  What is
 richmond's own here: three small crews (the county has no metronome, latency is its backpressure, and
-the listing walk is one door by nature); --edge is a DATE (YYYY-MM-DD), handed to synchronization and
-registration on a first start; documentation's pending window is the measured 7-day scan lag.
+the listing walk is one door by nature), births 0.4 s apart (the county's measured handshake stagger,
+set in each lane); --edge is a DATE (YYYY-MM-DD), handed to synchronization and registration on a first
+start; documentation's pending window is the measured 7-day scan lag.  The cycle the lanes inherit from
+lane.py is DORMANT at this county (no session close was ever measured here - login: "richmond can just
+enter and hammer"); it fires only when the wire itself dies.
 
 Exit codes: 0 stopped · 2 a lane was refused (everything stilled) · 5 crash.
 """

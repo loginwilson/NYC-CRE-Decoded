@@ -34,8 +34,12 @@ The rules, kept from the lane that ran before this one (rc_lane.py's monitor and
                page it needs for the grant is one request away)
   refusal      a captcha, access-denied or block page = the county's decision: park at once, no retry,
                no rotation
-  hang-up      every line dropped at once = dead transport: redial (wifi down waits; 3 tries per
-               incident, --redial-wait apart), then park with the reason
+  hang-up      shared with every lane (lane.py) and DORMANT at this county: no session close was ever
+               measured here (the drumroll rule: no pacer, latency is the governor, 160 lines ran 26 h
+               clean).  It fires only when the wire itself dies - every walker a transport error inside
+               60 s with nothing answered for 10 s: hang up, drop the cut windows (asked again at the
+               next heal), wait 60 s with no line open, re-enter once, births 0.4 s apart; four
+               re-entries in a row refused, then park
   wall         40 consecutive 503/429 with no success between: park with the reason
   width        --width walkers at launch (default 4: the day window, the heal, a catch-up); `width=N`
                or `stop` in synchronization.control
@@ -49,6 +53,7 @@ import datetime as dt
 import json
 import os
 import pathlib
+import queue
 import sys
 import time
 
@@ -247,6 +252,25 @@ class Synchronization:
             cutoff = (self.today() - dt.timedelta(days=self.heal_days + 7)).isoformat()
             self.seen = {k: v for k, v in self.seen.items() if _iso(v) >= cutoff}
 
+    def rebatch(self, crew, ctx):
+        """THE REBATCH for this walker (the cycle's hang-up - dormant at this county unless the wire dies): the cut
+        windows are dropped from the queue and forgotten as in flight, so nothing stays open forever and the edge can
+        move; a window is asked again at the next heal (the day window at the next tick), a control before it."""
+        n = 0
+        while True:
+            try:
+                key, _, _ = crew.q.get_nowait()
+            except queue.Empty:
+                break
+            self.inflight.pop(key, None)
+            self.attempts.pop(key, None)
+            if key[0] == CONTROL:
+                self.control_pending = False
+            else:
+                self.reask.add(key)
+            n += 1
+        return n
+
     def status(self):
         return "edge %s - inserted %d - holes %d - today lists %d" % (self.edge, self.inserted, self.holes, self.day_rows)
 
@@ -275,7 +299,7 @@ def main():
     ap.add_argument("--drive", default="", help="only for --also documentation:N")
     ap.add_argument("--fresh-days", type=int, default=richmond.IMAGE_LAG_DAYS, help="only for --also documentation:N (the 7-day scan lag)")
     lane.add_common_args(ap)
-    ap.set_defaults(width=4)
+    ap.set_defaults(width=4, stagger=0.4)            # 0.4 s between first handshakes: the county's measured stagger (160 cold opens at once = SSLError)
     args = ap.parse_args()
     args.lane = "synchronization"
     args.heal_days = max(1, min(args.heal_days, richmond.WINDOW_DAYS))

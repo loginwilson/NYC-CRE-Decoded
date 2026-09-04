@@ -32,12 +32,14 @@ relaunch can cure and never relaunches what a person must decide.
 | rule | what the fleet does | origin |
 |---|---|---|
 | one process per lane | the default; `--mega` is the exception | the GIL is the throughput wall (acris §3) |
-| one door per lane, `--entry-gap` apart | lanes launched 20 s apart; births inside a lane are its own `--stagger` | three doors, never one moment |
+| one door per lane, `--entry-gap` apart | lanes launched 20 s apart; births inside a lane 0.4 s apart (`--stagger`, set in each richmond lane: the county's measured handshake stagger) | three doors, never one moment; 160 cold TLS opens in one instant = SSLError across the board (§3) |
+| the cycle, dormant | every lane carries the shared cycle (`lane.py`: one entry, staggered births, a hang-up when the whole width dies with nothing landing, a 60-s wait, one re-entry, the cut batch dropped) and at this county it is DORMANT: no session close was ever measured here - the drumroll rule stands, no pacer, latency is the governor, restarts are free, stop-on-refusal is the only safety. It fires only when the wire itself dies (wifi, a dead host), the right thing then; the walkers drop their cut windows and pages and ask them again at the next heal or walk | §3 calibrations; login 2026-09-04: "richmond can just enter and hammer" - the record agrees |
+| maturation | inside the documentation lane: a `pending` comes back from the claim after `--pending-age` and is minted again; past the 7-day lag it lands `absent` - the old 4 AM `rc_pdf_state --apply` pass cannot be separated from the lane any more | the 4 AM tasks section below |
 | one station for the walkers | synchronization and registration WALK the county's listing (the grant is per listing page, so no claim can split that work); two walkers of the same window would spend the county's requests twice. Workstation 2 runs documentation only, which claims its slice from the table | Richmond Registration.md, "one machine" |
 | the edge is a date | `--edge YYYY-MM-DD` goes to synchronization and registration on a first start (each keeps its own `*.edge.json` afterwards); a later `--edge` that disagrees with the file is refused | the two walkers' edge files |
 | widths | 4 / 4 / 8: the county has no metronome, latency is its backpressure; 8 pullers measured 28.23 docs/s against 18.76 at 16 (rc_bench 2026-08-25, one variable) | §3 calibrations |
 | pending window | documentation's `--fresh-days` defaults to the measured 7-day scan lag | rc_source IMAGE_LAG_DAYS |
-| what each exit means | 0 done · 1 refused to start: left alone · 2 REFUSED: every lane told to stop, exit 2, a person decides · 3 redials exhausted: relaunch after 300 s (the lane already waited out its own dead window) · 4 wall: parked by the lane, left · 5 crash: relaunch after 60 s · 6 drive gone: wait for the drive, relaunch with `--unpark` | fleet.py |
+| what each exit means | 0 done · 1 refused to start: left alone · 2 REFUSED: every lane told to stop, exit 2, a person decides · 3 four re-entries in a row refused, or the probe broken: the lane parked itself, never relaunched, a person decides · 4 wall: parked by the lane, left · 5 crash: relaunch after 60 s · 6 drive gone: wait for the drive, relaunch with `--unpark` | fleet.py |
 | the relaunch cap | more than `--relaunch-cap` (3) launches of one lane in an hour parks it with the reason | every start is a stampede of handshakes |
 | a parked lane is never relaunched | the drive's return is the one exception, because the fleet can verify it | the park is the lane's word, or a person's |
 | logs appended, never truncated | `<lane>/<lane>.log` with a fleet banner at every launch | 2026-09-03 |
@@ -48,7 +50,7 @@ Proven 2026-09-03 by the fleet simulation over fake `Richmond <Lane>.py` program
 simulation that proved the acris fleet, pointed at this site): the order and the gap; crashes
 relaunched and the cap; a refusal stilling every lane; the drive's return; a lane already running
 refused and left; the mega lane; width, stop and status. Not yet run on the real lanes: that waits
-for the data move.
+for the data move. Re-proven 2026-09-04 (night) after the review.
 
 ## 1 · THE CYCLE (login's words — this IS richmond reproduction)
 

@@ -27,7 +27,7 @@ One machine: the edge is local state. `--width` defaults to 4 walkers (the day w
 | two namespaces | the internal id is ours: `RC_<internal>`; the instrument number repeats across eras and is never a key | measured 2026-08-21 |
 | the cell | the `doc_id` only; the counters move with the insert in the same transaction | the cell rule; `insert_ids()` |
 | ids landed once | the monitor remembers the ids it has landed for the heal window and sends only new ones to the cloud | ten-second probes must not re-send the day's ids |
-| one entry, one door, refusal, hang-up, wall, width | shared with every lane; a county refusal shape (captcha, access denied, block page) is a `lane.Refused` | lane.py; richmond.py |
+| one entry, one door, refusal, hang-up, wall, width | shared with every lane; a county refusal shape (captcha, access denied, block page) is a `lane.Refused`. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every walker a transport error inside 60 s with nothing answered for 10 s - and then the cut windows are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next heal, the day window at the next tick, a control before the heal), 60 s of silence, one re-entry with births 0.4 s apart; four refused re-entries in a row park it | lane.py; richmond.py; RICHMOND REPRODUCTION.md §3 (the drumroll rule) |
 | identify honestly | the user-agent names this project | measured 2026-08-18; the standing line on bot detection |
 
 ## Calibrations
@@ -38,6 +38,7 @@ One machine: the edge is local state. `--width` defaults to 4 walkers (the day w
 | heal | 900 s over 30 days | the old heal; about 150 pages a quarter hour |
 | pace | 0.3 s between pages | the census's pace against this county, 143k pages without a trip |
 | width | 4 | the day window, the heal window and a catch-up window are the only work; more walkers buy nothing |
+| stagger | 0.4 s | the county's measured handshake stagger (160 cold opens at once = SSLError); keep-alive after |
 | control | 2026-08-19..20, 315 rows | rc_window.control |
 | memory | the ids of the last 37 days | the heal window plus a week; pruned past 200,000 |
 
@@ -47,8 +48,10 @@ A date edge sees what the county lists for the dates it re-reads. A document lis
 
 ## Working files
 
-Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted or the probe broken · 4 wall · 5 crash.
+Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`. Exit codes: 0 stopped · 2 refused · 3 four re-entries in a row refused, or the probe broken (the lane parked itself) · 4 wall · 5 crash.
 
 ## History
+
+2026-09-04 (night) — the review against the record: `rebatch` added so a dead wire can never leave a window stuck as in flight (the edge would have frozen behind it); births set to the county's 0.4 s; the inherited cycle named dormant. Proven again offline and by the simulation.
 
 2026-09-03 — written from `rc_lane.py` (the probe and the heal cadence), `rc_window.py` (the listing route, the row pattern, the control) and the richmond audit's window rules, every line read. Proven offline against a fake crew and a fake cloud (the control first, the catch-up from the edge, the heal window inclusive of thirty days, ids landed once, the edge moving only after the rows are in, a hole after three failed asks, a control that fails three asks re-asked, a broken control parking the lane, the fail-closed edge file) and by a simulated walk against the live cloud with throwaway ids and no county request: a catch-up window, a heal window, the day window with a filing appearing mid-run, a window failing every ask recorded as a hole, the edge file at today, the counters moved by exactly the rows inserted. Not yet proven: a real listing read from the lane, which waits for the data move.
