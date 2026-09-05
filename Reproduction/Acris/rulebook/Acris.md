@@ -36,7 +36,7 @@ A connection cut is not a refusal: the far side closing lines is the hang-up, ha
 
 The One Touch address of a document is a pure function of its id and registry (`canonical_path(doc_id, registry)` -> `storage.canonical("acris", borough, year, month folder, doc_id)`):
 
-- **borough** (`borough_of`): the registry's own BOROUGH line; else the first parcel's BBL digit; else the microfilm id's borough digit (`FT_<borough>...`); else `Unknown`.
+- **borough** (`borough_of`): the registry's own BOROUGH line; else the first parcel's BBL digit; else the microfilm id's borough digit (`FT_<borough>...`); else `Unknown`. A registry fact - since 2026-09-05 no longer a folder: the document's place is `Acris\By Document\<year>\<MM Mon>\<day>` from the recorded date (`canonical_path` -> `storage.canonical`).
 - **year / month** (`recorded_ym`): the RECORDED date - the axis that aligns every source; the id's embedded date is the submission date and can lag recording by days. Fallbacks: the document date, then a digital id's own date. None for undated microfilm -> `undated/undated`.
 - `fresh(registry, days)`: recorded within the last `days` - a document without an image yet is `pending`, not `absent`; the documentation lane's `--fresh-days`.
 

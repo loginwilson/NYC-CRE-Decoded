@@ -42,8 +42,8 @@ check("302 + the clerk's own error page is no image", richmond.classify_mint(302
 check("200 and 404 are dead ends (no image)", richmond.classify_mint(200, "") == ("noimage", None) and richmond.classify_mint(404, "") == ("noimage", None))
 check("403 / 429 / 503 are about us", all(richmond.classify_mint(c, "")[0] == "error" for c in (403, 429, 503)))
 check("a pdf starts with %PDF", richmond.is_pdf(b"%PDF-1.4 ...") and not richmond.is_pdf(b"<html>") and not richmond.is_pdf(b"%PD"))
-check("the path: richmond, no borough, year and month from the recorded date", richmond.canonical_path("RC_1", {"recorded": "8/19/2026"}) == "D:\\CRE Decoding System\\Documents\\richmond\\2026\\08 Aug\\RC_1.pdf", richmond.canonical_path("RC_1", {"recorded": "8/19/2026"}))
-check("no readable date: undated", richmond.canonical_path("RC_2", {"recorded": ""}).endswith("\\richmond\\undated\\undated\\RC_2.pdf"))
+check("the path: Richmond / By Document / year / month / day from the recorded date", richmond.canonical_path("RC_1", {"recorded": "8/19/2026"}) == "D:\\NYC CRE Decoded\\Reproduction\\Richmond\\By Document\\2026\\08 Aug\\19\\RC_1.pdf", richmond.canonical_path("RC_1", {"recorded": "8/19/2026"}))
+check("no readable date: the id split, no empty folder", richmond.canonical_path("RC_2", {"recorded": ""}).endswith("\\Richmond\\By Document\\RC_2\\RC_2.pdf") and richmond.canonical_path("RC_1900390", {}).endswith("\\By Document\\RC_1\\9003\\RC_1900390.pdf"), richmond.canonical_path("RC_2", {"recorded": ""}))
 check("fresh: inside the 7-day lag / past it / an unreadable date is inside", richmond.fresh(REG_NEW) and not richmond.fresh(REG_OLD) and richmond.fresh({"recorded": "garbage"}) and richmond.fresh(None))
 check("the mint url and its referer", richmond.mint_url(" 123 ") == "https://www.richmondcountyclerk.com/ViewVscmsDocument/ViewContent?p_endorsementId=123"
       and richmond.mint_referer("123") == "https://www.richmondcountyclerk.com/Search/ViewDocumentInfo/123")

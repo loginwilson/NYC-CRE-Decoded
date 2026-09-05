@@ -247,10 +247,7 @@ def fresh(registry, days=IMAGE_LAG_DAYS):
 
 
 def canonical_path(doc_id, registry):
-    """The One Touch address: richmond has no borough; year and month from the RECORDED date (the id's
-    digits are a submission sequence, not a date), else undated."""
+    """The One Touch address: Richmond\\By Document\\<year>\\<MM Mon>\\<day>\\<id>.pdf from the RECORDED date (the id's
+    digits are a submission sequence, not a date); with no readable date the id split (storage.day_folders)."""
     import storage
-    rec = recorded_date(registry)
-    if rec is None:
-        return storage.canonical("richmond", None, "undated", "undated", doc_id)
-    return storage.canonical("richmond", None, rec.year, storage.month_folder(rec.month), doc_id)
+    return storage.canonical("richmond", doc_id, recorded_date(registry))

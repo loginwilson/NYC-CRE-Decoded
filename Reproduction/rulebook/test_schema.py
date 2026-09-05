@@ -20,7 +20,7 @@ _spec.loader.exec_module(_program)
 dsn = _program.dsn
 
 IDS = ["TEST-%04d" % i for i in range(1, 7)]
-PATH = r"D:\CRE Decoding System\Documents\acris\Manhattan\2004\08 Aug\TEST-0001.pdf"
+PATH = r"D:\NYC CRE Decoded\Reproduction\Acris\By Document\2004\08 Aug\21\TEST-0001.pdf"
 REGISTRY = json.dumps({"doc type": "DEED", "test": True})
 
 

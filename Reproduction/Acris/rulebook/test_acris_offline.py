@@ -21,13 +21,21 @@ c = acris.canonical_path("2004082100762006", reg)
 print("   canonical:", c)
 print("   local on D:", storage.local("D:\\", c))
 print("   local on Mac:", storage.local("/Volumes/NYCCRED2", c))
-assert c == r"D:\CRE Decoding System\Documents\acris\Manhattan\2004\08 Aug\2004082100762006.pdf", c
+assert c == r"D:\NYC CRE Decoded\Reproduction\Acris\By Document\2004\08 Aug\21\2004082100762006.pdf", c
+assert acris.canonical_path("FT_4700012345678", {"type": "DEED"}) == r"D:\NYC CRE Decoded\Reproduction\Acris\By Document\FT_4\7000\FT_4700012345678.pdf"
+assert acris.canonical_path("2017010200012001", {"type": "DEED"}) == r"D:\NYC CRE Decoded\Reproduction\Acris\By Document\2017\01 Jan\02\2017010200012001.pdf"
+assert acris.canonical_path("2003010600934005", {"recorded": "5/13/2003 3:49:24 PM"}) == r"D:\NYC CRE Decoded\Reproduction\Acris\By Document\2003\05 May\13\2003010600934005.pdf"   # a real old row, its file sits in exactly this day folder
 print("   borough from the BOROUGH line:", acris.borough_of("X", {"borough": "QUEENS / NEW YORK"}))
 print("   borough from a microfilm id:", acris.borough_of("FT_3210001234567", {}))
 print("   no borough anywhere:", acris.borough_of("BK_1", {}))
 print("   undated microfilm:", acris.canonical_path("FT_4700012345678", {"type": "DEED"}))
 print("   digital id, no registry date:", acris.canonical_path("2017010200012001", {"type": "DEED"}))
-print("   richmond form (no borough):", storage.canonical("richmond", None, 2019, "03 Mar", "RC_988537"))
+import datetime
+rc = storage.canonical("richmond", "RC_988537", datetime.date(2019, 3, 28))
+print("   richmond form:", rc)
+assert rc == r"D:\NYC CRE Decoded\Reproduction\Richmond\By Document\2019\03 Mar\28\RC_988537.pdf", rc
+assert storage.canonical("richmond", "RC_1", "3/18/1975") == r"D:\NYC CRE Decoded\Reproduction\Richmond\By Document\1975\03 Mar\18\RC_1.pdf"   # a real old row
+assert storage.canonical("richmond", "RC_1900390", None) == r"D:\NYC CRE Decoded\Reproduction\Richmond\By Document\RC_1\9003\RC_1900390.pdf"   # no date: the id split
 
 print("3. freshness")
 today = time.strftime("%m/%d/%Y")

@@ -165,12 +165,11 @@ def recorded_ym(doc_id, registry):
 
 
 def canonical_path(doc_id, registry):
-    """The One Touch address for this document."""
-    borough = borough_of(doc_id, registry)
-    ym = recorded_ym(doc_id, registry)
-    if ym:
-        return storage.canonical("acris", borough, ym[0], storage.month_folder(ym[1]), doc_id)
-    return storage.canonical("acris", borough, "undated", "undated", doc_id)
+    """The One Touch address for this document: Acris\\By Document\\<year>\\<MM Mon>\\<day>\\<id>.pdf from the RECORDED
+    date, else a digital id's own date, else the id split - storage.day_folders, the old lane's rule kept exactly.
+    The borough is a registry fact (borough_of), no longer a folder (login 2026-09-05)."""
+    recorded = registry.get("recorded") if isinstance(registry, dict) else None
+    return storage.canonical("acris", doc_id, recorded)
 
 
 def fresh(registry, days):

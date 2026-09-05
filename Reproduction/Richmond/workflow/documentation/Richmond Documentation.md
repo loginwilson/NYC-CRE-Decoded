@@ -29,7 +29,7 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 |---|---|---|
 | one entry | one pooled session, one connection per worker at birth, keep-alive after; the courts host gets a pool of its own so switching hosts never re-handshakes; the clerk's front door is fetched once for its cookies | lane.py; rc_lane's per-host pools |
 | the cell | the canonical One Touch path, or `pending` (no image, recorded inside the lag) or `absent` (checked, none); nothing else enters the cell | login 2026-09-03, the cell rule |
-| placement | `D:\CRE Decoding System\Documents\richmond\<year>\<month>\<id>.pdf` — no borough; year and month from the RECORDED date, else `undated` | corpus_paths: recorded is the axis, the id is a submission sequence |
+| placement | `D:\NYC CRE Decoded\Reproduction\Richmond\By Document\<year>\<MM Mon>\<day>\<id>.pdf` — the day from the RECORDED date, else the id split | login 2026-09-05 (the One Touch mirrors GitHub and Supabase); corpus_paths: recorded is the axis, the id is a submission sequence |
 | no registry, no request | a row without a registry cannot be placed or judged fresh; it waits for registration | the acris rule, same reason |
 | already on disk | a file already under this drive is recorded without a request | relaunch recovery |
 | two sources agree | `absent` needs the registry's `image_state` to agree; a registry that says present sends the document back to be asked again | rc_lane._no_image, 2026-08-26 |

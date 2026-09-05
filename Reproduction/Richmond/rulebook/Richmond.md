@@ -53,7 +53,7 @@ Three outcomes, never two - login 2026-08-25: "we have the url, if it doesnt sho
 - **The courts host gates on the user-agent** (2026-08-22, one variable, everything else identical): the library default `python-requests/2.34.2` hangs to a ReadTimeout at 45 s, 2 of 2; this project's honest `UA` answers 200 and the full PDF in 1.5 s, 2 of 2. So the pull carries the same honest string with `PULL_HEADERS` (Referer the clerk's front door, Accept `application/pdf,*/*`). A browser string was measured to buy nothing and would make the client dishonest.
 - `is_pdf(data)`: a PDF is a PDF only when the body starts `%PDF`.
 - `fresh(registry, days)`: inside the scan lag, a document with no image yet is `pending`, not `absent`. An UNREADABLE date is always inside the lag - guessing wrong records a scanned document as having no scan forever; staying pending costs one re-ask (2026-08-26). `recorded_date(registry)` reads the clerk's M/D/YYYY.
-- `canonical_path(doc_id, registry)` -> `storage.canonical("richmond", None, year, month folder, doc_id)`: richmond has no borough; year and month from the RECORDED date (the id's digits are a submission sequence, not a date), else `undated/undated`.
+- `canonical_path(doc_id, registry)` -> `storage.canonical("richmond", doc_id, recorded date)`: `D:\NYC CRE Decoded\Reproduction\Richmond\By Document\<year>\<MM Mon>\<day>\<id>.pdf` from the RECORDED date (the id's digits are a submission sequence, not a date); with no readable date the id split (`RC_1\9003`), the old lane's rule (2026-09-05).
 
 ## The access shape - and why the cycle is dormant here
 

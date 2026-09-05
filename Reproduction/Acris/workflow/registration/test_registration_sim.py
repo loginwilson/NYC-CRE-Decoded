@@ -42,7 +42,7 @@ IDS = ["SIM-%04d" % i for i in range(1, 12)]
 q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 q("insert into reproduction.acris (doc_id) select unnest(%s::text[])", (IDS,), fetch=False)
-q("update reproduction.acris set document = %s where doc_id = 'SIM-0011'", (r"D:\CRE Decoding System\Documents\acris\Brooklyn\2024\08 Aug\SIM-0011.pdf",), fetch=False)
+q("update reproduction.acris set document = %s where doc_id = 'SIM-0011'", (r"D:\NYC CRE Decoded\Reproduction\Acris\By Document\2004\08 Aug\21\SIM-0011.pdf",), fetch=False)
 before_lane = q("select landed from reproduction.acris_update_lanes where lane = 'registration'")[0][0]
 before_phase = q("select landed from reproduction.acris_update")[0][0]
 print("inserted 11 SIM rows (registry empty); registration landed before:", before_lane, "| phase before:", before_phase)

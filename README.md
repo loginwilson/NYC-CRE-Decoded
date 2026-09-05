@@ -18,7 +18,7 @@ This repo is the process. The data is not in it. The concept of the first phase,
 |---|---|---|
 | database | Supabase project **NYC CRE Decoded** (East US); `supabase/Supabase.md` · `supabase/supabase.py` | one schema per phase: `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table; each phase's schema as numbered SQL in `<Phase>/rulebook/schema/` |
 | code | this repo | `supabase/` at the root (the database's pair), then `Reproduction/` with the same three folders at every level (below) |
-| documents | the One Touch, `D:\CRE Decoding System\Documents\` | `source\borough\year\month\id.pdf` (richmond has no borough); a second workstation mounts its drive under the same letter and layout, then transfers |
+| documents | the One Touch, `D:\NYC CRE Decoded\Reproduction\` - the same tree as this repo and the database | `<Source>\By Document\<year>\<MM Mon>\<day>\<id>.pdf`, the day from the recorded date; a second workstation writes the identical tree under its own drive and records One Touch paths, then transfers |
 
 Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or printed.
 
