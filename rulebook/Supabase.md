@@ -57,8 +57,8 @@ reads in bulk, and the documents.
 | when | what |
 |---|---|
 | 2026-09-03 17:01 | schema `reproduction` created by 0001 (ten tables, four functions), applied with the Supabase CLI and recorded in the ledger |
-| 2026-09-05 | 0002 (pendings first; documentation claims only where a registry is) pending - applied from here on login's word, see the history |
-| until the data move | every table empty; the repo's lanes cannot run for real before the rows are in |
+| 2026-09-05 15:55 | 0002 (pendings first; documentation claims only where a registry is) applied from here with `push` and recorded in the ledger; `test_schema.py` ALL OK on the empty table after it |
+| until the data move | every table empty (verified 15:55: 0 rows, 0 claims, 0 heartbeats per source; the board rows in place - one phase row and three lane rows per source); the repo's lanes cannot run for real before the rows are in. READY TO RECEIVE: the cell rules as check constraints, the four to-do indexes per source (pendings keyed on `updated_at`), `claim` with its six arguments, `land`, `heartbeat`, `reconcile` |
 
 ## History
 
@@ -70,3 +70,10 @@ Retired: the Supabase CLI and its 300-line `config.toml` (settings for a local c
 `db_push.ps1` and `decoded_sql.py` (both folded into `supabase.py`), the folder's README and `SCHEMA.md` (folded into
 the phase rulebook's "The table"). The ledger the CLI wrote is kept and shared. Nothing in the database changed with
 the move.
+
+2026-09-05 15:55 — The connect step (login: "make the necessary fixes to git hub so we can then move into supabase and assure the
+reproduction table is ready for receiving"): `push` applied 0002 - the first file applied from here - and recorded it beside the
+CLI's 0001; `check` shows both applied; the proof ran ALL OK against the live, empty table (two hosts claim disjoint slices, the
+counters move by what was new, a wrong cell word is refused, heartbeats land, cleanup leaves nothing). The plan must be Pro
+before the data move (the free plan's 500 MB cannot hold the table; the database is 11 MB today). Next, on login's word: the
+data move (Legal Instruments.db → `reproduction.acris`, every lane paused) - populate is the last step of the sequence.
