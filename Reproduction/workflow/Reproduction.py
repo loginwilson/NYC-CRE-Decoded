@@ -7,10 +7,10 @@ Reproduction.py`: 4 / 4 / 8 at fixed widths, births 0.4 s apart.  THE PHASE is e
 each one is configured - this program.  It adds no rule of its own: what a source runs is written in its fleet
 program, what a lane does in the rulebook (../rulebook/).
 
-    python Reproduction.py --drive NYCCRED1                                every source's fleet as configured, one fleet at a
+    python Reproduction.py --drive OneTouch                                every source's fleet as configured, one fleet at a
                                                                            time --source-gap s apart, then the watch
-    python Reproduction.py --drive NYCCRED1 --sources acris                these sources only (folder names, any case)
-    python Reproduction.py --drive NYCCRED1 --richmond "--edge 2026-08-25" --acris "--lanes documentation:40"
+    python Reproduction.py --drive OneTouch --sources acris                these sources only (folder names, any case)
+    python Reproduction.py --drive OneTouch --richmond "--edge 2026-08-25" --acris "--lanes documentation:40"
                                                                            a source's own arguments, handed to its fleet whole
     python Reproduction.py status                                          every source: this machine's lanes, and every
                                                                            workstation's heartbeats in the cloud
@@ -256,9 +256,9 @@ def build_parser(srcs):
     ap.add_argument("command", nargs="?", default="run", choices=["run", "status", "stop"])
     ap.add_argument("target", nargs="?", default="", help="stop: one source (default: every source)")
     ap.add_argument("--sources", default="", help="SOURCE,... to run, in this order (default: every source, alphabetical: %s)" % ", ".join(n for n, _ in srcs))
-    ap.add_argument("--drive", default="", help="documentation's drive label (NYCCRED1 at home, NYCCRED2 on workstation 2); run needs it")
+    ap.add_argument("--drive", default="", help="documentation's drive label (the volume label: OneTouch at home, workstation 2's own); run needs it")
     ap.add_argument("--source-gap", type=int, default=20, help="seconds between one fleet's launch and the next")
-    ap.add_argument("--stop-wait", type=int, default=150, help="seconds for a fleet to stop its lanes and leave (a fleet gives its lanes 90) before it is terminated")
+    ap.add_argument("--stop-wait", type=int, default=240, help="seconds for a fleet to stop its lanes and leave (a fleet gives its lanes 180) before it is terminated")
     ap.add_argument("--within", default="10 minutes", help="status: heartbeats this recent")
     ap.add_argument("--host", default="", help="this workstation's name in the cloud (default: the machine name)")
     for name, _ in srcs:
@@ -276,7 +276,7 @@ def main(argv=None, phase=PHASE, here=None):
     if args.command == "stop":
         return run_each(pick(srcs, args.target or args.sources), ["stop", "--stop-wait", str(max(1, args.stop_wait - 60))], args.host)
     if not args.drive:
-        raise SystemExit("run needs --drive <label> (NYCCRED1 at home, NYCCRED2 on workstation 2): every source's batch has documentation in it")
+        raise SystemExit("run needs --drive <label> (the volume label: OneTouch at home, workstation 2's own): every source's batch has documentation in it")
     return Phase(args, pick(srcs, args.sources), here).run()
 
 

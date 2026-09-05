@@ -13,9 +13,9 @@
 
 ## 0 · THE PHASE PROGRAM — `Reproduction.py` (2026-09-05)
 
-    python Reproduction.py --drive NYCCRED1                                every source's fleet as configured, one fleet at a time, --source-gap s apart, then the watch
-    python Reproduction.py --drive NYCCRED1 --sources acris                these sources only
-    python Reproduction.py --drive NYCCRED1 --richmond "--edge 2026-08-25" --acris "--lanes documentation:40"
+    python Reproduction.py --drive OneTouch                                every source's fleet as configured, one fleet at a time, --source-gap s apart, then the watch
+    python Reproduction.py --drive OneTouch --sources acris                these sources only
+    python Reproduction.py --drive OneTouch --richmond "--edge 2026-08-25" --acris "--lanes documentation:40"
                                                                            a source's own arguments, handed to its fleet whole
     python Reproduction.py status                                          every source: this machine's lanes, every workstation's heartbeats
     python Reproduction.py stop [source]                                   `stop` through each fleet: the lanes finish their minute and leave
@@ -27,7 +27,7 @@
 | one phase per machine | `reproduction.lock` beside the program; a second start is refused (exit 1), the first left alone | the same fail-closed lock every lane and fleet takes (`lane.take_lock`) |
 | one fleet per source, `--source-gap` apart | fleets launched 20 s apart, each its own process with its own lock, log and watch | two sources are two doors, never one moment |
 | a fleet's exit is its word | 0 every lane left cleanly · 1 refused to start · 2 a lane was REFUSED and the fleet stilled the rest · 5 crash. The phase relaunches nothing; one source's refusal leaves the other fleets running; when the last fleet has left the phase leaves with the worst word it heard (2 over 5 over 1 over 0) | a fleet already relaunches what a relaunch can cure; what it leaves on is a decision for a person |
-| stop | Ctrl+C or `stop`: each fleet is told to stop (a break signal on Windows, SIGTERM elsewhere) and stops its lanes as it does alone - `stop` into every control file, a 90-s grace, then force; a fleet still up after `--stop-wait` (150 s) is terminated and its lanes finish on their own locks | the lanes' minute is theirs |
+| stop | Ctrl+C or `stop`: each fleet is told to stop (a break signal on Windows, SIGTERM elsewhere) and stops its lanes as it does alone - `stop` into every control file, a 180-s grace, then force; a fleet still up after `--stop-wait` (240 s) is terminated and its lanes finish on their own locks | the lanes' minute is theirs |
 | logs | `reproduction.log` beside the program (the phase's lines); `<source>.log` beside it (each fleet's console) - appended, never truncated | a live log was truncated once, 2026-09-03 |
 
 Exit codes: 0 every fleet left cleanly · 1 refused to start · 2 a fleet was refused by its source · 5 crash. Proven
@@ -56,7 +56,7 @@ Reproduction/
 
 Every folder that holds code holds a **pair**: the md is that thing's own authority (what it does, its rules, its
 calibrations, its history), the py is its one program, runnable alone from its folder - `python "Acris
-Documentation.py" --drive NYCCRED1` is the whole command. A proof sits beside what it proves (`test_*.py`) and asks
+Documentation.py" --drive OneTouch` is the whole command. A proof sits beside what it proves (`test_*.py`) and asks
 nothing of any source. A source folder is its three folders and nothing loose; the phase folder is its three folders,
 the database folder and the sources, and nothing loose.
 
