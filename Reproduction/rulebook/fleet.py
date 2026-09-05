@@ -22,8 +22,9 @@ Lanes together - the rules:
                          order written in --lanes
   the watch              the fleet stays up and reads its children every few seconds.  What each exit means:
                            0  stopped cleanly (control file, --limit, a signal)   done, not relaunched
-                           1  refused to start (another door open, parked, bad arguments)   left alone, logged
+                           1  refused to start (another door open, parked, a bad --drive; also a Windows kill)   left alone, logged
                            2  REFUSED by the source (the notice page)   every other lane is told to stop; exit 2; a person decides
+                              (argparse also exits 2, so a flag the fleet passes must exist on every lane's parser - it does)
                            3  four re-entries in a row refused: the lane PARKED itself   never relaunched; a person decides
                            4  wall (40 consecutive 503/429)   parked by the lane; left alone
                            5  crash   relaunched after a short wait
@@ -44,7 +45,7 @@ Lanes together - the rules:
   logs                   each lane's output is appended to <lane>/<lane>.log beside its file (never truncated:
                          a live lane's log was truncated once, 2026-09-03), with a fleet banner at every launch
   stop                   `stop` into each control file; the lanes finish their minute and leave; after --stop-wait
-                         seconds what is left is terminated
+                         seconds (180) what is left is terminated and logged as such
   cross-station          `status` reads reproduction.<source>_heartbeats: every lane on every workstation, its
                          width, its age, its last word - a second workstation runs the same file with its own --drive
 
@@ -64,7 +65,7 @@ import cloud
 import lane
 import storage
 
-WAIT_AFTER = {3: 300, 5: 60}                                     # seconds before a relaunch, by exit code (3 never relaunches in practice: the lane parked itself)
+WAIT_AFTER = {5: 60}                                             # seconds before a relaunch, by exit code: only a crash is relaunched
 MEANING = {0: "stopped cleanly", 1: "refused to start", 2: "REFUSED by the source", 3: "parked itself: four re-entries in a row refused",
            4: "wall - parked by the lane", 5: "crash", 6: "drive gone"}
 
@@ -138,7 +139,7 @@ class Fleet:
             pass
 
     # ── one lane's command line ──
-    def argv(self, name, width, unpark=False, also=()):
+    def argv(self, name, width, unpark=False, also=(), first=True):
         a = self.args
         argv = [sys.executable, "-u", str(self.site.lane_file(name)), "--width", str(width), "--host", self.host,
                 "--entry-gap", str(a.entry_gap), "--pending-age", a.pending_age]
@@ -148,9 +149,9 @@ class Fleet:
         crews = (name,) + tuple(n for n, _ in also)
         if "documentation" in crews:
             if not a.drive:
-                raise SystemExit("documentation needs --drive <label> (NYCCRED1 at home, NYCCRED2 on workstation 2)")
+                raise SystemExit("documentation needs --drive <label> (the volume label: OneTouch at home, workstation 2's own)")
             argv += ["--drive", a.drive, "--fresh-days", str(a.fresh_days)]
-        if a.edge and any(n in self.site.edge_lanes for n in crews):
+        if first and a.edge and any(n in self.site.edge_lanes for n in crews):     # the edge only on a lane's FIRST launch: afterwards its edge file is the truth, and a disagreeing --edge is refused
             argv += ["--edge", str(a.edge)]
         for n, w in also:
             argv += ["--also", "%s:%d" % (n, w)]
@@ -165,7 +166,8 @@ class Fleet:
         return argv
 
     def launch(self, name, width, unpark=False, also=()):
-        argv = self.argv(name, width, unpark, also)
+        first = not (self.children.get(name) or {}).get("launches")
+        argv = self.argv(name, width, unpark, also, first)
         log = self.site.lane_dir(name) / ("%s.log" % name)
         with log.open("a", encoding="utf-8") as f:                      # appended, never truncated
             f.write("\n=== fleet launch %s on %s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), self.host,
@@ -267,8 +269,11 @@ class Fleet:
     def _exited(self, name, c, rc):
         up = time.time() - c["started"]
         meaning = MEANING.get(rc, "exit %d" % rc)
-        self.log("%s: pid %d left after %.0f min - %s (%d)" % (name, c["proc"].pid, up / 60, meaning, rc))
         parked = self.site.lane_dir(name) / ("%s.parked" % name)
+        if c.get("terminated"):
+            self.log("%s: pid %d terminated by the fleet after the stop grace (exit %d)" % (name, c["proc"].pid, rc))
+            return
+        self.log("%s: pid %d left after %.0f min - %s (%d)" % (name, c["proc"].pid, up / 60, meaning, rc))
         if rc == 0 or rc == 1:
             return                                                    # done, or a person's / another door's - left alone
         if rc == 2:
@@ -276,13 +281,14 @@ class Fleet:
             self.exit_code = 2
             self.stopping = True
             return
-        if rc == 4:
-            return                                                    # parked by the lane: its word
+        if rc in (3, 4):
+            self.log("%s: parked itself (%s) - not relaunched; a person decides" % (name, parked.name))
+            return                                                    # parked by the lane (3: four refused re-entries, 4: the wall) - its word
         self.history[name] = c
         if rc == 6:
             self.waiting[name] = (0, "the drive is gone - waiting for it", True)
             return
-        # 3, 5 and anything else: a relaunch is the cure, within the cap
+        # 5 and anything else: a relaunch is the cure, within the cap
         hour_ago = time.time() - 3600
         n = sum(1 for t in c["launches"] if t > hour_ago)
         if n > self.args.relaunch_cap:
@@ -295,7 +301,7 @@ class Fleet:
             return
         wait = WAIT_AFTER.get(rc, WAIT_AFTER[5]) if not self.args.relaunch_wait else self.args.relaunch_wait
         self.waiting[name] = (time.time() + wait, meaning, False)
-        self.log("%s: relaunch in %d s (%s; launch %d of %d this hour)" % (name, wait, meaning, n, self.args.relaunch_cap))
+        self.log("%s: relaunch in %d s (%s; launch %d of %d this hour)" % (name, wait, meaning, n + 1, self.args.relaunch_cap))
 
     def _relaunch_due(self):
         for name in list(self.waiting):
@@ -343,6 +349,7 @@ class Fleet:
         for name, c in list(self.children.items()):
             if c["proc"].poll() is None:
                 self.log("%s: still running after %d s - terminating pid %d" % (name, wait, c["proc"].pid))
+                c["terminated"] = True
                 try:
                     c["proc"].terminate()
                     c["proc"].wait(timeout=15)
@@ -462,20 +469,20 @@ def build_parser(site, description, edge_type, edge_help, fresh_days_default):
     ap.add_argument("target", nargs="?", default="", help="stop: a lane name; width: LANE=N")
     ap.add_argument("--lanes", default="", help="LANE:WIDTH,... in launch order (default: %s)" % ",".join("%s:%d" % (n, site.widths[n]) for n in site.lanes))
     ap.add_argument("--mega", action="store_true", help="every crew in one process through the first lane's --also")
-    ap.add_argument("--drive", default="", help="documentation's drive label (NYCCRED1 at home, NYCCRED2 on workstation 2)")
+    ap.add_argument("--drive", default="", help="documentation's drive label (the volume label: OneTouch at home, workstation 2's own)")
     ap.add_argument("--fresh-days", type=int, default=fresh_days_default, help="documentation: a document recorded within this many days with no image is pending, not absent")
     ap.add_argument("--edge", type=edge_type, default=edge_type(), help=edge_help)
     ap.add_argument("--entry-gap", type=int, default=20, help="seconds between lane launches (and between crews inside a mega lane)")
-    ap.add_argument("--stagger", type=float, default=None, help="seconds between worker births inside a lane (default: the lane's own, 5 s)")
+    ap.add_argument("--stagger", type=float, default=None, help="seconds between worker births inside a lane (default: the lane's own)")
     ap.add_argument("--pending-age", default="1 hour")
     ap.add_argument("--redial-wait", type=int, default=None, help="seconds of silence before a re-entry (default: the lane's own, 60 s with the backoff)")
     ap.add_argument("--tries", type=int, default=None, help="re-entries per incident before a lane parks (default: the lane's own, 4)")
     ap.add_argument("--limit", type=int, default=0, help="each lane stops after this many documents (a test run)")
     ap.add_argument("--unpark", action="store_true", help="start parked lanes too (a person has decided)")
     ap.add_argument("--no-pool-check", action="store_true", help="the lanes skip the exit-pool check at entry (tests only)")
-    ap.add_argument("--relaunch-wait", type=int, default=0, help="seconds before relaunching a crashed lane (default: 60 after a crash, 300 after exhausted redials)")
+    ap.add_argument("--relaunch-wait", type=int, default=0, help="seconds before relaunching a crashed lane (default 60)")
     ap.add_argument("--relaunch-cap", type=int, default=3, help="relaunches per lane per hour before the fleet parks it")
-    ap.add_argument("--stop-wait", type=int, default=90, help="seconds to wait for lanes to leave before terminating them")
+    ap.add_argument("--stop-wait", type=int, default=180, help="seconds for the lanes to leave after `stop` (a lane reads its control file on the minute, then joins its workers) before terminating them")
     ap.add_argument("--within", default="10 minutes", help="status: heartbeats this recent")
     ap.add_argument("--host", default="")
     return ap

@@ -4,8 +4,8 @@ The database records the CANONICAL address of a document, always in One Touch fo
 
     D:\\CRE Decoding System\\Documents\\<source>\\<borough>\\<year>\\<month>\\<id>.pdf     (richmond: no borough)
 
-Each workstation writes the file under ITS OWN drive - found by its label (--drive NYCCRED1,
---drive NYCCRED2) on Windows or Mac alike - with the identical layout beneath, so a later
+Each workstation writes the file under ITS OWN drive - found by its label (--drive OneTouch at
+home; workstation 2 names its own) on Windows or Mac alike - with the identical layout beneath, so a later
 transfer of that drive's files into the One Touch makes every recorded path literally true
 with no change to the database.  The label names the drive; the letter D: in the cell is the
 One Touch's address, not a claim about which machine fetched the file.

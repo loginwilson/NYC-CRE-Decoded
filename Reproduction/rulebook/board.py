@@ -37,7 +37,6 @@ import os
 import pathlib
 import signal
 import socket
-import sys
 import time
 
 from cloud import Cloud
@@ -62,6 +61,10 @@ def eta_text(remaining, rate):
 
 def fmt(n):
     return "{:,}".format(n) if isinstance(n, int) else ("-" if n is None else str(n))
+
+
+def fmt_signed(n):
+    return ("+" + fmt(n)) if isinstance(n, int) and n > 0 else fmt(n)      # an increase reads +288, a hold 0
 
 
 class Board:
@@ -220,7 +223,7 @@ class Board:
             rate, inc, pct, eta = r["rate_" + tag], r["increase_" + tag], r["pct_" + tag], r["eta_" + tag]
             if rate is None and inc is None:
                 return "%-3s      -" % tag
-            return "%-3s %6.2f/s %+8s %+8.4f%%  eta %s" % (tag, rate or 0.0, fmt(inc), pct or 0.0, eta or "-")
+            return "%-3s %6.2f/s %8s %+8.4f%%  eta %s" % (tag, rate or 0.0, fmt_signed(inc), pct or 0.0, eta or "-")
         pct = ("%.2f%%" % r["pct"]) if r["pct"] is not None else "-"
         out = "UPDATE %-8s | %-15s | %s | %s | %s / %s = %s | %s" % (
             self.source, key if key != "phase" else "reproduction", kit("60s"), kit("5m"), fmt(r["landed"]), fmt(r["needed"]), pct,
@@ -320,7 +323,7 @@ class Board:
         rows = self.cloud._run("select what, landed, needed from reproduction.reconcile(%s)", (s,), True)
         self.log("reconcile(%s) in %.1f s:" % (s, time.time() - t))
         for what, landed, needed in rows:
-            key = "phase" if what == "phase" else what
+            key = what
             b = before.get(key, (None, None))
             drift = "" if b[0] == landed and b[1] == needed else "   (was %s / %s)" % (fmt(b[0]), fmt(b[1]))
             self.log("  %-16s landed %12s  needed %12s%s" % (what, fmt(int(landed)), fmt(int(needed)), drift))

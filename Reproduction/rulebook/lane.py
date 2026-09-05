@@ -2,11 +2,11 @@
 their own connection, and the policies that keep a lane alive without a person - measured on the
 acris lanes of 2026-08/09 and written down in ACRIS REPRODUCTION.md.
 
-A lane file (documentation.py, registration.py, ...) defines a ROLE - what one worker does with one
+A lane file (`Acris Documentation.py`, `Richmond Registration.py`, ...) defines a ROLE - what one worker does with one
 document - and hands it to run().  run() owns everything else:
 
   claim / land / heartbeat   the cloud hands this workstation its slice (claim); results land once a
-                             minute through the outbox, so a cloud hiccup loses nothing; heartbeat
+                             minute (or at 200 results) through the outbox, so a cloud hiccup loses nothing; heartbeat
                              once a minute carries the width and the last word
   failures                   a fetch error never stops the lane; the document stays empty for a later
                              pass and the reason is written to <lane>.fails.jsonl
@@ -43,8 +43,8 @@ pass; a role that walks a range re-asks its window), waits --redial-wait (60 s) 
 fresh batch and re-enters ONCE (_await_entry), staggered, after exit_pool() shows five draws in one block.
 The wait is a state: a re-entry the door refuses (cut inside five minutes with fewer than SERVED_LANDINGS
 landed) doubles the next wait, capped at 80 minutes; a served one halves it back to the base.  Neither the
-wait nor the ramp blocks the process: births run on their own thread and the main loop keeps feeding and
-landing every other crew.
+wait, the exit-pool check nor the ramp blocks the process: births and the pool draws run on their own threads and
+the main loop keeps feeding and landing every other crew.
 A cut is ACRIS's ordinary session end, not a block: it closed every session of 2026-09-04 after 12-59
 minutes and served the fresh-batch re-entry 60 s after the last dead line cleared (14:54, 0 fails by minute
 4).  What it refuses is a re-entry made while its own closing waves are still running on the old batch, and
@@ -58,7 +58,7 @@ a projection at the exit's recent speed; a grow that buys nothing is undone (the
 up on purpose (planned: lands, drops the batch, no try spent) and the cycle re-enters it on a fresh batch - the batch manager is the
 cycle itself.  Only lanes the site names are managed (fleet.Site(manage=...)); every other lane runs exactly as before.
 
-Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused (notice page) · 3 redials
+Exit codes: 0 stopped (control file, limit, Ctrl+C, SIGTERM; a Windows kill - TerminateProcess - exits 1) · 2 refused (notice page) · 3 redials
 exhausted · 4 wall · 5 crash · 6 drive gone.  Every stop writes its reason as the lane's last word.
 """
 import json
@@ -72,6 +72,7 @@ import threading
 import time
 import traceback
 import types
+import urllib.error
 import urllib.request
 
 import requests
@@ -91,8 +92,9 @@ class Transport(RuntimeError):
 
 class HTTPStatus(RuntimeError):
     def __init__(self, code, url):
-        super().__init__("HTTP %d" % code)
+        super().__init__("HTTP %d at %s" % (code, url))
         self.code = code
+        self.url = url
 
 
 class Retry(RuntimeError):
@@ -150,9 +152,9 @@ def take_lock(path):
 
 def add_common_args(ap):
     """The knobs every cycle lane shares; a lane file adds its own (documentation: --drive, --fresh-days)."""
-    ap.add_argument("--width", type=int, default=40, help="workers = connections (default 40)")
+    ap.add_argument("--width", type=int, default=40, help="workers = connections (default %(default)s)")
     ap.add_argument("--host", default="", help="this workstation's name in the cloud (default: the machine name)")
-    ap.add_argument("--stagger", type=float, default=5.0, help="seconds between worker births: a ramp of about 200 s at width 40 (2026-09-04: 0.5-s entries were cut, 5-s and 20-s entries served on the same door)")
+    ap.add_argument("--stagger", type=float, default=5.0, help="seconds between worker births (default %(default)s; the richmond lanes set 0.4): a ramp of about 200 s at width 40 (2026-09-04: 0.5-s entries were cut, 5-s and 20-s entries served on the same door)")
     ap.add_argument("--claim", type=int, default=0, help="documents taken per claim (default 12 x width)")
     ap.add_argument("--ttl", default="20 minutes", help="how long a claim is ours before it goes back on the list")
     ap.add_argument("--pending-age", default="1 hour",
@@ -326,6 +328,7 @@ class Crew:
         self.target = width               # the width asked for: a managed crew ramps from one worker and moves on its own, but claims by this
         self.reqs_at_entry = 0            # the session manager counts requests from the entry, not the process
         self.governor = None              # the rate manager of the current entry (managed lanes)
+        self.pool_thread, self.pool_ok, self.pool_at = None, False, 0.0     # the exit-pool check of the pending entry runs on its own thread (_await_entry)
 
     # ── the fetcher every worker uses: counts, closes, classifies ────────────────────────
     def get(self, url, referer, timeout=90):
@@ -347,6 +350,7 @@ class Crew:
         with self.lock:
             self.stats["fail"] += 1
             self.failed.append((doc_id, err))
+            self.held.discard(doc_id)             # no longer ours to land: the claim expires and the document comes back later
         try:
             with self.fails.open("a", encoding="utf-8") as f:
                 f.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "id": doc_id, "err": err[:160]}) + "\n")
@@ -436,7 +440,7 @@ class Crew:
 
     def _births(self, lo, hi, stagger):
         for i in range(lo, hi + 1):
-            if self.stop.is_set():
+            if self.stop.is_set() or i > self.width:      # a retire during a grow ends the grow: no birth above the width standing now
                 break
             t = threading.Thread(target=self.worker, args=(i,), daemon=True, name="%s-%d" % (self.role.lane, i))
             t.start()
@@ -516,6 +520,10 @@ def _control(ctx, crews):
         if l.lower() == "stop":
             ctx.exit_code, ctx.exit_reason = 0, "stopped by %s at %s" % (p.name, time.strftime("%H:%M"))
             ctx.stopping.set()
+            try:
+                p.write_text("", encoding="utf-8")            # the word is acted on once: a stale `stop` never stops the next start
+            except OSError:
+                pass
             return
         if "=" in l:
             k, v = [x.strip() for x in l.split("=", 1)]
@@ -556,7 +564,7 @@ def _feed(ctx, c):
         c.q.put((i, regs.get(i), 0))
 
 
-def _land(ctx, c, final=False):
+def _land(ctx, c):
     if hasattr(c.role, "land"):
         c.role.land(c, ctx)               # a role that walks a range lands its own way (ids + the edge)
         return
@@ -645,6 +653,13 @@ def _hangup(ctx, c, why, planned=False):
         pass
 
 
+def _pool_check(ctx, c):
+    """The exit-pool check on its own thread (_await_entry): the verdict and its time land on the crew."""
+    wait_for_pool(ctx, c)
+    c.pool_at = time.time()
+    c.pool_ok = not ctx.stopping.is_set()
+
+
 def _await_entry(ctx, crews, c):
     """A crew waiting to enter (the first entry, or a re-entry after a hang-up) enters when its wait is over,
     no other crew is ramping, the last ramp ended --entry-gap ago, the wire is up and the exit pool is
@@ -661,10 +676,20 @@ def _await_entry(ctx, crews, c):
         c.reentry_at = now + 60
         _log(ctx, "%s: network is DOWN - waiting a minute, no try spent" % c.role.lane)      # wifi is not a block
         return
-    _feed(ctx, c)
-    wait_for_pool(ctx, c)
-    if ctx.stopping.is_set():
+    if c.pool_thread is None:
+        # the exit-pool check draws and waits on its own thread: a crew waiting for the VPN never stalls the others' feeding and landing
+        c.pool_ok = False
+        c.pool_thread = threading.Thread(target=_pool_check, args=(ctx, c), daemon=True, name="%s-pool" % c.role.lane)
+        c.pool_thread.start()
         return
+    if c.pool_thread.is_alive():
+        return
+    c.pool_thread = None
+    if not c.pool_ok or ctx.stopping.is_set():
+        return
+    if time.time() - c.pool_at > 120:
+        return                                              # the verdict aged while another crew ramped: drawn again on the next pass
+    _feed(ctx, c)                                           # the fresh batch right before the ramp, never before a wait
     if c.entries:
         c.tries += 1
         c.last_redial = time.time()
@@ -674,8 +699,8 @@ def _await_entry(ctx, crews, c):
     a = ctx.args
     if getattr(a, "manage", 0):
         c.governor = RM.Governor(lambda: c.stats["ok"], c.alive,
-                                 lambda n: c.resize(min(a.width_max, c.width + n), a.stagger),
-                                 lambda n: c.resize(max(1, c.width - n), a.stagger),
+                                 lambda n: c.resize(min(a.width_max, c.alive() + n), a.stagger),      # the manager's n is relative to the live count it read
+                                 lambda n: c.resize(max(1, c.alive() - n), a.stagger),
                                  c.stop, lambda m: _log(ctx, "%s: %s" % (c.role.lane, m)),
                                  floor=a.rate_floor, ideal_lo=a.rate_ideal_lo, ideal_hi=a.rate_ideal_hi, hard=a.dps_ceiling,
                                  lo=a.width_min, hi=a.width_max, step=a.adjust_step, every=a.adjust_every,
@@ -709,6 +734,13 @@ def run(roles, args, here):
             raise SystemExit("%s: width %d - a crew has 1 to %d workers; a zero-worker floor does not exist" % (role.lane, width, MAX_WIDTH))
     lock = here / ("%s.lock" % args.lane)
     take_lock(lock)
+    ctl = here / ("%s.control" % args.lane)
+    try:
+        if ctl.exists() and any(l.strip().lower() == "stop" for l in ctl.read_text(encoding="utf-8").splitlines()):
+            ctl.write_text("", encoding="utf-8")
+            _log(ctx, "%s: a stale `stop` in %s cleared at start (a stop is acted on once)" % (args.lane, ctl.name))
+    except OSError:
+        pass
 
     def _signalled(signum, _frame):
         ctx.exit_code, ctx.exit_reason = 0, "stopped by signal %d at %s" % (signum, time.strftime("%H:%M"))
@@ -799,7 +831,7 @@ def run(roles, args, here):
     finally:
         for c in crews:
             c.leave()
-            _land(ctx, c, final=True)
+            _land(ctx, c)
             try:
                 c.cloud.heartbeat(0, ctx.exit_reason)
             except Exception:

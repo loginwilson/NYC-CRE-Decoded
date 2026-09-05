@@ -74,7 +74,6 @@ class Governor(threading.Thread):
         # the docs/s over the last `ramp_window` seconds sits under ideal_lo and the request rate under 90% of the ceiling;
         # the ramp ends when the rate is met (or width_max), and the windows begin after `settle`.  No starting width to guess.
         self.ramp, self.stagger, self.ramp_window = ramp, stagger, ramp_window
-        self.ramp_done_at = None
         # THE REQUEST CEILING (the record's meter): docs/s is login's band, but the notices came at 58-81 REQUESTS/s held for
         # hours (the golden day ran ~57), and a stretch of small documents can hold 6 docs/s at a low request rate while a
         # stretch of long ones can push 6 docs/s past 80 requests/s.  requests() returns the lane's running request count;
@@ -124,7 +123,6 @@ class Governor(threading.Thread):
                     self.log("RAMP: %d workers - %.2f docs/s, %.1f requests/s over the last %.0fs - adding one every %.0fs until %.1f docs/s"
                              % (self.alive(), dps, rps, min(self.ramp_window, now - t0), self.stagger, self.ideal_lo))
                 continue
-            self.ramp_done_at = now
             self.log("RAMP DONE at %d workers after %.0fs: %s (%.2f docs/s, %.1f requests/s over the last %.0fs, read at this width) - the rate manager's"
                      " first window in %ds" % (width, now - t0, why, dps, rps, min(self.ramp_window, now - t0), self.settle + self.every))
             return

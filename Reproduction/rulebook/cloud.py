@@ -1,7 +1,7 @@
 """THE CLOUD TABLE, FROM A LANE'S POINT OF VIEW - claim, land, heartbeat, and a local outbox.
 
-One connection per lane process, used by the lane's main thread only: workers never touch the
-database.  Every call is one round trip to a function defined in the migrations
+One connection per crew, used by the lane's main thread - and, one statement at a time under its lock, by the
+census's comparing workers.  Every call is one round trip to a function defined in the migrations
 (reproduction.claim / land / heartbeat), so the cooperation rules live in the database and every
 workstation gets them by construction.
 
@@ -13,11 +13,11 @@ import os
 import pathlib
 import re
 import sys
+import threading
 import time
 import urllib.parse
 
 import psycopg2
-import psycopg2.extras
 
 
 def env_path():
@@ -64,6 +64,7 @@ class Cloud:
     def __init__(self, source, lane, host, app="lane"):
         self.source, self.lane, self.host, self.app = source, lane, host, app
         self.con = None
+        self._lock = threading.RLock()        # one statement at a time: a reconnect never races another thread's statement
 
     def connect(self):
         self.close()
@@ -83,20 +84,21 @@ class Cloud:
     def _run(self, sql, params, fetch):
         """One statement, with one reconnect on a dropped connection.  Raises on a second failure so
         the caller can keep the work local (outbox) and try again later."""
-        for attempt in (1, 2):
-            try:
-                if self.con is None or self.con.closed:
-                    self.connect()
-                with self.con.cursor() as cur:
-                    cur.execute(sql, params)
-                    return cur.fetchall() if fetch else None
-            except (psycopg2.OperationalError, psycopg2.InterfaceError):
-                self.close()
-                if attempt == 2:
-                    raise
-                time.sleep(2)
+        with self._lock:
+            for attempt in (1, 2):
+                try:
+                    if self.con is None or self.con.closed:
+                        self.connect()
+                    with self.con.cursor() as cur:
+                        cur.execute(sql, params)
+                        return cur.fetchall() if fetch else None
+                except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                    self.close()
+                    if attempt == 2:
+                        raise
+                    time.sleep(2)
 
-    def claim(self, n=500, ttl="20 minutes", pending_age="1 day"):
+    def claim(self, n=500, ttl="20 minutes", pending_age="1 hour"):
         rows = self._run("select reproduction.claim(%s, %s, %s, %s, %s::interval, %s::interval)",
                          (self.source, self.lane, self.host, n, ttl, pending_age), True)
         return [r[0] for r in rows]
