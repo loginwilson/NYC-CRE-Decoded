@@ -15,7 +15,7 @@ says what each module is for and how a program reaches it.
 | `storage.py` | WHERE A DOCUMENT LIVES: the drive found by its label on Windows or Mac, the One Touch layout `<source>\<borough>\<year>\<month>\<id>.pdf`, recorded in canonical `D:\` form whichever machine fetched the file | `../Acris/rulebook/test_acris_offline.py` (the drive lookup, the path rule and the acris rules) |
 | `rate_manager.py` | THE RATE MANAGER and the session cap: `next_width()` is pure arithmetic (the graduated hand around the docs band, the request ceiling as a projection at the exit's recent speed, the door curve), the `Governor` thread only calls it and the crew's resize | `test_managers.py` (fake exits at 10x speed: the band, the ceiling, the stall, the door curve, the ramp, the session knob) |
 | `requirements.txt` | the one install a workstation needs: `pip install -r requirements.txt` | |
-| `schema/` | THE TABLE's definition: the phase's schema `reproduction` as numbered SQL files, one per dictated decision, applied once and never edited after (a new decision is a new file) - 0001 the tables, the cell rule as constraints, the to-do indexes, the claims, the heartbeats, the counters and the four functions `claim` / `land` / `heartbeat` / `reconcile`; 0002 pendings first, and documentation claims only where a registry is. Applied and recorded by the project's program, `python ../../rulebook/supabase.py push` (`--dry` first; `../../rulebook/Supabase.md`). The dictated concept is the section "The table" below | `test_schema.py` (claim / land / heartbeat / reconcile on the live project with throwaway TEST- rows; refuses a populated table) |
+| `schema/` | THE TABLE's definition: the phase's schema `reproduction` as numbered SQL files, one per dictated decision, applied once and never edited after (a new decision is a new file) - 0001 the tables, the cell rule as constraints, the to-do indexes, the claims, the heartbeats, the counters and the four functions `claim` / `land` / `heartbeat` / `reconcile`; 0002 pendings first, and documentation claims only where a registry is. Applied and recorded by the project's program, `python ../../supabase/supabase.py push` (`--dry` first; `../../supabase/Supabase.md`). The dictated concept is the section "The table" below | `test_schema.py` (claim / land / heartbeat / reconcile on the live project with throwaway TEST- rows; refuses a populated table) |
 
 ## How a program reaches it
 
@@ -35,7 +35,7 @@ which is never committed or printed.
 login's organization concept for NYC CRE Decoded, in the words it was given, followed by the mapping onto Supabase, git
 and the drive. The SQL files in `schema/` beside this file implement it one dictated decision at a time; nothing is
 created that was not dictated. The database as a whole - one project, one schema per phase, the program that applies
-these files - is `../../rulebook/Supabase.md`.
+these files - is `../../supabase/Supabase.md`.
 
 ### The concept
 
@@ -81,7 +81,7 @@ Postgres has one level of folder above tables, so the phase is the schema and th
 
 **The counting rule (speed).** The board never counts 21.6M rows once a minute. `land()` adds exactly what was new to the lane's `landed` (cells that were empty) and to the phase's `landed` (rows whose other cell was already filled); a pending that becomes a path was already counted and adds nothing. `reconcile(source)` recounts from the primary key and the four partial indexes (index-only scans, seconds on the full table) and overwrites the counters; the update program runs it on demand only (`reconcile`): after the data move, after a hand edit, never on the tick. The 60-second and 5-minute rates are the board's subtraction of `landed` between its own ticks.
 
-Apply with the project's program: `python ../../rulebook/supabase.py push --dry` shows what would be applied, `push` applies it and records each file in the project's ledger. A file already applied is never edited - a new decision is a new file (0001's header still names `Reproduction/SCHEMA.md`, its home when it was applied).
+Apply with the project's program: `python ../../supabase/supabase.py push --dry` shows what would be applied, `push` applies it and records each file in the project's ledger. A file already applied is never edited - a new decision is a new file (0001's header still names `Reproduction/SCHEMA.md`, its home when it was applied).
 
 ## The proofs
 
@@ -95,8 +95,8 @@ or throwaway rows on the live cloud table (never a source); each one says in its
 we've set up the acris and Richmond folders" · "supabase shouldn't even be in reproduction … the project gets a supabase
 folder"): the two SQL files moved from `Reproduction/supabase/migrations/` to `schema/` here, `test_claims.py` became
 `test_schema.py`, the dictated schema (`SCHEMA.md`) became the section "The table" above; the push script, the SQL tool
-and the Supabase CLI's config were retired for the project's one program, `rulebook/supabase.py` at the root
-(`Supabase.md` beside it). 0001's header still names `Reproduction/SCHEMA.md`, its home when it was applied: an applied
+and the Supabase CLI's config were retired for the project's one program, `supabase/supabase.py` at the root
+(`Supabase.md` beside it; the folder was named `rulebook/` for an hour, then for what it holds). 0001's header still names `Reproduction/SCHEMA.md`, its home when it was applied: an applied
 file is never edited.
 
 2026-09-05 — the review of every module against its own words (three reviewers, then each finding read in the code): lane.py - the exit-pool check and the fresh batch's claim moved off the main thread and after the wait (a mega lane's crews no longer stall while one waits for the VPN); a retire during a grow now ends the grow; a `stop` in the control file is cleared when acted on and at start; failed ids leave `held`; HTTPStatus keeps its url; the Governor's grow/retire are relative to the live count it reads; `urllib.error` imported; the help strings show each lane's own defaults. fleet.py - exit 3 is a park, never relaunched; `--edge` on a lane's first launch only; a lane the fleet terminates is logged as such; `--stop-wait` 180; the drive help names the real label. board.py - the increase prints with its sign. cloud.py - `pending_age` defaults to 1 hour (migration 0002); one lock per connection. rate_manager.py - a dead attribute removed. The proofs that had lived only in the scratchpad now sit here (`test_fleet_sim.py`, `test_lane_sim.py`, `test_lane_policies.py`, `test_mega_sim.py`, `test_board_offline.py`, `test_board_sim.py`) and all pass.

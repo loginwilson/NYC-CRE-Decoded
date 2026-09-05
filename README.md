@@ -10,14 +10,14 @@ phase is a folder at the root of this repo; only the first exists yet.
 | **PRODUCTION** | the products | not started |
 
 This repo is the process. The data is not in it. The concept of the first phase, in login's words, is the section
-"The table" of `Reproduction/rulebook/Rulebook.md`; the database that holds every phase is `rulebook/Supabase.md`.
+"The table" of `Reproduction/rulebook/Rulebook.md`; the database that holds every phase is `supabase/Supabase.md`.
 
 ## Three homes
 
 | what | where | shape |
 |---|---|---|
-| database | Supabase project **NYC CRE Decoded** (East US); `rulebook/Supabase.md` · `rulebook/supabase.py` | one schema per phase: `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table; each phase's schema as numbered SQL in `<Phase>/rulebook/schema/` |
-| code | this repo | the project's `rulebook/` at the root, then `Reproduction/` with the same three folders at every level (below) |
+| database | Supabase project **NYC CRE Decoded** (East US); `supabase/Supabase.md` · `supabase/supabase.py` | one schema per phase: `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table; each phase's schema as numbered SQL in `<Phase>/rulebook/schema/` |
+| code | this repo | `supabase/` at the root (the database's pair), then `Reproduction/` with the same three folders at every level (below) |
 | documents | the One Touch, `D:\CRE Decoding System\Documents\` | `source\borough\year\month\id.pdf` (richmond has no borough); a second workstation mounts its drive under the same letter and layout, then transfers |
 
 Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or printed.
@@ -25,7 +25,7 @@ Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or prin
 ## The layout - the same three folders at every level
 
 ```
-rulebook/       Supabase.md · supabase.py       the project's rules: the one database (one project, one schema per phase) and its program
+supabase/       Supabase.md · supabase.py       the one database (one project, one schema per phase) and its one program
 Reproduction/                                   the phase
   rulebook/     Rulebook.md · lane.py · fleet.py · board.py · cloud.py · storage.py · rate_manager.py · requirements.txt · schema/
                                                 the rules every lane of every source shares, written once; schema/ = the phase's tables as numbered SQL
@@ -45,8 +45,8 @@ configured in its fleet program (`Acris Reproduction.py`); the **phase** is ever
 configured (`Reproduction/workflow/Reproduction.py`). Every folder that holds code holds a pair - the md is that
 thing's own authority, the py its one program - and a proof beside it (`test_*.py`) that asks nothing of any source.
 Nothing is loose: a source folder is its three folders; the phase folder is its three folders and the sources; the root
-is the phases and the project's own rulebook. The phase's authority is `Reproduction/workflow/Reproduction.md`; the
-rulebook's is `Reproduction/rulebook/Rulebook.md`; the database's is `rulebook/Supabase.md`.
+is the phases and the database's own folder, `supabase/`. The phase's authority is `Reproduction/workflow/Reproduction.md`;
+the rulebook's is `Reproduction/rulebook/Rulebook.md`; the database's is `supabase/Supabase.md`.
 
 ## The phase: reproduction
 

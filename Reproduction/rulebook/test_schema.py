@@ -10,11 +10,11 @@ documents - the test refuses to run when reproduction.acris holds anything but T
   4. a wrong word is rejected by the cell rule
   5. heartbeat() from both hosts -> two rows
   6. delete the test rows (claims cascade), the test heartbeats and any test claim left; reconcile
-Uses the project's rulebook/supabase.py dsn() for the connection; never prints credentials."""
+Uses the project's supabase/supabase.py dsn() for the connection; never prints credentials."""
 import os, sys, json, threading, pathlib, importlib.util
 import psycopg2, psycopg2.errors
 ROOT = pathlib.Path(__file__).resolve().parents[2]                       # rulebook -> Reproduction -> the repo
-_spec = importlib.util.spec_from_file_location("supabase_program", ROOT / "rulebook" / "supabase.py")
+_spec = importlib.util.spec_from_file_location("supabase_program", ROOT / "supabase" / "supabase.py")
 _program = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_program)
 dsn = _program.dsn

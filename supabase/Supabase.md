@@ -62,10 +62,10 @@ reads in bulk, and the documents.
 
 ## History
 
-2026-09-05 — Created at the root, from `Reproduction/supabase/` (login: "Isn't that a bit confusing? I have no idea
+2026-09-05 — Created at the root (first as `rulebook/`, renamed `supabase/` the same hour - login: "should rule book just be supabase?" - the folder is named for the one thing it holds), from `Reproduction/supabase/` (login: "Isn't that a bit confusing? I have no idea
 how this works compared to how we've set up the acris and Richmond folders" · "supabase shouldn't even be in
-reproduction … the project gets a supabase folder"). The database is the project's, so its md and program live in the
-project's rulebook; each phase keeps only its SQL (`Reproduction/rulebook/schema/`) and its proof (`test_schema.py`).
+reproduction … the project gets a supabase folder"). The database is the project's, so its md and program live at the
+root; each phase keeps only its SQL (`Reproduction/rulebook/schema/`) and its proof (`test_schema.py`).
 Retired: the Supabase CLI and its 300-line `config.toml` (settings for a local copy of Supabase we never run),
 `db_push.ps1` and `decoded_sql.py` (both folded into `supabase.py`), the folder's README and `SCHEMA.md` (folded into
 the phase rulebook's "The table"). The ledger the CLI wrote is kept and shared. Nothing in the database changed with

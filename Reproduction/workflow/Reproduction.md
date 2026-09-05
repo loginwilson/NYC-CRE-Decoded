@@ -58,7 +58,7 @@ Every folder that holds code holds a **pair**: the md is that thing's own author
 calibrations, its history), the py is its one program, runnable alone from its folder - `python "Acris
 Documentation.py" --drive OneTouch` is the whole command. A proof sits beside what it proves (`test_*.py`) and asks
 nothing of any source. A source folder is its three folders and nothing loose; the phase folder is its three folders
-and the sources, and nothing loose; the database's program is the project's, in the rulebook at the repo's root.
+and the sources, and nothing loose; the database's pair is the project's, in `supabase/` at the repo's root.
 
 The reproduction pair of a source is the cycle: its py is the fleet - one process per lane by default, launched one
 door at a time and watched (`--mega` hosts the crews in one process) - built on the rulebook's `fleet.py`. Each cycle
@@ -83,8 +83,8 @@ per document, three cells `doc_id` · `registry` · `document`), two update tabs
 claims table and a heartbeats table; the functions `claim()`, `land()`, `heartbeat()`, `reconcile()` hold the
 cooperation rules so every workstation gets them by construction. The dictated concept is the section "The table" of
 `../rulebook/Rulebook.md`; the phase's schema is `../rulebook/schema/`, one numbered SQL file per dictated decision,
-applied and recorded by the project's program (`python ../../rulebook/supabase.py push`; the database as a whole is
-`../../rulebook/Supabase.md`). A master view over the sources' update tables is the phase board's later decision
+applied and recorded by the project's program (`python ../../supabase/supabase.py push`; the database as a whole is
+`../../supabase/Supabase.md`). A master view over the sources' update tables is the phase board's later decision
 (`../update/Update.md`).
 
 ## History
@@ -97,4 +97,4 @@ into `supabase/`, and the phase README folded into this file.
 
 2026-09-05 — The database folder left the phase (login: "supabase shouldn't even be in reproduction"): its SQL to
 `../rulebook/schema/`, its dictated concept into `../rulebook/Rulebook.md`, its proof to `../rulebook/test_schema.py`,
-its program to the project's rulebook at the root (`rulebook/supabase.py` · `rulebook/Supabase.md`); the CLI's files retired.
+its program to the root (`supabase/supabase.py` · `supabase/Supabase.md`); the CLI's files retired.
