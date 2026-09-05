@@ -1,10 +1,15 @@
-"""Prove the cooperation functions on the live project with throwaway rows, then remove them.
-  1. insert 6 test documents (ids starting TEST-) into reproduction.acris
+"""Prove the cooperation functions on the live project with throwaway rows, then remove them.  EMPTY TABLE ONLY:
+claim() hands out the first due rows of the whole table in id order, so on a populated table it would take real
+documents - the test refuses to run when reproduction.acris holds anything but TEST- rows.
+  1. insert 6 test documents (ids starting TEST-) into reproduction.acris, each with a registry object (migration 0002:
+     documentation claims only rows whose registry is a JSON object)
   2. host A claims 4, host B claims 4 at once -> the two slices must be disjoint and cover all 6
-  3. host A lands 2 (a path and 'absent'), host B lands 1 ('pending') -> cells filled, claims dropped
+  3. host A lands 2 (a path and 'absent'), host B lands 1 ('pending') -> cells filled, claims dropped, the lane counter
+     and the phase counter each rise by 3 (a registry was already there, so every landed document completes its row);
+     a pending re-landed as a path adds nothing
   4. a wrong word is rejected by the cell rule
   5. heartbeat() from both hosts -> two rows
-  6. delete the test rows (claims cascade)
+  6. delete the test rows (claims cascade), the test heartbeats and any test claim left; reconcile
 Uses decoded_sql.dsn() for the connection; never prints credentials."""
 import os, sys, json, threading
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -13,6 +18,7 @@ from decoded_sql import dsn
 
 IDS = ["TEST-%04d" % i for i in range(1, 7)]
 PATH = r"D:\CRE Decoding System\Documents\acris\Manhattan\2004\08 Aug\TEST-0001.pdf"
+REGISTRY = json.dumps({"doc type": "DEED", "test": True})
 
 
 def q(sql, params=None, fetch=True):
@@ -31,9 +37,13 @@ def claim(host, got):
     got[host] = [r[0] for r in q("select reproduction.claim('acris', 'documentation', %s, 4)", (host,))]
 
 
-print("1. insert", len(IDS), "test rows")
+real = q("select count(*) from reproduction.acris where doc_id not like 'TEST-%'")[0][0]
+if real:
+    raise SystemExit("reproduction.acris holds %s real rows - this test claims the first due rows of the WHOLE table and would take them; run it on an empty table only" % "{:,}".format(real))
+
+print("1. insert", len(IDS), "test rows, each with a registry object")
 q("delete from reproduction.acris where doc_id like 'TEST-%'", fetch=False)
-q("insert into reproduction.acris (doc_id) select unnest(%s::text[])", (IDS,), fetch=False)
+q("insert into reproduction.acris (doc_id, registry) select unnest(%s::text[]), %s::jsonb", (IDS, REGISTRY), fetch=False)
 
 print("2. two hosts claim at once")
 got = {}
@@ -63,16 +73,21 @@ print("   claims left:", left, "OK")
 after = q("select landed from reproduction.acris_update_lanes where lane = 'documentation'")[0][0]
 assert after - before == 3, "lane landed should rise by 3 (path, absent, pending all count), rose by %d" % (after - before)
 print("   documentation landed +3: OK")
-# registry for one landed doc -> the row completes -> the phase counter rises by 1
-q("select reproduction.land('acris', 'registration', 'HOST-A', %s::jsonb)", (json.dumps([{"doc_id": la[0], "value": {"doc type": "DEED", "test": True}}]),), fetch=False)
 phase_after = q("select landed from reproduction.acris_update")[0][0]
-assert phase_after - phase_before == 1, "phase landed should rise by 1, rose by %d" % (phase_after - phase_before)
-print("   phase landed +1 when the row completed: OK")
-# re-landing the same pending as a path adds nothing to the lane counter
+assert phase_after - phase_before == 3, "phase landed should rise by 3 (each row had its registry already), rose by %d" % (phase_after - phase_before)
+print("   phase landed +3 as the rows completed: OK")
+# re-landing the same pending as a path adds nothing to either counter
 q("select reproduction.land('acris', 'documentation', 'HOST-B', %s::jsonb)", (json.dumps([{"doc_id": lb[0], "value": PATH}]),), fetch=False)
 again = q("select landed from reproduction.acris_update_lanes where lane = 'documentation'")[0][0]
-assert again == after, "pending -> path must not add to landed"
+phase_again = q("select landed from reproduction.acris_update")[0][0]
+assert again == after and phase_again == phase_after, "pending -> path must not add to landed"
 print("   pending -> path adds nothing: OK")
+# a registry landed over an existing one adds nothing to the registration counter
+reg_before = q("select landed from reproduction.acris_update_lanes where lane = 'registration'")[0][0]
+q("select reproduction.land('acris', 'registration', 'HOST-A', %s::jsonb)", (json.dumps([{"doc_id": la[0], "value": {"doc type": "DEED", "again": True}}]),), fetch=False)
+reg_after = q("select landed from reproduction.acris_update_lanes where lane = 'registration'")[0][0]
+assert reg_after == reg_before, "a registry over a registry must not add to landed"
+print("   registry over registry adds nothing: OK")
 print("   reconcile:", q("select * from reproduction.reconcile('acris')"))
 
 print("4. the cell rule rejects a wrong word")
@@ -85,12 +100,13 @@ except psycopg2.errors.CheckViolation as e:
 print("5. heartbeats from both hosts")
 q("select reproduction.heartbeat('acris', 'documentation', 'HOST-A', 40, 'test')", fetch=False)
 q("select reproduction.heartbeat('acris', 'documentation', 'HOST-B', 40, null)", fetch=False)
-print("   ", q("select lane, host, width, last_event from reproduction.acris_heartbeats order by host"))
+print("   ", q("select lane, host, width, last_event from reproduction.acris_heartbeats where host like 'HOST-%' order by host"))
 
-print("6. remove the test rows and reset the counters by measuring")
+print("6. remove the test rows, heartbeats and claims; reset the counters by measuring")
 q("delete from reproduction.acris where doc_id like 'TEST-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host like 'HOST-%'", fetch=False)
+q("delete from reproduction.acris_claims where host like 'HOST-%'", fetch=False)
 print("   reconcile after cleanup:", q("select * from reproduction.reconcile('acris')"))
 print("   rows left:", q("select count(*) from reproduction.acris where doc_id like 'TEST-%'")[0][0],
-      "| claims left:", q("select count(*) from reproduction.acris_claims")[0][0])
+      "| test claims left:", q("select count(*) from reproduction.acris_claims where host like 'HOST-%'")[0][0])
 print("ALL OK")

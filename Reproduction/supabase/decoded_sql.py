@@ -26,7 +26,7 @@ def env():
                 k, val = line.split("=", 1)
                 v[k.strip()] = val.strip().strip('"').strip("'")
     except FileNotFoundError:
-        raise SystemExit("no env file at %s - create it with SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_DB_URL" % ENV)
+        raise SystemExit("no env file at %s - create it with SUPABASE_DB_URL (and SUPABASE_DB_PASSWORD if the URL carries no password)" % ENV)
     if not v.get("SUPABASE_DB_URL"):
         raise SystemExit("SUPABASE_DB_URL missing in %s (Connect > Session pooler > URI, password filled in)" % ENV)
     return v
