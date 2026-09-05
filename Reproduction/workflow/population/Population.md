@@ -84,3 +84,21 @@ dual station pulls"; "make sure it is done right please since this database is a
 from `D:\CRE Decoding System\02 Acquisitions\Legal Instruments Acquisition\` (two sample files opened there); By Parcel
 holds 3,289 PDFs and By Party 14,730, named `YYYY-MM-DD_<id>.pdf`. The survey's and organize's numbers are appended here
 when they are in.
+
+2026-09-05 17:4x — THE FOURTH AND FIFTH OLD STORES. `D:/Ignore` (900,061 files, 920 GB - the framework tree from before
+08-19, which the clean-up list had marked as space to reclaim) holds two more stores of documents: `Acquisition by parcel`
+(520,447 files named `YYYY-MM-DD__<id>__TYPE__reel-page.pdf`) and `Documents` (379,538 files named `<id>.pdf` under `20/`,
+`BK/`, `FT/`, `_acqtest/`, `_boundary/`). A sample of 3,000 against the old table: 2,790 documents the table shows as never
+fetched (empty cell), 210 duplicates of files already in By Document, none unknown to the table. So `organize` places all
+four stores, and nothing in Ignore is removed before its counts are read. The tree rename ran at 17:40:50 (one operation,
+102 year folders); the placement of the old stores started at once, about 100 documents a second, richmond's files after
+it. The disk was set to 40 GB by login at 17:4x (from 2 GB, +$4 a month).
+
+2026-09-05 17:57 — THE SURVEY (24,126,063 rows in 4,176 s, every word accounted for). Document cells: 5,699,987 paths into
+By Document (acris 3,207,346 · richmond 2,492,641), 18,241,681 empty (richmond 64), 174 pending (all richmond), 9,622
+absent (all richmond), 156,583 `imageless` (all acris; mapped to `absent`: the old lane's word for "the source has no
+image"), and 18,016 cells pointing INTO `By Party\<name>\YYYY-MM-DD_<id>.pdf` - the old store organize places by the table,
+so those cells are to-dos until `apply-found` writes the new full path. Registry cells: 24,125,999 objects, 64 empty, no
+verdict words. The richmond side was counted through the RC_ band of the primary key (its 2,502,501 rows add up exactly);
+the acris side is the totals minus richmond. The load started 17:59:10: 50,000 rows per transaction, about 1,550 rows a
+second, 1 KB a row in the database (about 24 GB when done), zero rejects in the first 250,000.

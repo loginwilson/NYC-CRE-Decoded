@@ -89,12 +89,17 @@ def rows_after(con, after, n):
     return con.execute("select id, recorded_details, pdf from navigation where id > ? order by id limit ?", (after, n)).fetchall()
 
 
+def old_store_cell(pdf):
+    """A cell pointing into an old store (`By Party\\...`, `By Parcel\\...`): a to-do until the found map fills it."""
+    return pdf.lower().startswith(("by party", "by parcel"))
+
+
 def map_document(doc_id, pdf, found):
     """The new document cell, or (None, <unknown word>)."""
-    if pdf in WORDS:
-        d = WORDS[pdf]
+    if pdf in WORDS or old_store_cell(pdf):
+        d = WORDS.get(pdf)
         if d is None and found and doc_id in found:
-            return found[doc_id], None                  # organize found this document in By Parcel / By Party and placed it
+            return found[doc_id], None                  # organize placed this document from an old store (or found it already there)
         return d, None
     if pdf.startswith("By Document\\") and pdf.lower().endswith(".pdf"):
         return source_root(source_of(doc_id)) + "\\" + pdf, None
@@ -121,7 +126,7 @@ def load_found():
 def survey(a):
     con = old(a.db)
     t0 = time.time()
-    per = {s: {"rows": 0, "document": {"empty": 0, "pending": 0, "absent": 0, "imageless": 0, "path": 0},
+    per = {s: {"rows": 0, "document": {"empty": 0, "pending": 0, "absent": 0, "imageless": 0, "path": 0, "old_store_path": 0},
                "registry": {"empty": 0, "object": 0, "word": 0}} for s in ("acris", "richmond")}
     doc_other, reg_other, shapes = {}, {}, {}
     after, n = "", 0
@@ -135,6 +140,9 @@ def survey(a):
             p["rows"] += 1
             if pdf in WORDS:
                 p["document"]["empty" if pdf == "" else pdf] += 1
+            elif old_store_cell(pdf):
+                p["document"]["empty"] += 1               # a to-do until the found map fills it
+                p["document"]["old_store_path"] += 1
             elif pdf.startswith("By Document\\") and pdf.lower().endswith(".pdf"):
                 p["document"]["path"] += 1
                 top = pdf.split("\\")[1] if "\\" in pdf else "?"

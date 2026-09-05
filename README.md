@@ -14,6 +14,9 @@ This repo is the process. The data is not in it. The concept of the first phase,
 
 ## Three homes
 
+login 2026-09-05: "code = git, database = supabase, document = hard drive." Each home holds one kind of thing and
+nothing of the other two; the same tree - phase, source - runs through all three.
+
 | what | where | shape |
 |---|---|---|
 | database | Supabase project **NYC CRE Decoded** (East US); `supabase/Supabase.md` · `supabase/supabase.py` | one schema per phase: `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table; each phase's schema as numbered SQL in `<Phase>/rulebook/schema/` |
