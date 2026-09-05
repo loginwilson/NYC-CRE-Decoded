@@ -6,8 +6,8 @@ document by minted access, saves it to the drive named by --drive, and records i
 path in the `document` cell - or the verdict word: pending (recorded in the last --fresh-days, no
 image yet) or absent (checked: none).
 
-    python "Acris Documentation.py" --drive NYCCRED1            home
-    python3 "Acris Documentation.py" --drive NYCCRED2           workstation 2
+    python "Acris Documentation.py" --drive OneTouch            home
+    python3 "Acris Documentation.py" --drive <label>           workstation 2
 
 This file's own authority is Acris Documentation.md beside it; the cycle's is ../reproduction/Acris Reproduction.md.
 
@@ -40,8 +40,8 @@ The rules are kept from the lane that ran before this one:
 Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused · 3 redials exhausted · 4 wall ·
 5 crash · 6 drive gone.  A parked lane refuses to start until --unpark.
 
-The shared pieces it imports: ../../../lane.py (the entry and the policies), ../../../cloud.py (claim,
-land, heartbeat), ../../../storage.py (the drive by label, the One Touch layout), ../../rulebook/acris.py
+The shared pieces it imports: ../../../rulebook/lane.py (the entry and the policies), ../../../rulebook/cloud.py (claim,
+land, heartbeat), ../../../rulebook/storage.py (the drive by label, the One Touch layout), ../../rulebook/acris.py
 (the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, where a document files).
 """
 import argparse
@@ -147,7 +147,7 @@ def role(drive_root, args):
 
 def main():
     ap = argparse.ArgumentParser(description="acris documentation: one entry, N workers, the cloud table as the to-do list")
-    ap.add_argument("--drive", required=True, help="label of the drive to write to (NYCCRED1 at home, NYCCRED2 on workstation 2)")
+    ap.add_argument("--drive", required=True, help="label of the drive to write to (the volume label: OneTouch at home, workstation 2's own)")
     ap.add_argument("--fresh-days", type=int, default=30, help="a document recorded within this many days with no image is pending, not absent")
     lane.add_common_args(ap)
     args = ap.parse_args()

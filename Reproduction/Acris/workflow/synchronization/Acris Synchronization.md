@@ -23,11 +23,11 @@ Home only: the edge lives on one workstation. `--width` defaults to 20 walkers. 
 | a blank is an answer | the source said no document is at that number. Blanks past the last document are unissued numbers and are asked again next time | the counter is forward-only |
 | an error is not an absence | a failed request is asked again, never read as blank. Three failed asks make a hole: recorded in `synchronization.holes.jsonl`, passed, and left to the audit — one bad number never freezes the edge | acris_edge.quick_crfn, 2026-08-23: a broad except once printed "quiet" after eight instant failures |
 | personal-property runs | UCC filings take numbers in the same counter and answer blank here (about a sixth of the sequence). After `--widen-after` empty watches one wider look of `--widen` numbers is taken, so a run of them can never hide a document from a narrow watch | live_delta's CRFN measurements; a stall the old monitor could not rule out |
-| a live page is a full page | a detail parsed from fewer than 20 KB is suspect truncation and is asked again, never reported live | acris_edge, `_MIN_DETAIL` |
+| a live page is a full page | a page that prints an id from fewer than 20 KB is suspect truncation and is asked again, never reported live; a page with no id at all is a blank - an answer - whatever its size | acris_edge, `_MIN_DETAIL` |
 | the cell | the `doc_id` only. The page fetched is the registry page, and registration will fetch it again for the recorded details: one more request per new document. The cell rule is worth it | login 2026-09-03: each lane fills its own cell and nothing else |
 | the counters | a new row moves `needed` for the phase and every lane, and synchronization's `landed`, in the same transaction as the insert | the counting rule |
 | one entry, one door, refusal, hang-up, wall, width | shared with every lane; see Acris Documentation.md. The cycle for a walker crew: every walker a transport error inside 60 s with nothing answered for 10 s is the session closed - hang up at once, drop the cut window from the queue and forget it as in flight (`rebatch`), 60 s of silence with the backoff, one re-entry with births 5 s apart, and the monitor asks the same numbers again from the edge, which never moved past an unanswered number | lane.py; login 2026-09-04, the cycle |
-| one machine | the edge is local state; the lane runs at home | SCHEMA.md |
+| one machine | the edge is local state; the lane runs at home | supabase/SCHEMA.md |
 
 ## Calibrations
 
@@ -47,9 +47,11 @@ A forward-only counter inherits every gap it already has and reports clean forev
 
 ## Working files
 
-Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
+Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.log` (every launch's output, appended), `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
 
 ## History
+
+2026-09-05 — the review against the code: the size guard applies to a page that carries an id (a short page without one is the blank the code records); the working files list the log.
 
 2026-09-04 — the review against the cycle: `rebatch` added (the cut window dropped and forgotten as in flight, asked again from the edge after the re-entry); the lane module's amendments apply. Proven by the simulation again the same night.
 

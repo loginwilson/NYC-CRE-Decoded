@@ -13,7 +13,7 @@ This file's own authority is Acris Registration.md beside it; the cycle's is ../
 The rules are kept from the register floor that ran before this one:
 
   echo        a page that does not print DOCUMENT ID: <id> is a re-ask, not a failure and never a
-              verdict: asked again in place 3x (0.5 s, 1 s, 1.5 s), then left for a later pass
+              verdict: asked again in place 3x (0.5 s, then 1 s between asks), then left for a later pass
   the page    parsed by the one parser that knows its format (acris.parse_acris): the copy-paste rule,
               tables classified by their own header row, the page's 32 nested tables walked by a real
               parser; the parse happens only after the echo is proven
@@ -28,7 +28,7 @@ The rules are kept from the register floor that ran before this one:
               a fresh batch, re-enter once with births 5 s apart; 4 re-entries per incident, then park
   wall        40 consecutive 503/429 with no success between: park with the reason
   width       --width at launch; `width=30` or `stop` in registration.control while it runs
-  mega lane   --also documentation:10 --drive NYCCRED1 hosts the documentation crew in this process through
+  mega lane   --also documentation:10 --drive OneTouch hosts the documentation crew in this process through
               its own session, one ramp at a time, --entry-gap apart (one entry per floor, as measured);
               each crew runs the cycle on its own
   pending     a registry pending goes back to the backfill like a document pending: re-checked once
@@ -41,7 +41,7 @@ The rules are kept from the register floor that ran before this one:
 Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.  A parked lane refuses
 to start until --unpark.
 
-The shared pieces it imports: ../../../lane.py (the entry and the policies), ../../../cloud.py (claim,
+The shared pieces it imports: ../../../rulebook/lane.py (the entry and the policies), ../../../rulebook/cloud.py (claim,
 land, heartbeat), ../../rulebook/acris.py (the ACRIS rules: URLs minted from the id, the one user-agent,
 the refusal detector, the page parser).
 """

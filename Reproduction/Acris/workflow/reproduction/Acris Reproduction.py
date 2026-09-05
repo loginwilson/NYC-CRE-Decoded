@@ -3,13 +3,13 @@
 Each lane is its own program (Acris Synchronization.py, Acris Registration.py, Acris Documentation.py)
 with its own lock, park, control file and log.  This program launches them together, in order, one
 door at a time, and watches them: it relaunches what a relaunch can cure and never relaunches what a
-person must decide.  The machinery is ../../../fleet.py, shared with every source; this file is the
+person must decide.  The machinery is ../../../rulebook/fleet.py, shared with every source; this file is the
 acris site: its lanes in the cycle's order, their widths, its edge.
 
-    python "Acris Reproduction.py" --drive NYCCRED1                       the batch: synchronization x9 (+ its monitor = login's 10), registration x10,
+    python "Acris Reproduction.py" --drive OneTouch                       the batch: synchronization x9 (+ its monitor = login's 10), registration x10,
                                                                           documentation x10 - one process per lane, each on its own entry, each running the cycle
-    python "Acris Reproduction.py" --drive NYCCRED1 --lanes registration:40,documentation:40
-    python "Acris Reproduction.py" --drive NYCCRED1 --mega                the frankenstein run: the same crews in ONE process, one entry per crew, one ramp at a time
+    python "Acris Reproduction.py" --drive OneTouch --lanes registration:40,documentation:40
+    python "Acris Reproduction.py" --drive OneTouch --mega                the frankenstein run: the same crews in ONE process, one entry per crew, one ramp at a time
     python "Acris Reproduction.py" status                                 this machine's lanes, and every workstation's heartbeats in the cloud
     python "Acris Reproduction.py" stop [lane]                            `stop` into the control file(s); waits for the lanes to leave; then force
     python "Acris Reproduction.py" width documentation=60                 a width into a lane's control file (read within a minute)

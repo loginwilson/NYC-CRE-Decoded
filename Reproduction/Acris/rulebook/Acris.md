@@ -15,7 +15,7 @@ The rules every acris lane shares, as one module: `acris.py`. ACRIS is the Autom
 | a detail too short to trust | `MIN_DETAIL` = 20,000 bytes: a detail parsed from fewer bytes is suspect truncation and is never reported live | - |
 | the id a page is about | `detail_doc_id(html)`: the `DOCUMENT ID:` the page prints, None for the stub; `echoes(html, doc_id)`: the page prints the id that was asked for - a page that does not is a re-ask, never a failure and never a verdict (63 % of a floor's requests under load did not echo) | 2026-08-28 |
 
-Every URL is minted from the id. No URL, token or key is ever stored: the table holds `doc_id`, `registry`, `document` and nothing else (`../../SCHEMA.md`).
+Every URL is minted from the id. No URL, token or key is ever stored: the table holds `doc_id`, `registry`, `document` and `updated_at` (the re-check clock), nothing else (`../../supabase/SCHEMA.md`).
 
 ## The refusal
 
@@ -77,13 +77,15 @@ login, 2026-08-20: "all 4 url paths result in the exact same format so just figu
 | documentation | `UA`, `viewer_url` (with `detail_url` as the page it is reached from), `check_refused`, `total_pages`, `image_url`, `is_tiff`, `is_placeholder`, `fresh`, `canonical_path` |
 | reproduction, update | nothing - the fleet and the board never talk to the source |
 
-The module imports `storage` (the One Touch layout) and `lane.Refused` (so a refusal here is the same exception every crew parks on). It makes no request of its own except the index calls the enumeration lane asks for.
+The module imports `storage` (the One Touch layout) and `lane.Refused` (so a refusal here is the same exception every crew parks on); `cloud` is imported lazily for the index's app token. It makes no request of its own except the index calls the enumeration lane asks for.
 
 ## Working files
 
 Beside this file, never in git: `refusals/` - the body of every refusal ever detected, one HTML file per verdict.
 
 ## History
+
+2026-09-05 — the review against the code: `updated_at` named as the table's fourth column; the lazy `cloud` import named; a refusal page that could not be saved is now said so in the Refused message instead of silently.
 
 2026-09-03 - the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the index measured the same day (real 17,049,742 / personal 4,544,590, good through 2026-07-31). Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
 

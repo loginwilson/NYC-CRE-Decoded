@@ -36,9 +36,9 @@ Ids the table holds that the index does not are classified, never counted agains
 | an empty denominator is never a pass | the index's own count is read before any zero is believed; a shard the index answers empty where the table holds rows is UNPROVEN, never a pass | a 45-day richmond window returned a silent zero and printed `held 0/0 · MISSING 0` (ACRIS REPRODUCTION.md §5) |
 | every pull is held to its own count | a throttled index call answers HTTP 200 and `[]`; each shard is pulled after a `count(distinct document_id)` for the same range and a short pull is Void, asked twice more, then UNPROVEN | acris_bulk_rd.py, 2026-08-31: one run returned 0/322 and would have read as "every id is missing" |
 | `$order=:id` on every page | without an order, `$offset` paging silently drops and duplicates rows while the count stays right | bulk.py, measured 2026-08-06 |
-| distinct ids | the index repeats rows (15,348 duplicate rows in the real master) | measured 2026-09-04 |
+| distinct ids | the index repeats rows (15,348 duplicate rows in the real master) | measured 2026-09-03 |
 | 5xx retried, 4xx never | a 5xx or a dropped wire is the server's moment; a 4xx is this client's query and is raised at once | bulk.py |
-| the shard list is the index's own | prefixes come from the index and the table, never assumed; the range form of the query, not `starts_with` | measured 2026-09-04: the range form answered a 50,000-row page in 2.5 s against 8 s |
+| the shard list is the index's own | prefixes come from the index and the table, never assumed; the range form of the query, not `starts_with` | measured 2026-09-03: the range form answered a 50,000-row page in 2.5 s against 8 s |
 | never repair a number | a difference is reported, listed and left; nothing here inserts. Missing ids are for a person: landing them is a decision, not the audit's act | the security rules; the index is an audit, not a discovery source |
 | the seed is the control | the gallop for a year's top starts at the index's own highest number, which must resolve first, or the probe is broken and the top is UNPROVEN | live_delta.resolve_holes: a malformed request returns the same empty page as a real negative |
 | a hole is not the edge | after the gallop and bisect, a Fibonacci spread (1, 2, 3, 5, 8, 13, 21, 34, 55, 89) is asked; a hit resumes the climb from there | acris_census.year_edge, 2009: a gallop from 1 stopped at 122 with 430,881 documents held |
@@ -52,7 +52,7 @@ Ids the table holds that the index does not are classified, never counted agains
 
 | knob | value | how it was measured, how it fails |
 |---|---|---|
-| the index | real `bnx9-e6tj` 17,049,742 distinct ids; personal `sv7x-dduq` 4,544,590; both good through 2026-07-31 | measured 2026-09-04. Both masters hold every band: FT_ (a borough digit 1–4 then a digit; no FT_5: Staten Island's film lives at Richmond County), BK_ (a two-digit year 66–81), digital (2002-12 on). One garbage id in the personal master (`--51e9…--`) and two rows without a recorded date |
+| the index | real `bnx9-e6tj` 17,049,742 distinct ids; personal `sv7x-dduq` 4,544,590; both good through 2026-07-31 | measured 2026-09-03. Both masters hold every band: FT_ (a borough digit 1–4 then a digit; no FT_5: Staten Island's film lives at Richmond County), BK_ (a two-digit year 66–81), digital (2002-12 on). One garbage id in the personal master (`--51e9…--`) and two rows without a recorded date |
 | page | 50,000 | honoured (measured 2026-08-05); a page shorter than this ends a walk |
 | shards | 284 digital months of at most 57,941 rows; 40 FT_ prefixes of at most 231,241; 16 BK_ of at most 124,810 | the index's own prefix census; a month is one or two pages, a film prefix up to five |
 | default scope | the newest 3 months of the index, plus every table month past it (the tail, not asked of the index) | the cheap daily run; `--all` is the full history |
@@ -74,6 +74,8 @@ Beside this file, never in git: `enumeration.report.txt` (the last run's report,
 - **The 322 ids whose detail page fails** (registration's open decision): 318 are in the real master and 4 in the personal master, so the diff will always find them present and say nothing; their registry is registration's question, not the audit's.
 
 ## History
+
+2026-09-05 — the review: the index measurement is dated 2026-09-03 here as in `acris.py` and `Acris.md` (this file said 09-04, the day it was written).
 
 2026-09-04 (night) — the probe runs the cycle: births 5 s apart, the whole-width hang-up with the quiet rule, a wait with the backoff, one re-entry on what is unanswered, four refused in a row then exit 3; a wire error is never an ask (a number keeps its attempts across a close); the gallop re-enters once on three wire failures. Proven by the simulation (two refused re-entries, then exit 3 with nothing read as void).
 

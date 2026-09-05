@@ -1,6 +1,6 @@
 # Acris Update
 
-The board of the acris reproduction, as one program: `Acris Update.py`. It always runs and only reads: every minute it takes the counters that the lanes keep exact, subtracts them from its own readings a minute and five minutes back, and writes the two tabs in the cloud. Its database is the two tables `reproduction.acris_update` (tab 1: the phase) and `reproduction.acris_update_lanes` (tab 2: one row per lane). The shared rules live in `Reproduction/board.py`; this file is the lane's own authority.
+The board of the acris reproduction, as one program: `Acris Update.py`. It always runs and only reads: every minute it takes the counters that the lanes keep exact, subtracts them from its own readings a minute and five minutes back, and writes the two tabs in the cloud. Its database is the two tables `reproduction.acris_update` (tab 1: the phase) and `reproduction.acris_update_lanes` (tab 2: one row per lane). The shared rules live in `Reproduction/rulebook/board.py`; this file is the lane's own authority.
 
 ## Launch
 
@@ -28,7 +28,7 @@ Both tabs carry the same metrics: `pct` (landed over needed), the minute kit (`r
 | one subtraction | rate and increase come from the same subtraction of landed between the board's own readings, nearest to 60 s and to 5 min back; the readings ring lives in `update.state.json` and survives a restart | "5.42/s with +0" on the old board, 2026-08-23 |
 | the denominator | every percentage is over needed | login 2026-08-23 |
 | four statuses, computed | complete: landed >= needed, needed > 0 · stalled: the lane's last word is a refusal or a wall · active: the counters moved in the last window · pending: everything else. The phase row is stalled if any lane's last word is a rejection | login 2026-08-23 (four and only four); SCHEMA.md 2026-09-03 (the status follows the lane) |
-| measured movement outranks every proxy | a row whose counters moved is active whatever the heartbeats say | ACRIS REPRODUCTION.md §4 |
+| measured movement outranks every proxy | a row whose counters moved is active whatever the heartbeats' freshness says - unless its last word is a rejection: stalled outranks active (the row above) | ACRIS REPRODUCTION.md §4 |
 | eta follows status | complete -> "complete"; pending or stalled -> "paused"; active -> from the rate and what remains, on both bases | ACRIS REPRODUCTION.md §4 |
 | never clamp | landed outside 0..needed publishes no metrics: the row says OUT OF BOUNDS and names `reconcile` | the anchor that published landed = -20,721,031, 2026-08-23 |
 | reconcile on demand | `reconcile` recounts from the primary key and the four partial indexes (index-only) and overwrites the counters, printing the drift; after the data move and after a hand edit, never on the tick | login 2026-09-03: "why are we counting all rows every hour?" |
@@ -51,5 +51,7 @@ Beside this file, never in git: `update.state.json` (the readings ring), `update
 - **Richmond** runs the same `board.py` from `Richmond Update.py` once its lanes exist.
 
 ## History
+
+2026-09-05 — the review against the code: stalled outranks active (board.py tests the rejection before the movement); the increase now prints with its sign (`+288`), as this file's example always showed.
 
 2026-09-03 - written from `routine_update.py` and `board_truth.py` (the five metrics, the two windows, the four statuses, one subtraction, never clamp, no scan on a tick) against the tables and functions of migration 0001, every line read. Proven offline (the rate, increase, percentage and eta math over synthetic readings; the status table; the fold of heartbeats; the out-of-bounds gate) and by a simulation against the live cloud with throwaway counters and heartbeats (the rows written and read back, active on movement, pending without a heartbeat, stalled on a refusal's last word, complete at needed, the fold of two workstations, the ring surviving a restart, reconcile restoring the empty table's zeros). Not yet run beside real lanes: that waits for the data move.

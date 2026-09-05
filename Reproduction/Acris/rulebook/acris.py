@@ -86,13 +86,14 @@ def check_refused(data, ctype, where):
     hits = [s for s in NOTICE_SIGNALS if s in low]
     soft = "bandwidth" in low[:2000] and "document id" not in low
     if hits or "Bandwidth Notice" in text or soft:
+        kept = ""
         try:
             REFUSALS_DIR.mkdir(parents=True, exist_ok=True)
             (REFUSALS_DIR / ("refusal-%s.html" % time.strftime("%Y%m%d-%H%M%S"))).write_bytes(data)
-        except Exception:
-            pass
-        raise Refused("ACRIS served its Bandwidth Notice at %s (%d/%d signals, %d bytes, ct=%s)"
-                      % (where, len(hits), len(NOTICE_SIGNALS), len(data), ctype))
+        except Exception as e:                                      # the page is evidence: say so when it could not be kept
+            kept = "; the page could NOT be saved under refusals/ (%s: %s)" % (type(e).__name__, str(e)[:80])
+        raise Refused("ACRIS served its Bandwidth Notice at %s (%d/%d signals, %d bytes, ct=%s)%s"
+                      % (where, len(hits), len(NOTICE_SIGNALS), len(data), ctype, kept))
 
 
 # ── the page count ──────────────────────────────────────────────────────────────────────────

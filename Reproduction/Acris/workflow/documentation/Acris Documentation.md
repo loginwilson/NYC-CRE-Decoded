@@ -4,10 +4,10 @@ The documentation lane of the acris reproduction, as one program: `Acris Documen
 
 ## Launch
 
-    python "Acris Documentation.py" --drive NYCCRED1          home (the drive is labelled OneTouch today; the word follows the label)
-    python3 "Acris Documentation.py" --drive NYCCRED2         workstation 2
+    python "Acris Documentation.py" --drive OneTouch          home (the One Touch's volume label; the word follows the label)
+    python3 "Acris Documentation.py" --drive <label>         workstation 2
 
-The same file runs on every workstation. `--drive` names the drive by its label; the program finds where it is mounted on Windows or Mac. `--width` defaults to 40. While it runs, `documentation.control` beside it takes `width=30` (workers above the number park after their document, missing ones are born staggered) or `stop`. `--also registration:40` hosts another lane's crew in the same process through its own entry, twenty seconds later. `--limit N` is a test run. A lane that parked itself refuses to start again until `--unpark`. In the fleet's batch (`../reproduction/Acris Reproduction.py`) this lane runs 10 wide beside registration 10 and synchronization 9 plus its monitor, each crew on its own entry, one ramp at a time.
+The same file runs on every workstation. `--drive` names the drive by its label; the program finds where it is mounted on Windows or Mac. `--width` defaults to 40. While it runs, `documentation.control` beside it takes `width=30` (workers above the number park after their document, missing ones are born staggered) or `stop`. `--also registration:40` hosts another lane's crew in the same process through its own entry, twenty seconds later. `--limit N` is a test run. A lane that parked itself refuses to start again until `--unpark`. In the fleet's batch (`../reproduction/Acris Reproduction.py`) this lane is MANAGED: it enters with one worker and the rate manager sets its width between 20 and 120 (its `--width 10` only sizes the claim), beside registration 10 and synchronization 9 plus its monitor, each crew on its own entry, one ramp at a time.
 
 ## The rules
 
@@ -30,7 +30,7 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 | wall | forty consecutive 503 or 429 on the crew with no success between: park, exit 4 | trap 2 |
 | drive | once a minute the drive must still be there; a pulled drive parks the lane, exit 6 | trap 5 |
 | pending goes back to the backfill | a pending is re-checked once its last check is `--pending-age` old, ahead of the empties; when the lane is up to date every claim is pendings, cycling through them | login 2026-09-03 23:5x |
-| no overlap | the table hands this workstation its slice (claim); cells land once a minute through `documentation.outbox.jsonl`, so a cloud hiccup loses nothing; a heartbeat every minute carries the width and the last word | SCHEMA.md, the cooperation rules |
+| no overlap | the table hands this workstation its slice (claim); cells land once a minute (or at 200 results) through `documentation.outbox.jsonl`, so a cloud hiccup loses nothing; a heartbeat every minute carries the width and the last word | SCHEMA.md, the cooperation rules |
 | the last word | every stop — control file, limit, Ctrl+C, kill, refusal, redials exhausted, wall, crash, drive — leaves its reason in the heartbeat and, for a park, in `documentation.parked` | the board's status follows the lane |
 
 ## Calibrations
@@ -57,16 +57,19 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 
 ## Working files
 
-Beside this file, never in git: `documentation.lock` (the running pid), `documentation.control` (`width=N`, `stop`), `documentation.parked` (the reason a person must read), `documentation.outbox.jsonl` (landings the cloud has not taken), `documentation.fails.jsonl` (every fetch error with its reason), `Reproduction/Acris/rulebook/refusals/` (the page a refusal was called on - one folder for every acris lane). Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash · 6 drive gone.
+Beside this file, never in git: `documentation.lock` (the running pid), `documentation.log` (every launch's output, appended by the fleet and by `--log`), `documentation.control` (`width=N`, `stop`), `documentation.parked` (the reason a person must read), `documentation.outbox.jsonl` (landings the cloud has not taken), `documentation.fails.jsonl` (every fetch error with its reason), `Reproduction/Acris/rulebook/refusals/` (the page a refusal was called on - one folder for every acris lane). Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash · 6 drive gone.
 
 ## What it imports
 
-`Reproduction/lane.py` (the entry and the policies every lane shares), `Reproduction/cloud.py` (claim, land, heartbeat, the outbox), `Reproduction/storage.py` (the drive by label, the One Touch layout), `Reproduction/Acris/rulebook/acris.py` (the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, the page count, where a document files).
+`Reproduction/rulebook/lane.py` (the entry and the policies every lane shares), `Reproduction/rulebook/cloud.py` (claim, land, heartbeat, the outbox), `Reproduction/rulebook/storage.py` (the drive by label, the One Touch layout), `Reproduction/Acris/rulebook/acris.py` (the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, the page count, where a document files).
 
 ## History
 
 
-2026-09-05 (night) — THE THREE MANAGERS ported from the lane that ran them live all night (batch = the cycle; rate = ramp until the rate is met, then adjust under the docs band and the projected request ceiling; session = end at the request knob, re-enter on a fresh batch), as knobs the acris fleet passes to this lane; `--manage 0` is the lane as before. Proven offline by `Reproduction/test_managers.py` (the rate manager against fake exits, and this lane's wiring through the whole loop). The night's record is `D:/CRE Decoding System/Reproduction/Acris Reproduction/ACRIS DOCUMENTATION NIGHT 2026-09-04.md`.
+2026-09-05 — the review of this file against the code: the launch line names the One Touch's real label (`--drive OneTouch`; `NYCCRED1` was a label no mounted drive carries, so the written command could not have run); the batch line says what the managers do with this lane (one worker in, 20..120, `--width 10` sizes the claim); the working files list `documentation.log`; landing is once a minute or at 200 results; the imports point at `Reproduction/rulebook/`.
+
+2026-09-05 (night) — THE THREE MANAGERS ported from the lane that ran them live all night (batch = the cycle; rate = ramp until the rate is met, then adjust under the docs band and the projected request ceiling; session = end at the request knob, re-enter on a fresh batch), as knobs the acris fleet passes to this lane; `--manage 0` is the lane as before. Proven offline by `Reproduction/rulebook/test_managers.py` (the rate manager against fake exits, and this lane's wiring through the whole loop). The night's record is `D:/CRE Decoding System/Reproduction/Acris Reproduction/ACRIS DOCUMENTATION NIGHT 2026-09-04.md`.
+
 2026-09-04 (night) — the review of every acris file against the cycle (login: "assure it reflects the current approach that works"). Found and fixed in the shared lane module: the re-entry was resuming the cut batch from the same queue - now the cut batch is dropped at the hang-up and a fresh batch is claimed right before the ramp; the whole width means every worker inside 60 s with nothing landed for 10 s (a partial close keeps landing); served means 300 landings or five minutes; births run on their own thread and the wait is a state the loop re-enters, so a crew's wait or ramp never stalls another crew in the process; the fleet passed 0.5-s births, a 600-s wait and 3 tries to every lane - it now passes the knobs only when given, and its batch is login's 9 plus the monitor / 10 / 10. Nothing of this lane's own changed. Proven again offline and by the simulations.
 
 2026-09-04 (evening) — THE CYCLE (login's design, proven unattended at 14:51-14:58): the hang-up is the whole width failing inside a minute, not the first wave; the wait after it is 60 s with a backoff (×2 refused, ÷2 served); the re-entry claims a fresh batch; four tries. Replaces the 1,800-s ladder of the morning.
