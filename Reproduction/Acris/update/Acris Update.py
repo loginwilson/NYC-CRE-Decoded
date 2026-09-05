@@ -28,7 +28,7 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[1]                       # update -> Acris -> Reproduction
-sys.path.insert(0, str(PHASE))
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 
 import board                                                    # noqa: E402
 

@@ -27,7 +27,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 WORKFLOW = HERE.parent                            # reproduction -> workflow
 PHASE = HERE.parents[2]                           # reproduction -> workflow -> Acris -> Reproduction
-sys.path.insert(0, str(PHASE))
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import fleet                                                    # noqa: E402

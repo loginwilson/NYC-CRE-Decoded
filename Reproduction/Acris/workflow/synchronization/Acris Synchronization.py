@@ -54,7 +54,7 @@ import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # synchronization -> workflow -> Acris -> Reproduction
-sys.path.insert(0, str(PHASE))
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import acris                                                    # noqa: E402

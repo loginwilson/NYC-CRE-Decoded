@@ -61,7 +61,7 @@ import requests
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # registration -> workflow -> Richmond -> Reproduction
-sys.path.insert(0, str(PHASE))
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
 import lane                                                     # noqa: E402
