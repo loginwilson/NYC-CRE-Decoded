@@ -29,7 +29,7 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 | wifi is not a block | a network outage waits without spending a try | login 2026-09-03 01:0x |
 | wall | forty consecutive 503 or 429 on the crew with no success between: park, exit 4 | trap 2 |
 | drive | once a minute the drive must still be there; a pulled drive parks the lane, exit 6 | trap 5 |
-| pending goes back to the backfill | a pending is re-checked once its last check is `--pending-age` old, ahead of the empties; when the lane is up to date every claim is pendings, cycling through them | login 2026-09-03 23:5x |
+| pending goes back to the backfill | a pending is re-checked once its last check is `--pending-age` old, ahead of the empties; when the lane is up to date every claim is pendings, cycling through them. The wait is the claim itself: `land()` keeps a landed pending's claim as a cooldown for `--pending-age` and `claim()` offers it again when that is gone (0004; the table holds no clock) | login 2026-09-03 23:5x; 2026-09-05 18:4x |
 | no overlap | the table hands this workstation its slice (claim); cells land once a minute (or at 200 results) through `documentation.outbox.jsonl`, so a cloud hiccup loses nothing; a heartbeat every minute carries the width and the last word | SCHEMA.md, the cooperation rules |
 | the last word | every stop — control file, limit, Ctrl+C, kill, refusal, redials exhausted, wall, crash, drive — leaves its reason in the heartbeat and, for a park, in `documentation.parked` | the board's status follows the lane |
 

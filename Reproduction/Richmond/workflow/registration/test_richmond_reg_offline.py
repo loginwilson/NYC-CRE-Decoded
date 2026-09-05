@@ -80,10 +80,11 @@ check("the registry is JSON", True)
 class FakeCloud:
     def __init__(self):
         self.need = set(); self.landed = []; self.todo_calls = []; self.fail_land = False
-    def todo(self, ids, pending_age):
-        self.todo_calls.append((sorted(ids), pending_age))
+    def todo(self, ids):
+        self.todo_calls.append(sorted(ids))
         return {i for i in ids if i in self.need}
-    def land(self, rows):
+    def land(self, rows, pending_age="1 hour"):
+        self.pending_ages = getattr(self, "pending_ages", []) + [pending_age]
         if self.fail_land:
             raise RuntimeError("cloud down (simulated)")
         self.landed.extend(rows)
@@ -217,7 +218,7 @@ crew.cloud.need = {"RC_990000001", "RC_990000002"}
 role.land(crew, ctx)
 items = drain(crew)
 check("pages 2 and 3 of the window are queued", ("page", a, b, 2) in items and ("page", a, b, 3) in items, items)
-check("the table was asked about the page's ids", crew.cloud.todo_calls == [(["RC_990000001", "RC_990000002", "RC_990000003"], "1 hour")], crew.cloud.todo_calls)
+check("the table was asked about the page's ids", crew.cloud.todo_calls == [["RC_990000001", "RC_990000002", "RC_990000003"]], crew.cloud.todo_calls)
 check("a details item carries only the ids that need work", ("details", a, b, 1, ("RC_990000001", "RC_990000002")) in items, items)
 check("the control is no longer pending; the window knows its pages", not role.control_pending and role.windows[(a, b)]["pages"] == 3 and role.windows[(a, b)]["details"] == 1)
 full = richmond.parse_detail(detail_html()); full["at"] = "t"; full["listing"] = {}

@@ -158,7 +158,7 @@ def add_common_args(ap):
     ap.add_argument("--claim", type=int, default=0, help="documents taken per claim (default 12 x width)")
     ap.add_argument("--ttl", default="20 minutes", help="how long a claim is ours before it goes back on the list")
     ap.add_argument("--pending-age", default="1 hour",
-                    help="re-check a pending once its last check is this old; pendings ride ahead of the backfill, and when"
+                    help="re-check a pending once its last check is this old (its claim stays as a cooldown that long); pendings ride ahead of the backfill, and when"
                          " the lane is up to date every claim is pendings (one request per pending per interval)")
     ap.add_argument("--redial-wait", type=int, default=60, help="seconds of silence after the session closes before the fresh-batch re-entry; a refused re-entry doubles the next wait (cap 4,800 s), a served one halves it back to this base")
     ap.add_argument("--tries", type=int, default=4, help="re-entries per incident before parking (the wait doubles each time: 1, 2, 4, 8 minutes at the base)")
@@ -550,7 +550,7 @@ def _feed(ctx, c):
     if ctx.args.limit and c.stats["ok"] + c.q.qsize() >= ctx.args.limit:
         return
     try:
-        ids = c.cloud.claim(ctx.args.claim or 12 * batch, ctx.args.ttl, ctx.args.pending_age)
+        ids = c.cloud.claim(ctx.args.claim or 12 * batch, ctx.args.ttl)
         regs = c.cloud.registries(ids) if getattr(c.role, "needs_registry", True) else {}
     except Exception as e:
         _log(ctx, "%s: claim failed (%s) - will retry" % (c.role.lane, reason(e)))
@@ -576,7 +576,7 @@ def _land(ctx, c):
         for r in rows:
             c.held.discard(r["doc_id"])
     if c.outbox.path.exists() and c.outbox.path.stat().st_size > 0:
-        landed, left = c.outbox.drain(c.cloud.land)
+        landed, left = c.outbox.drain(lambda rows: c.cloud.land(rows, ctx.args.pending_age))
         if left:
             _log(ctx, "%s: cloud did not take %d landings (kept in %s)" % (c.role.lane, left, c.outbox.path.name))
 

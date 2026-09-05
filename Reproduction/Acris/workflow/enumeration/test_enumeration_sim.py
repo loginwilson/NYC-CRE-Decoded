@@ -101,6 +101,11 @@ def run_diff(index, months=3):
     return code, rep.lines
 
 
+_real = q("select count(*) from reproduction.acris where doc_id not like '2099%'")[0][0]
+if _real:
+    raise SystemExit("reproduction.acris holds %s real rows - this simulation writes into the live table (it inserts throwaway ids and reads the table as the audit), so on the"
+                     " populated table it would touch real documents; it runs on an empty table only (rule of 2026-09-05 19:2x)"
+                     % "{:,}".format(_real))
 q("delete from reproduction.acris where doc_id like '2099%%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 time.sleep(0.5)

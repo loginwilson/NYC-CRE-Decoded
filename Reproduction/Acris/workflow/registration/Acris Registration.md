@@ -24,7 +24,7 @@ No drive: the registry is text and lives in the cloud table only. `--width` defa
 | refusal | HTTP 200 carrying the Bandwidth Notice is the only block: park at once, exit 2, no retry, no rotation; the page is preserved under `Reproduction/Acris/rulebook/refusals/` | the detectors; the 08-26 false positive |
 | hang-up | the session closed (every worker a transport error inside 60 s, nothing landed for 10 s): hang up at once, drop the cut batch, wait `--redial-wait` (60 s, ×2 per refused re-entry, ÷2 per served), claim a fresh batch, re-enter once, births 5 s apart; four re-entries per incident, then park, exit 3 | the cycle, login 2026-09-04; see Acris Documentation.md |
 | wall | forty consecutive 503 or 429 with no success between: park, exit 4 | trap 2 |
-| pending goes back to the backfill | a registry pending is re-checked once its last check is `--pending-age` old, ahead of the empties | login 2026-09-03 23:5x |
+| pending goes back to the backfill | a registry pending is re-checked once its last check is `--pending-age` old, ahead of the empties; the wait is the claim itself, kept by `land()` as a cooldown for `--pending-age` (0004; the table holds no clock) | login 2026-09-03 23:5x; 2026-09-05 18:4x |
 | no overlap | claim, land once a minute (or at 200 results) through `registration.outbox.jsonl`, heartbeat every minute | rulebook/Rulebook.md |
 | the last word | every stop leaves its reason in the heartbeat and, for a park, in `registration.parked` | the board's status follows the lane |
 

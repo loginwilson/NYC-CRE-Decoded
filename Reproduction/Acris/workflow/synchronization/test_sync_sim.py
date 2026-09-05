@@ -42,6 +42,11 @@ def q(sql, params=None, fetch=True):
 EDGE = 9000000000000
 BLANKS = {3, 4, 11, 12, 13, 31, 32}
 HOLE = 17
+_real = q("select count(*) from reproduction.acris where doc_id not like 'SIM-%'")[0][0]
+if _real:
+    raise SystemExit("reproduction.acris holds %s real rows - this simulation writes into the live table (the lane inserts its throwaway ids and moves the counters), so on the"
+                     " populated table it would touch real documents; it runs on an empty table only (rule of 2026-09-05 19:2x)"
+                     % "{:,}".format(_real))
 q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 before = q("select (select needed from reproduction.acris_update), (select landed from reproduction.acris_update_lanes where lane='synchronization'), (select needed from reproduction.acris_update_lanes where lane='documentation')")[0]

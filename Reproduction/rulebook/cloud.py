@@ -98,9 +98,11 @@ class Cloud:
                         raise
                     time.sleep(2)
 
-    def claim(self, n=500, ttl="20 minutes", pending_age="1 hour"):
-        rows = self._run("select reproduction.claim(%s, %s, %s, %s, %s::interval, %s::interval)",
-                         (self.source, self.lane, self.host, n, ttl, pending_age), True)
+    def claim(self, n=500, ttl="20 minutes"):
+        """The doc_ids now held by this host: pendings whose cooldown has run out first, then empties, both in
+        id order (migration 0004: the wait between two checks of a pending is its claim, written by land())."""
+        rows = self._run("select reproduction.claim(%s, %s, %s, %s, %s::interval)",
+                         (self.source, self.lane, self.host, n, ttl), True)
         return [r[0] for r in rows]
 
     def registries(self, ids):
@@ -111,13 +113,14 @@ class Cloud:
                          (list(ids),), True)
         return {r[0]: r[1] for r in rows}
 
-    def land(self, rows):
+    def land(self, rows, pending_age="1 hour"):
         """rows = [{"doc_id": ..., "value": ...}] -> cells written.  The cell rule in the table rejects
-        any value that is not a fill, 'pending' or 'absent' (the whole batch, so nothing half-lands)."""
+        any value that is not a fill, 'pending' or 'absent' (the whole batch, so nothing half-lands).  A landed
+        pending keeps its claim as a cooldown for pending_age; claim() offers it again after that (migration 0004)."""
         if not rows:
             return 0
-        out = self._run("select reproduction.land(%s, %s, %s, %s::jsonb)",
-                        (self.source, self.lane, self.host, json.dumps(rows)), True)
+        out = self._run("select reproduction.land(%s, %s, %s, %s::jsonb, %s::interval)",
+                        (self.source, self.lane, self.host, json.dumps(rows), pending_age), True)
         return out[0][0]
 
     def heartbeat(self, width, last_event=None):
@@ -197,15 +200,17 @@ class Cloud:
                          % (self.source, where), (n,) + params, True)
         return {r[0]: r[1] for r in rows}
 
-    def todo(self, ids, pending_age="1 hour"):
-        """The subset of ids whose registry needs work: empty, or pending and last checked longer ago than
-        pending_age.  For a lane whose source grants details only behind its listing (richmond), so the
-        lane walks the listing and asks the table which of the ids it passes are its work."""
+    def todo(self, ids):
+        """The subset of ids whose registry needs work: empty, or pending and not held - no live claim for the
+        registration lane, neither another workstation's nor the cooldown land() left after the last check
+        (migration 0004).  For a lane whose source grants details only behind its listing (richmond), so the lane
+        walks the listing and asks the table which of the ids it passes are its work."""
         if not ids:
             return set()
-        rows = self._run("select doc_id from reproduction.%s where doc_id = any(%%s) and (registry is null or"
-                         " (registry = '\"pending\"'::jsonb and updated_at < now() - %%s::interval))" % self.source,
-                         (list(ids), pending_age), True)
+        rows = self._run("select w.doc_id from reproduction.%s w where w.doc_id = any(%%s) and (w.registry is null or"
+                         " (w.registry = '\"pending\"'::jsonb and not exists (select 1 from reproduction.%s_claims c"
+                         " where c.doc_id = w.doc_id and c.lane = 'registration' and c.until > now())))" % (self.source, self.source),
+                         (list(ids),), True)
         return {r[0] for r in rows}
 
     def held(self, ids):

@@ -15,7 +15,7 @@ The rules every acris lane shares, as one module: `acris.py`. ACRIS is the Autom
 | a detail too short to trust | `MIN_DETAIL` = 20,000 bytes: a detail parsed from fewer bytes is suspect truncation and is never reported live | - |
 | the id a page is about | `detail_doc_id(html)`: the `DOCUMENT ID:` the page prints, None for the stub; `echoes(html, doc_id)`: the page prints the id that was asked for - a page that does not is a re-ask, never a failure and never a verdict (63 % of a floor's requests under load did not echo) | 2026-08-28 |
 
-Every URL is minted from the id. No URL, token or key is ever stored: the table holds `source`, `doc_id`, `registry`, `document` and `updated_at` (the re-check clock), nothing else (`../../rulebook/Rulebook.md`).
+Every URL is minted from the id. No URL, token or key is ever stored: the table holds `source`, `doc_id`, `registry`, `document`, nothing else - not even a clock: the wait before a pending's next check is its claim (0004) (`../../rulebook/Rulebook.md`).
 
 ## The refusal
 
@@ -90,3 +90,5 @@ Beside this file, never in git: `refusals/` - the body of every refusal ever det
 2026-09-03 - the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the index measured the same day (real 17,049,742 / personal 4,544,590, good through 2026-07-31). Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
 
 2026-09-04 (night) - the review of every acris file against the cycle: nothing in this module changed; the callers' table and the refusal paragraph were read against the reviewed lane module. The six refusal pages preserved beside the module's old location were folded into `refusals/` here.
+
+2026-09-05 — `updated_at` gone from the table (0004, login: "Makes the table less clean"); a pending's re-check wait is its claim, kept by `land()` for `--pending-age`.

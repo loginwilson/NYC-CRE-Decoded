@@ -39,6 +39,11 @@ PAGE = """<html><body><table><tr><td>DOCUMENT ID: %s</td><td>CRFN: 2024000123456
 <tr><td>BROOKLYN</td><td>00123</td><td>0045</td><td>N/A</td></tr></table></table></table></body></html>"""
 
 IDS = ["SIM-%04d" % i for i in range(1, 12)]
+_real = q("select count(*) from reproduction.acris where doc_id not like 'SIM-%'")[0][0]
+if _real:
+    raise SystemExit("reproduction.acris holds %s real rows - this simulation writes into the live table (the lane claims through claim(), which hands out the first empties of the WHOLE table), so on the"
+                     " populated table it would touch real documents; it runs on an empty table only (rule of 2026-09-05 19:2x)"
+                     % "{:,}".format(_real))
 q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 q("insert into reproduction.acris (doc_id) select unnest(%s::text[])", (IDS,), fetch=False)

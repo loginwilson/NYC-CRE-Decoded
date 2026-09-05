@@ -153,12 +153,12 @@ class FakeCloud:
     def __init__(self, *a, **k): self.beats = []; self.landed = 0
     def connect(self): pass
     def close(self): pass
-    def claim(self, n, ttl, pending_age):
+    def claim(self, n, ttl):
         out = ["D%08d" % i for i in range(FakeCloud.ids, FakeCloud.ids + n)]
         FakeCloud.ids += n
         return out
     def registries(self, ids): return {i: {"recorded": "2026-09-04"} for i in ids}
-    def land(self, rows): self.landed += len(rows)
+    def land(self, rows, pending_age="1 hour"): self.landed += len(rows)
     def heartbeat(self, width, last_event=None): self.beats.append((width, last_event))
 
 

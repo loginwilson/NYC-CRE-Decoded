@@ -316,7 +316,7 @@ class Registration:
                 ids = [richmond.doc_id(row["internal_id"]) for row in payload["rows"]]
                 if ids:
                     try:
-                        need = crew.cloud.todo(ids, self.pending_age)
+                        need = crew.cloud.todo(ids)
                     except Exception as e:
                         lane._log(ctx, "registration: could not ask the table about %d ids (%s) - the page is asked again at the next walk" % (len(ids), lane.reason(e)))
                         self.reask.add(key)
@@ -354,7 +354,7 @@ class Registration:
             crew.outbox.append(to_land)
         if crew.outbox.count():
             try:
-                landed, left = crew.outbox.drain(crew.cloud.land)
+                landed, left = crew.outbox.drain(lambda rows: crew.cloud.land(rows, self.pending_age))
                 if landed:
                     lane._log(ctx, "registration: landed %d registr%s" % (landed, "y" if landed == 1 else "ies"))
                 if left:
