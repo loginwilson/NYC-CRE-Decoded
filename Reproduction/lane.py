@@ -50,6 +50,14 @@ minutes and served the fresh-batch re-entry 60 s after the last dead line cleare
 4).  What it refuses is a re-entry made while its own closing waves are still running on the old batch, and
 a relaunch storm (2026-09-03 19:43: nine in 96 minutes, each cut sooner).  A notice page is never re-entered.
 
+THE THREE MANAGERS (login 2026-09-04; live on the home workstation 09-04 19:37 -> 09-05; knobs, default off - see add_common_args): with
+--manage 1 the crew enters with ONE worker and rate_manager.Governor births one every --stagger s until the docs/s meets the band
+(or 90% of the request ceiling, or width_max), then adjusts every --adjust-every s through Crew.resize - the same path the control
+file uses: the docs band (--rate-floor/--rate-ideal-lo/--rate-ideal-hi/--dps-ceiling) under the request ceiling (--rps-ceiling) read as
+a projection at the exit's recent speed; a grow that buys nothing is undone (the door curve).  At --session-max-requests the crew hangs
+up on purpose (planned: lands, drops the batch, no try spent) and the cycle re-enters it on a fresh batch - the batch manager is the
+cycle itself.  Only lanes the site names are managed (fleet.Site(manage=...)); every other lane runs exactly as before.
+
 Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused (notice page) · 3 redials
 exhausted · 4 wall · 5 crash · 6 drive gone.  Every stop writes its reason as the lane's last word.
 """
@@ -70,6 +78,7 @@ import requests
 import requests.adapters
 
 from cloud import Cloud, Outbox
+import rate_manager as RM
 
 
 class Refused(RuntimeError):
@@ -157,6 +166,23 @@ def add_common_args(ap):
     ap.add_argument("--limit", type=int, default=0, help="stop after this many documents (a test run)")
     ap.add_argument("--log", default="", help="also append the printed lines to this file")
     ap.add_argument("--unpark", action="store_true", help="start although the lane parked itself (a person has decided)")
+    # THE THREE MANAGERS (login 2026-09-04: "batch manager makes sure the batch is good to enter and enters 1 time / rate manager
+    # adds a worker every 5 seconds to reach sustained rate preference and then adjusts based on rate / session manager tracks
+    # requests until the set limit then ends once reached and tells batch manager to go from the top").  Knobs, not code:
+    # --manage 0 (default) = the lane as before, fixed --width; the acris site turns them on for its document lane.
+    ap.add_argument("--manage", type=int, default=0, help="1 = the rate and session managers run this lane (default 0: fixed --width, the cycle only)")
+    ap.add_argument("--ramp-to-rate", type=int, default=1, help="managed: 1 = enter with ONE worker and add one every --stagger s until the band; 0 = ramp to --width")
+    ap.add_argument("--rate-floor", type=float, default=5.0, help="managed: docs/s under this = a full step up")
+    ap.add_argument("--rate-ideal-lo", type=float, default=6.0, help="managed: the band's lower edge (login: around 6)")
+    ap.add_argument("--rate-ideal-hi", type=float, default=7.0, help="managed: the band's upper edge")
+    ap.add_argument("--dps-ceiling", type=float, default=8.0, help="managed: the hard line - a full step down at once (login: no more than 8 ever)")
+    ap.add_argument("--rps-ceiling", type=float, default=60.0, help="managed: REQUESTS/s ceiling, the record's meter (notices at 58-81 held for hours; the golden day ~57); 0 = off")
+    ap.add_argument("--width-min", type=int, default=20, help="managed: the manager never retires below this")
+    ap.add_argument("--width-max", type=int, default=120, help="managed: the manager never grows above this (the pool's ceiling is %d)" % MAX_WIDTH)
+    ap.add_argument("--adjust-every", type=int, default=120, help="managed: seconds per window")
+    ap.add_argument("--adjust-step", type=int, default=10, help="managed: workers per full step")
+    ap.add_argument("--ramp-window", type=float, default=60.0, help="managed: the ramp reads its docs/s and requests/s over this many seconds (read at the current width)")
+    ap.add_argument("--session-max-requests", type=int, default=0, help="managed: end the session at this many requests and re-enter on a fresh batch (login: 1,000,000); 0 = off")
     return ap
 
 
@@ -297,6 +323,9 @@ class Crew:
         self.born = 0                     # workers born in the current entry
         self.idle_until = 0.0             # when the to-do list came back empty, do not ask again before this
         self.progress_at = time.time()    # when the last PROGRESS line was printed (the rate divides by real time)
+        self.target = width               # the width asked for: a managed crew ramps from one worker and moves on its own, but claims by this
+        self.reqs_at_entry = 0            # the session manager counts requests from the entry, not the process
+        self.governor = None              # the rate manager of the current entry (managed lanes)
 
     # ── the fetcher every worker uses: counts, closes, classifies ────────────────────────
     def get(self, url, referer, timeout=90):
@@ -398,6 +427,10 @@ class Crew:
         self.transport_streak = 0
         self.wall_streak = 0
         self.last_success = time.time()
+        self.reqs_at_entry = self.stats["reqs"]
+        a = self.ctx.args
+        if getattr(a, "manage", 0) and getattr(a, "ramp_to_rate", 1):
+            self.width = 1                # RAMP TO RATE: one worker in, the Governor births the rest one every `stagger` (login: "ramp until rate is met and then adjust")
         self.ramp = threading.Thread(target=self._births, args=(1, self.width, stagger), daemon=True, name="%s-births" % self.role.lane)
         self.ramp.start()
 
@@ -503,12 +536,13 @@ def _feed(ctx, c):
     if hasattr(c.role, "feed"):
         c.role.feed(c, ctx)
         return
-    if c.q.qsize() >= c.width or time.time() < c.idle_until:
+    batch = max(c.width, c.target)               # a managed crew ramps from one worker; it still claims a whole batch
+    if c.q.qsize() >= batch or time.time() < c.idle_until:
         return
     if ctx.args.limit and c.stats["ok"] + c.q.qsize() >= ctx.args.limit:
         return
     try:
-        ids = c.cloud.claim(ctx.args.claim or 12 * c.width, ctx.args.ttl, ctx.args.pending_age)
+        ids = c.cloud.claim(ctx.args.claim or 12 * batch, ctx.args.ttl, ctx.args.pending_age)
         regs = c.cloud.registries(ids) if getattr(c.role, "needs_registry", True) else {}
     except Exception as e:
         _log(ctx, "%s: claim failed (%s) - will retry" % (c.role.lane, reason(e)))
@@ -579,14 +613,18 @@ def _rebatch(ctx, c):
     return n
 
 
-def _hangup(ctx, c, why):
+def _hangup(ctx, c, why, planned=False):
     """The session closed (or the wire died): hang up at once, land what the crew holds, drop the cut batch
     and set the wait; the main loop re-enters the crew when it is due (_await_entry).  Nothing blocks:
-    every other crew keeps feeding and landing."""
+    every other crew keeps feeding and landing.  planned=True is the SESSION manager's close at the request
+    knob: the same exit and the same re-entry, but no try is spent and the wait stays at the base."""
     now = time.time()
     if c.wait_s is None:
         c.wait_s = ctx.args.redial_wait
-    if c.tries and (c.stats["ok"] - c.ok_at_redial >= SERVED_LANDINGS or now - c.last_redial >= SERVED_S):
+    if planned:
+        c.tries = 0                      # a session ended on purpose is not an incident: the next entry is the first of a new one
+        c.wait_s = ctx.args.redial_wait
+    elif c.tries and (c.stats["ok"] - c.ok_at_redial >= SERVED_LANDINGS or now - c.last_redial >= SERVED_S):
         c.tries = 0                      # the last re-entry was SERVED (a real batch landed, or five minutes lived) and the door then closed it: the incident closed
         c.wait_s = max(c.wait_s // 2, ctx.args.redial_wait)
     elif c.tries:
@@ -633,7 +671,26 @@ def _await_entry(ctx, crews, c):
         c.ok_at_redial = c.stats["ok"]
     c.enter(ctx.args.stagger)
     c.reentry_at = None
-    _log(ctx, "%s: %s - %d workers, births %.0fs apart, one entry" % (c.role.lane, "entered" if c.entries == 1 else "re-entered (%d/%d)" % (c.tries, ctx.args.tries), c.width, ctx.args.stagger))
+    a = ctx.args
+    if getattr(a, "manage", 0):
+        c.governor = RM.Governor(lambda: c.stats["ok"], c.alive,
+                                 lambda n: c.resize(min(a.width_max, c.width + n), a.stagger),
+                                 lambda n: c.resize(max(1, c.width - n), a.stagger),
+                                 c.stop, lambda m: _log(ctx, "%s: %s" % (c.role.lane, m)),
+                                 floor=a.rate_floor, ideal_lo=a.rate_ideal_lo, ideal_hi=a.rate_ideal_hi, hard=a.dps_ceiling,
+                                 lo=a.width_min, hi=a.width_max, step=a.adjust_step, every=a.adjust_every,
+                                 settle=(a.adjust_every if a.ramp_to_rate else max(a.adjust_every, int(c.target * a.stagger) + a.adjust_every)),
+                                 requests=lambda: c.stats["reqs"], rps_ceiling=a.rps_ceiling,
+                                 ramp=bool(a.ramp_to_rate), stagger=a.stagger, ramp_window=getattr(a, "ramp_window", 60.0))
+        c.governor.start()
+        _log(ctx, "%s: %s - %s; RATE MANAGER on: %sfloor %.1f, ideal %.1f-%.1f docs/s, hard %.1f, request ceiling %.0f/s, width %d..%d, step %d every %ds;"
+                  " SESSION knob: %s" % (c.role.lane, "entered" if c.entries == 1 else "re-entered (%d/%d)" % (c.tries, a.tries),
+                  "one worker in, one more every %.0fs until the band" % a.stagger if a.ramp_to_rate else "%d workers, births %.0fs apart" % (c.width, a.stagger),
+                  "RAMP TO RATE - " if a.ramp_to_rate else "", a.rate_floor, a.rate_ideal_lo, a.rate_ideal_hi, a.dps_ceiling, a.rps_ceiling,
+                  a.width_min, a.width_max, a.adjust_step, a.adjust_every,
+                  ("{:,} requests, then a fresh batch".format(a.session_max_requests)) if a.session_max_requests else "no request cap"))
+    else:
+        _log(ctx, "%s: %s - %d workers, births %.0fs apart, one entry" % (c.role.lane, "entered" if c.entries == 1 else "re-entered (%d/%d)" % (c.tries, ctx.args.tries), c.width, ctx.args.stagger))
 
 
 def run(roles, args, here):
@@ -712,6 +769,14 @@ def run(roles, args, here):
                         c.role.check(ctx)                         # e.g. the drive is still there
                     _land(ctx, c)
                     s = _progress(ctx, c, t0, last[c.role.lane])
+                    cap = getattr(args, "session_max_requests", 0) if getattr(args, "manage", 0) else 0
+                    if cap and c.reentry_at is None and s["reqs"] - c.reqs_at_entry >= cap:
+                        # THE SESSION MANAGER (login 2026-09-04: "the session manager will track requests in a session and end it when the request
+                        # limit is reached and tell the batch manager to repeat"): a planned close, lines alive; the cycle re-enters on a fresh batch
+                        _hangup(ctx, c, "SESSION RESET: %s requests this session, the knob is %s - ending on purpose, a fresh batch after the wait"
+                                % ("{:,}".format(s["reqs"] - c.reqs_at_entry), "{:,}".format(cap)), planned=True)
+                        last[c.role.lane] = s
+                        continue
                     asked = s["reqs"] - last[c.role.lane]["reqs"]
                     moved = s["ok"] - last[c.role.lane]["ok"]
                     quiet[c.role.lane] = quiet[c.role.lane] + 1 if (asked > 0 and moved == 0) else 0
