@@ -37,13 +37,24 @@ LANES = ("synchronization", "registration", "documentation")    # the cycle's or
 # THE BATCH (login 2026-09-04): "1 batch of 10 sync (1 monitor, 9 walkers), 10 registers, 10 documenters".  The monitor is
 # synchronization's main-thread feed, not a connection, so its crew is 9 walkers; a lane run alone keeps its own default (40).
 WIDTHS = {"synchronization": 9, "registration": 10, "documentation": 10}
+# THE THREE MANAGERS on the document lane (login 2026-09-04; live and proven 2026-09-04 19:37 -> 09-05 on the home workstation):
+# the batch manager is the cycle itself (one entry on a settled exit pool); the RATE manager enters with one worker, adds one every
+# --stagger s until the docs/s meets the band, then adjusts every 120 s - a full step down over 8, half down over 7, hold in 6-7,
+# half up under 6, full up under 5, with the record's meter first: the request ceiling (60/s; notices came at 58-81 held for hours)
+# read as a projection at the exit's recent speed - retire straight to the cap, never grow past it; a grow that buys nothing (the
+# door curve) is undone and held; the SESSION manager ends the session at 1,000,000 requests and the cycle re-enters on a fresh batch.
+# Knobs, not code: change a number here (or on the lane's command line), never the manager.  Only documentation is managed: the
+# band and the ceiling were measured on the document floor; registration and synchronization keep their fixed widths.
+MANAGE = {"documentation": {"manage": 1, "ramp_to_rate": 1, "rate_floor": 5, "rate_ideal_lo": 6, "rate_ideal_hi": 7, "dps_ceiling": 8,
+                            "rps_ceiling": 60, "width_min": 20, "width_max": 120, "adjust_every": 120, "adjust_step": 10,
+                            "session_max_requests": 1000000}}
 EDGE_HELP = "synchronization's first start: the last CRFN whose document the table holds"
 FRESH_DAYS = 30
 
 
 def site():
     """Read at call time so a test may point WORKFLOW / HERE elsewhere."""
-    return fleet.Site(SOURCE, LANES, WIDTHS, WORKFLOW, HERE, edge_lanes=("synchronization",))
+    return fleet.Site(SOURCE, LANES, WIDTHS, WORKFLOW, HERE, edge_lanes=("synchronization",), manage=MANAGE)
 
 
 def parse_lanes(spec):

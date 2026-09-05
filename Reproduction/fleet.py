@@ -73,8 +73,9 @@ class Site:
     """One source's fleet: its name, its lanes in the cycle's order, their widths, where the lane programs
     live, and which lanes take --edge on a first start."""
 
-    def __init__(self, source, lanes, widths, workflow, here, edge_lanes=("synchronization",)):
+    def __init__(self, source, lanes, widths, workflow, here, edge_lanes=("synchronization",), manage=None):
         self.source = source
+        self.manage = dict(manage or {})      # lane -> {knob: value}: the three managers' knobs, passed on that lane's command line (see lane.add_common_args)
         self.lanes = tuple(lanes)
         self.widths = dict(widths)
         self.workflow = pathlib.Path(workflow)
@@ -159,6 +160,8 @@ class Fleet:
             argv.append("--unpark")
         if getattr(a, "no_pool_check", False):
             argv.append("--no-pool-check")
+        for knob, val in sorted(self.site.manage.get(name, {}).items()):      # the managers' knobs: the site's word for this lane
+            argv += ["--" + knob.replace("_", "-"), str(val)]
         return argv
 
     def launch(self, name, width, unpark=False, also=()):
