@@ -50,8 +50,9 @@ the rulebook's is `Reproduction/rulebook/Rulebook.md`; the database's is `supaba
 
 ## The phase: reproduction
 
-Two sources, `acris` and `richmond`. Per source one workflow table, one row per document, three cells: `doc_id` ·
-`registry` · `document`. No URL or key columns: every URL is minted from the id. Each source has four lanes, each its
+Two sources, `acris` and `richmond`. Per source one workflow table, one row per document: a `source` column in
+front (a constant per table, for the cross-source tables of construction) and three cells: `doc_id` · `registry` ·
+`document`. No URL or key columns: every URL is minted from the id. Each source has four lanes, each its
 own code in its own folder, toggled independently and configurable in width; three of them fill the cells.
 
 | lane | job | fills |

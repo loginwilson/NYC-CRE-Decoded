@@ -79,7 +79,7 @@ its own `<Source> Reproduction.md`.
 ## 3 · THE DATABASE
 
 One Supabase project, one schema per phase: `reproduction`. Per source a workflow table (`acris`, `richmond`; one row
-per document, three cells `doc_id` · `registry` · `document`), two update tabs (`*_update`, `*_update_lanes`), a
+per document: `source` in front, then the three cells `doc_id` · `registry` · `document`), two update tabs (`*_update`, `*_update_lanes`), a
 claims table and a heartbeats table; the functions `claim()`, `land()`, `heartbeat()`, `reconcile()` hold the
 cooperation rules so every workstation gets them by construction. The dictated concept is the section "The table" of
 `../rulebook/Rulebook.md`; the phase's schema is `../rulebook/schema/`, one numbered SQL file per dictated decision,
