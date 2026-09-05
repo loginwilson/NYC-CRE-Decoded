@@ -117,8 +117,21 @@ def map_registry(rd):
     return None, rd[:40]
 
 
-def load_found():
-    return json.loads(FOUND.read_text(encoding="utf-8")) if FOUND.exists() else {}
+def load_found(with_log=False):
+    """The documents organize placed: the found map, and - with_log - every `placed` / `restored` move in the log (the file
+    name carries the id), so an interrupted old-store step loses nothing."""
+    found = json.loads(FOUND.read_text(encoding="utf-8")) if FOUND.exists() else {}
+    if with_log and MOVES.exists():
+        for line in io.open(MOVES, encoding="utf-8"):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("kind") in ("placed", "restored") and not r.get("dry"):
+                m = FILE_ID.match(os.path.basename(r["dst"]))
+                if m:
+                    found.setdefault(m.group(1), r["dst"])
+    return found
 
 
 # ── survey ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -451,7 +464,7 @@ def load(a):
 def verify(a):
     import psycopg2
     sv = json.loads(SURVEY.read_text(encoding="utf-8")) if SURVEY.exists() else None
-    found = load_found()
+    found = load_found(with_log=True)
     pg = psycopg2.connect(cloud.dsn(), connect_timeout=30, application_name="population")
     ok = True
     with pg.cursor() as cur:
@@ -498,9 +511,10 @@ def apply_found(a):
     a file on disk outranks a verdict word), never over an existing path.  One COPY into a temporary table, one UPDATE per
     source, then reconcile."""
     import psycopg2
-    found = load_found()
+    found = load_found(with_log=True)
     if not found:
-        raise SystemExit("no population.found.json - run organize first")
+        raise SystemExit("nothing found: no population.found.json and no placed move in the log - run organize first")
+    log("documents to write: %s (the found map and the moves log together)" % "{:,}".format(len(found)))
     pg = psycopg2.connect(cloud.dsn(), connect_timeout=30, application_name="population")
     pg.autocommit = False
     with pg.cursor() as cur:
