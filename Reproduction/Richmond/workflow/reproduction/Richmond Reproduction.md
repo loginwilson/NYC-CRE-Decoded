@@ -212,7 +212,7 @@ roadmap.
 
 ---
 
-## ⚠ THE 4 AM TASKS WERE REMOVED 2026-09-01 — ONE OF THEM IS LOAD-BEARING
+## ⚠ THE 4 AM TASKS WERE REMOVED 2026-09-01 — ONE OF THEM WAS LOAD-BEARING (RESOLVED: ITS PASS LIVES INSIDE THE DOCUMENTATION LANE)
 
 login: *"the 4 am tasks should be completely removed. they are of no use."*
 Disabled: **`CRE Ledger Refresh 4AM`** and **`Legal Instruments Navigation
@@ -243,7 +243,11 @@ documentation). **NOT harmless once richmond resumes** — without the
 maturation pass, `pending` rows never mature to `path`/`absent` and richmond
 stalls again exactly as it did before.
 
-**SO: when richmond resumes, restore the maturation pass** — either re-enable
-the task, or better, fold `rc_pdf_state --apply` into `rc_lane` so it cannot
-be separated from the lane it serves. Do NOT simply re-enable the old 4 AM
-task while a long acris run is live: that is what created this deadlock.
+**RESOLVED 2026-09-03 (recorded 2026-09-05) — the maturation pass lives inside
+the documentation lane and cannot be separated from it.** The cloud table's
+`claim()` offers the pendings due for a re-check (older than `--pending-age`)
+before any empty cell (migration `20260903230000_pending_backfill.sql`); the
+lane mints each one again, and past the 7-day lag (`richmond.IMAGE_LAG_DAYS`) it
+lands `absent` (`Richmond Documentation.md`, the maturation row). There is
+nothing to restore and no task to re-enable: the two 4 AM tasks stay disabled,
+and a long acris run can never be frozen by them again.

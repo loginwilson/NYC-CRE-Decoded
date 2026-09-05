@@ -1,20 +1,59 @@
 # NYC CRE Decoded
 
-The reproduction of New York City's public real-estate record sources into one place: the registered data in one cloud database, the documents on the One Touch, and the code that keeps both current. This repo is the process. The data is not in it. The concept, in login's words, is `Reproduction/SCHEMA.md`.
+The process that turns New York City's public real-estate record into decoded intelligence, in three phases. Each
+phase is a folder at the root of this repo; only the first exists yet.
+
+| phase | what it produces | state |
+|---|---|---|
+| **REPRODUCTION** | every source's record reproduced into one place - the registered data in one cloud database, the documents on the One Touch, and the code that keeps both current: the document index | running: acris and richmond |
+| **CONSTRUCTION** | the event index, built from the reproduced documents (it never existed before - it is constructed, not re-constructed) | not started |
+| **PRODUCTION** | the products | not started |
+
+This repo is the process. The data is not in it. The concept of the first phase, in login's words, is
+`Reproduction/supabase/SCHEMA.md`.
 
 ## Three homes
 
 | what | where | shape |
 |---|---|---|
-| database | Supabase project **NYC CRE Decoded** (East US) | schema `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table |
-| code | this repo | `Reproduction/<Source>/workflow/<lane>/` and `Reproduction/<Source>/update/` |
+| database | Supabase project **NYC CRE Decoded** (East US) | one schema per phase: `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table |
+| code | this repo | `Reproduction/` with the same three folders at every level (below) |
 | documents | the One Touch, `D:\CRE Decoding System\Documents\` | `source\borough\year\month\id.pdf` (richmond has no borough); a second workstation mounts its drive under the same letter and layout, then transfers |
 
 Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or printed.
 
+## The layout - the same three folders at every level
+
+```
+Reproduction/                                   the phase
+  rulebook/     lane.py · fleet.py · board.py · cloud.py · storage.py · rate_manager.py · requirements.txt · Rulebook.md
+                                                the rules every lane of every source shares, written once
+  workflow/     Reproduction.md · Reproduction.py   the phase's authority, and every source's fleet kicked off as configured
+  update/       Update.md                       the phase board across sources (a later migration)
+  supabase/     SCHEMA.md · migrations/ · db_push.ps1 · decoded_sql.py · test_claims.py
+                                                the database as migrations; moves to the root at the Supabase step
+  Acris/                                        a source
+    rulebook/   acris.py · Acris.md             the source's rules as one module, and its authority
+    workflow/   reproduction/ enumeration/ synchronization/ registration/ documentation/
+                                                a pair per folder: `Acris <Lane>.md` (its authority) · `Acris <Lane>.py` (its one program)
+    update/     Acris Update.md · Acris Update.py   the board: one program, two tabs in Supabase
+  Richmond/     the same
+```
+
+Three levels, one shape (login 2026-09-05): a **lane** is one program in its own folder, run alone from there -
+`python "Acris Documentation.py" --drive NYCCRED1` is the whole command; a **source** is its lanes together,
+configured in its fleet program (`Acris Reproduction.py`); the **phase** is every source's fleet, kicked off as
+configured (`Reproduction/workflow/Reproduction.py`). Every folder that holds code holds a pair - the md is that
+thing's own authority, the py its one program - and a proof beside it (`test_*.py`) that asks nothing of any source.
+Nothing is loose: a source folder is its three folders; the phase folder is its three folders, the database folder and
+the sources. The phase's authority is `Reproduction/workflow/Reproduction.md`; the rulebook's is
+`Reproduction/rulebook/Rulebook.md`.
+
 ## The phase: reproduction
 
-Two sources, `acris` and `richmond`. Per source one workflow table, one row per document, three cells: `doc_id` · `registry` · `document`. No URL or key columns: every URL is minted from the id. Each source has four lanes, each its own code in its own folder, toggled independently and configurable in width (1x40, 1x20, one entry of 100 split 20/40/40); three of them fill the cells.
+Two sources, `acris` and `richmond`. Per source one workflow table, one row per document, three cells: `doc_id` ·
+`registry` · `document`. No URL or key columns: every URL is minted from the id. Each source has four lanes, each its
+own code in its own folder, toggled independently and configurable in width; three of them fill the cells.
 
 | lane | job | fills |
 |---|---|---|
@@ -23,24 +62,27 @@ Two sources, `acris` and `richmond`. Per source one workflow table, one row per 
 | registration | the recorded details, by a URL minted from the id stem; no navigation step | `registry` |
 | documentation | the document, by minted access; saved to the drive, its full One Touch path recorded | `document` |
 
-**The cell rule.** Each lane fills its own cell and nothing else. A cell holds the fill or one of two words: `pending` (recorded but not yet served, inside the source's window; it stays in the backfill until it becomes the fill or `absent`) or `absent` (checked: there is none). Nothing else can go in a cell; the table itself refuses it. Anything but empty counts as landed.
+**The cell rule.** Each lane fills its own cell and nothing else. A cell holds the fill or one of two words: `pending`
+(recorded but not yet served, inside the source's window; it stays in the backfill until it becomes the fill or
+`absent`) or `absent` (checked: there is none). Nothing else can go in a cell; the table itself refuses it. Anything
+but empty counts as landed.
 
-**Two workstations, no overlap.** The table is the only to-do list. A lane calls `claim()` for a slice of empty cells with its name and an expiry on them, atomic and skip-locked so two machines never receive the same document; it fills them with `land()` once a minute, which drops the claims; expired claims go back on the list. Each running lane writes `heartbeat()` once a minute. Synchronization runs at home; registration and documentation on any machine.
+**Two workstations, no overlap.** The table is the only to-do list. A lane calls `claim()` for a slice of empty cells
+with its name and an expiry on them, atomic and skip-locked so two machines never receive the same document; the
+pendings due for a re-check come first. It fills them with `land()` once a minute, which drops the claims; expired
+claims go back on the list. Each running lane writes `heartbeat()` once a minute. Synchronization runs at home;
+registration and documentation on any machine.
 
-**The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells filled against rows), tab 2 is the lanes (each cell filled against rows), both with 60-second and 5-minute rate, increase, percent and eta, landed, needed, percent of total, status and as-of. The status follows the lane's own heartbeat: `active` (fresh heartbeat, landed rising) · `pending` (no fresh heartbeat, not complete: paused or parked) · `stalled` (the lane's last word is a refusal or a wall; a refusal parks at once) · `complete` (100 %).
+**The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells
+filled against rows), tab 2 is the lanes (each cell filled against rows), both with 60-second and 5-minute rate,
+increase, percent and eta, landed, needed, percent of total, status and as-of. The status follows the lane's own
+heartbeat: `active` (fresh heartbeat, landed rising) · `pending` (no fresh heartbeat, not complete: paused or parked) ·
+`stalled` (the lane's last word is a refusal or a wall; a refusal parks at once) · `complete` (100 %).
 
-## Layout
-
-```
-Reproduction/
-  SCHEMA.md                       the concept, in login's words
-  lane.py · cloud.py · storage.py the pieces every lane shares
-  supabase/migrations/            one numbered SQL file per dictated decision; supabase/db_push.ps1 applies them
-  Acris/     rulebook/ (acris.py · Acris.md) · workflow/{reproduction,enumeration,synchronization,registration,documentation}/ · update/
-  Richmond/  rulebook/ (richmond.py · Richmond.md) · the same
-```
-
-In every lane folder a pair named for the source and the lane: `Acris Documentation.md` (that lane's authority) and `Acris Documentation.py` (its one program). `workflow/reproduction/` holds the source's authority and the fleet program that runs the whole cycle; `update/` holds the board pair; `rulebook/` holds the source's rules as one module and that module's authority (`acris.py` · `Acris.md`). A source folder is those three folders and nothing loose. Everything about a source lives in its folder; everything about the phase lives at the phase level. There is nothing else at the top. A lane is launched from its own folder: go to Acris, workflow, documentation, and `python "Acris Documentation.py" --drive NYCCRED1` is the whole command.
+**The three managers (login 2026-09-04).** On the acris document lane the batch manager is the cycle itself (the exit
+pool settled in one block, one entry, a fresh batch); the rate manager enters with one worker and adds one every 5 s
+until the docs/s meets the band, then adjusts every window under the request ceiling; the session manager ends the
+session at 1,000,000 requests and hands back to the batch manager. Knobs in the fleet program, never code.
 
 ## Rules that do not bend
 
