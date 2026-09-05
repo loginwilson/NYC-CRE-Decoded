@@ -40,3 +40,7 @@ __pycache__/
 # os
 .DS_Store
 Thumbs.db
+
+# the population step's working files live beside it and never enter git
+population.*.json
+population.*.jsonl
