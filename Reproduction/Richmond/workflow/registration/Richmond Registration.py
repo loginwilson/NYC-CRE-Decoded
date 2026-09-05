@@ -74,7 +74,7 @@ class Registration:
     """The monitor (feed + land on the lane's main thread) and what one walker does with one page."""
     source, lane_name = "richmond", "registration"
     ua = richmond.UA
-    noun = "pages"                # the PROGRESS line's word for an answered item; registries are in the status
+    noun = "detail batches"       # the PROGRESS line's word for an answered item (a details item with a registry in it); pages and registries are in the status
     needs_registry = False
 
     def __init__(self, here, args):

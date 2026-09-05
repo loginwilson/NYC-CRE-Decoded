@@ -238,6 +238,8 @@ class Synchronization:
             try:
                 n = crew.cloud.insert_ids(list(new_ids))
             except Exception as e:
+                with crew.lock:
+                    crew.results = results + crew.results           # the answers stay on the crew: read again next minute (their windows are asked again only if lost)
                 lane._log(ctx, "synchronization: could not land %d ids (%s) - kept, next minute" % (len(new_ids), lane.reason(e)))
                 return
             self.seen.update(new_ids)

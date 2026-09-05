@@ -1,4 +1,4 @@
-# Richmond — registration
+# Richmond Registration
 
 One program, `Richmond Registration.py`, beside this file. It fills the **registry** cell of every richmond row that needs one: the recorded details the county publishes on a document's detail page, as JSON. Documentation reads the image in its own pass; this lane never touches the document cell.
 
@@ -8,7 +8,7 @@ python "Richmond Registration.py"                       afterwards registration.
 python "Richmond Registration.py" --width 4 --every 900 --days 30 --pace 0.3 --pending-age "1 hour"
 ```
 
-The cycle's authority is `../reproduction/Richmond Reproduction.md`; the shared machinery (the crew and its staggered births - here every walker keeps its OWN session, the county's grant being per session - the outbox, the heartbeat, the refusal park, the hang-up and wall breakers, the width control, the lock) is `Reproduction/lane.py` and is not repeated here. The hang-up is DORMANT at this county (no session close was ever measured here - the drumroll rule, `RICHMOND REPRODUCTION.md` §3): it fires only when the wire itself dies, and then the cut pages and details are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next walk, a details item releasing its window's count so the window can close), 60 s of silence, one re-entry with births 0.4 s apart (the county's measured handshake stagger); four refused re-entries in a row park it.
+The cycle's authority is `../reproduction/Richmond Reproduction.md`; the shared machinery (the crew and its staggered births - here every walker keeps its OWN session, the county's grant being per session - the outbox, the heartbeat, the refusal park, the hang-up and wall breakers, the width control, the lock) is `Reproduction/rulebook/lane.py` and is not repeated here. The hang-up is DORMANT at this county (no session close was ever measured here - the drumroll rule, `Richmond Reproduction.md` §3): it fires only when the wire itself dies, and then the cut pages and details are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next walk, a details item releasing its window's count so the window can close), 60 s of silence, one re-entry with births 0.4 s apart (the county's measured handshake stagger); four refused re-entries in a row park it.
 
 ## The rule that shapes this lane: the grant
 
@@ -27,9 +27,9 @@ Every worker holds its own keep-alive session (the grant is per session), born s
 
 - **The trailing window.** Every `--every` seconds (900: the old heal cadence) the lane walks the trailing `--days` (30, the county's silent cap on a date range) — page 1 of the window, then pages 2..N fanned out across the workers, each page's needed ids as a `details` item. A page whose ids the table already holds filled costs the county one listing request and nothing more.
 - **The catch-up.** On a start, if the edge is older than the trailing window, the days from the edge + 1 to the day before the window are walked first, in 30-day windows.
-- **The edge** (`registration.edge.json`) is the last day whose registries were walked. It moves only after a window's pages have all answered and its details are all landed, never on an empty-looking page, and never past an earlier window still open or holed. The first start must name it (`--edge`); the file refuses an `--edge` that disagrees with it (remove the file if the day is meant to change).
+- **The edge** (`registration.edge.json`) is the last day whose registries were walked. It moves only after a window's pages have all answered and its details are all landed or holed (a holed detail releases its window - see Holes), never on an empty-looking page, and never past an earlier window still open or holed. The first start must name it (`--edge`); the file refuses an `--edge` that disagrees with it (remove the file if the day is meant to change).
 - **The control.** Before the first walk and before every walk the lane asks a window known to hold documents (`richmond.CONTROL`: 2026-08-19..20, 315 rows). If page 1 parses no rows, the parser is broken and no empty page may be believed: the lane parks with `PROBE BROKEN` (exit 3) until the parser is re-proven.
-- **Holes.** An item that fails three asks (wire, wall, the shell) is written to `registration.holes.jsonl` and asked again at the next walk. A detail that fails three asks is a hole by id.
+- **Holes.** An item that fails three asks (wire, wall, the shell) is written to `registration.holes.jsonl` and asked again at the next walk - while its day is inside the trailing window; an older hole is the audit's to find (enumeration lists what the table lacks). A detail that fails three asks is a hole by id: it releases its window's count so the edge can move, and the next walk over that day re-lists it because the table still says the id needs work.
 
 ## The value
 
@@ -65,3 +65,7 @@ The walk is the work list. Two workstations walking the same window would spend 
 
 - **Offline** (`test_richmond_reg_offline.py`): the parser on a page in the county's shape — both `Document No.` labels, blank book/page, BBLs, the party columns, the four image states, the premature detail, the shell as `None`; the walker's order in one session (page, then details), the shell asked again, three wire failures raising `Transport`, a 503 raising `HTTPStatus`, a block page raising `Refused`; the monitor — control first, the catch-up from the edge, pages 2..N fanned out, a `details` item carrying only the ids the table needs, both a dict and a `pending` landed through the outbox, the outbox holding a landing through a cloud hiccup, the edge moving only when the window is complete, holes after three asks (page, detail, control), the next walk re-asking the holes, the broken control parking with code 3, the fail-closed edge file.
 - **Live cloud simulation** (`test_richmond_reg_sim.py`): throwaway `RC_9900000xx` rows with empty / `pending` / filled registries; `cloud.todo` returns the empty and the *due* pendings only; a landing fills the cells and moves the lane's counters; a re-ask after the pending age; cleanup + reconcile. No request to the county.
+
+## History
+
+2026-09-05 — the review against the code: the edge's rule states the release a holed detail gives its window, and the limit - a hole older than the trailing window is not re-walked by this lane, the audit finds it; the PROGRESS line's noun for an answered item is `detail batches` (it counted details items with a registry, not pages); the proofs `test_richmond_reg_offline.py`, `test_richmond_reg_sim.py` and `../reproduction/test_richmond_rebatch.py` now live in the repo beside what they prove.

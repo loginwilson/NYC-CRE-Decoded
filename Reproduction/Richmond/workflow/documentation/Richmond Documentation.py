@@ -6,8 +6,8 @@ the clerk and PULLS the pdf from the NY State courts viewer in one breath, saves
 by --drive, and records its full One Touch path in the `document` cell - or the verdict word: pending
 (no image yet, recorded inside the scan lag) or absent (checked: none).
 
-    python "Richmond Documentation.py" --drive NYCCRED1          home
-    python3 "Richmond Documentation.py" --drive NYCCRED2         workstation 2
+    python "Richmond Documentation.py" --drive OneTouch          home
+    python3 "Richmond Documentation.py" --drive <label>         workstation 2
 
 This file's own authority is Richmond Documentation.md beside it; the cycle's is ../reproduction/Richmond Reproduction.md.
 
@@ -40,7 +40,7 @@ The rules are kept from the lane that ran before this one (rc_lane.py, rc_pdf_pu
                 (the claims expire and come back), wait 60 s, re-enter once, births 0.4 s apart
   maturation    a `pending` comes back from the claim after --pending-age and is minted again; past
                 the 7-day lag it lands `absent` - the old 4 AM rc_pdf_state --apply pass lives inside
-                this lane and cannot be separated from it (RICHMOND REPRODUCTION.md, the 4 AM tasks)
+                this lane and cannot be separated from it (Richmond Reproduction.md, the 4 AM tasks)
 
 Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash · 6 drive gone.
 """
@@ -111,7 +111,7 @@ class Documentation:
         clerk's cookies from one GET of its front door."""
         s = crew.session
         with self.prep_lock:
-            if self.prepared == id(s):
+            if getattr(s, "_prepared", False):     # the session object itself is marked: after a re-entry the old id could be reused
                 return
             s.mount(richmond.IAPPS, requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=lane.MAX_WIDTH + 4,
                                                                   max_retries=0, pool_block=True))
@@ -119,7 +119,7 @@ class Documentation:
                 crew.get(richmond.BASE + "/", richmond.BASE + "/", timeout=60)
             except lane.HTTPStatus:
                 pass                                      # the front door's status is not the point; the cookies are
-            self.prepared = id(s)
+            s._prepared = True
 
     def _get(self, crew, url, headers, timeout, allow_redirects, stream=False):
         """A request on the crew's session with the crew's accounting; the caller closes the response."""
@@ -177,8 +177,8 @@ class Documentation:
             probe = self._probe(crew, doc_id)
             if probe is None:
                 raise lane.Retry("no probe document available - the hold is released unproven; asked again later")
-            probe_id, ok = probe
-            if ok:
+            probe_id, answer = probe
+            if answer == "served":
                 self.restricted.add(doc_id)
                 try:
                     with self.restricted_path.open("a", encoding="utf-8") as f:
@@ -189,8 +189,11 @@ class Documentation:
                 lane._log(crew.ctx, "documentation: VERDICT - %s is RESTRICTED (probe %s returned a pdf): recorded absent, never asked again;"
                           " the lane resumes" % (doc_id, probe_id))
                 return "restricted"
-            raise richmond.Refused("the courts host refused %s (%d) AND the probe %s - the lane is refused; STOP, no retry, no rotation"
-                                   % (doc_id, code, probe_id))
+            if answer == "refused":
+                raise richmond.Refused("the courts host refused %s (%d) AND the probe %s - the lane is refused; STOP, no retry, no rotation"
+                                       % (doc_id, code, probe_id))
+            raise lane.Retry("HTTP %d on %s, and the probe %s answered neither a pdf nor a refusal (%s) - unproven; asked again later"
+                             % (code, doc_id, probe_id, answer))
         finally:
             self.hold.clear()
             self.arbiter.release()
@@ -202,7 +205,7 @@ class Documentation:
 
     def _probe(self, crew, doc_id):
         """Borrow a different claimed document from the crew's queue, mint and pull it, put it back.
-        -> (probe id, served) or None when no probe could be minted."""
+        -> (probe id, "served" | "refused" | "HTTP <n>" / "not a pdf") or None when no probe could be minted."""
         borrowed = []
         try:
             for _ in range(5):
@@ -222,11 +225,15 @@ class Documentation:
                     continue
                 r = self._get(crew, token, richmond.PULL_HEADERS, (10, 90), allow_redirects=True, stream=True)
                 try:
-                    ok = r.status_code == 200 and richmond.is_pdf(r.content)
-                    refused = r.status_code in (401, 403)
+                    if r.status_code == 200 and richmond.is_pdf(r.content):
+                        answer = "served"
+                    elif r.status_code in (401, 403):
+                        answer = "refused"
+                    else:
+                        answer = "HTTP %d" % r.status_code if r.status_code != 200 else "not a pdf"   # a 500, a 404, an html page: proves nothing
                 finally:
                     r.close()
-                return pid, (ok and not refused)
+                return pid, answer
             return None
         finally:
             for item in borrowed:
@@ -283,7 +290,7 @@ def role(drive_root, args):
 
 def main():
     ap = argparse.ArgumentParser(description="richmond documentation: mint on the clerk, pull from the courts, one entry, N workers")
-    ap.add_argument("--drive", required=True, help="label of the drive to write to (NYCCRED1 at home, NYCCRED2 on workstation 2)")
+    ap.add_argument("--drive", required=True, help="label of the drive to write to (the volume label: OneTouch at home, workstation 2's own)")
     ap.add_argument("--fresh-days", type=int, default=richmond.IMAGE_LAG_DAYS,
                     help="a document recorded within this many days with no image is pending, not absent (the measured scan lag)")
     ap.add_argument("--cooldown", type=int, default=600, help="seconds every worker holds while a 401/403 from the courts host is arbitrated")

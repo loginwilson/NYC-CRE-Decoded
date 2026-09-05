@@ -18,16 +18,16 @@ One machine: the edge is local state. `--width` defaults to 4 walkers (the day w
 | rule | what the lane does | origin |
 |---|---|---|
 | the edge | `synchronization.edge.json` holds the last day whose listing was walked. A start without it needs `--edge`, never a guess. The edge moves only over windows whose ids are in the table and never past a window still in flight or holed, so a crash re-walks from the last contiguous day and loses nothing | the acris lane's edge; the census's last swept day |
-| the day | today's listing every `--every` seconds; a new filing lands within seconds | rc_lane's probe every 10 s (RICHMOND REPRODUCTION.md §1) |
+| the day | today's listing every `--every` seconds; a new filing lands within seconds | rc_lane's probe every 10 s (Richmond Reproduction.md §1) |
 | the heal | the trailing `--heal-days` (30, inclusive) every `--heal-every` seconds (15 min); never a window longer than the county's cap | rc_lane's rd heal, 15 min over 30 days; the 30-day cap answers a silent zero beyond it |
 | catch-up | on a start, the days between the edge and the heal window are walked first, in windows of at most 30 days | the census's resumable windows |
 | control first | a window known to hold documents (2026-08-19..20, 315 rows) is asked at start and before every heal; if it parses nothing, the parser is broken and the lane parks (exit 3) rather than believing empty answers | rc_window.control, 2026-08-21: a sync printed level for hours on a false zero |
 | a blank is an answer | the county listed nothing for that day: weekends, holidays, early morning | the listing is the county's own |
-| an error is not an absence | a page that fails is asked again (three asks: once by the crew, then by the monitor); a window that keeps failing is recorded in `synchronization.holes.jsonl` and the next heal asks it again | rc_rd_walk, 2026-08-21: the retry unit must never be bigger than the failure unit |
+| an error is not an absence | a page that fails is asked again (three asks by the monitor; each time a transport error is retried once more by the crew); a window that keeps failing is recorded in `synchronization.holes.jsonl` and the next heal asks it again | rc_rd_walk, 2026-08-21: the retry unit must never be bigger than the failure unit |
 | two namespaces | the internal id is ours: `RC_<internal>`; the instrument number repeats across eras and is never a key | measured 2026-08-21 |
 | the cell | the `doc_id` only; the counters move with the insert in the same transaction | the cell rule; `insert_ids()` |
 | ids landed once | the monitor remembers the ids it has landed for the heal window and sends only new ones to the cloud | ten-second probes must not re-send the day's ids |
-| one entry, one door, refusal, hang-up, wall, width | shared with every lane; a county refusal shape (captcha, access denied, block page) is a `lane.Refused`. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every walker a transport error inside 60 s with nothing answered for 10 s - and then the cut windows are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next heal, the day window at the next tick, a control before the heal), 60 s of silence, one re-entry with births 0.4 s apart; four refused re-entries in a row park it | lane.py; richmond.py; RICHMOND REPRODUCTION.md §3 (the drumroll rule) |
+| one entry, one door, refusal, hang-up, wall, width | shared with every lane; a county refusal shape (captcha, access denied, block page) is a `lane.Refused`. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every walker a transport error inside 60 s with nothing answered for 10 s - and then the cut windows are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next heal, the day window at the next tick, a control before the heal), 60 s of silence, one re-entry with births 0.4 s apart; four refused re-entries in a row park it | lane.py; richmond.py; Richmond Reproduction.md §3 (the drumroll rule) |
 | identify honestly | the user-agent names this project | measured 2026-08-18; the standing line on bot detection |
 
 ## Calibrations
@@ -48,9 +48,11 @@ A date edge sees what the county lists for the dates it re-reads. A document lis
 
 ## Working files
 
-Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`. Exit codes: 0 stopped · 2 refused · 3 four re-entries in a row refused, or the probe broken (the lane parked itself) · 4 wall · 5 crash.
+Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.log` (every launch's output, appended), `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`. Exit codes: 0 stopped · 2 refused · 3 four re-entries in a row refused, or the probe broken (the lane parked itself) · 4 wall · 5 crash.
 
 ## History
+
+2026-09-05 — the review against the code: when `insert_ids` failed, the answered windows were already forgotten and their ids neither in `seen` nor re-asked - lost for the run, and the edge could move past them; the answers now stay on the crew for the next minute. The three asks are the monitor's; the crew's own transport retry comes on top.
 
 2026-09-04 (night) — the review against the record: `rebatch` added so a dead wire can never leave a window stuck as in flight (the edge would have frozen behind it); births set to the county's 0.4 s; the inherited cycle named dormant. Proven again offline and by the simulation.
 

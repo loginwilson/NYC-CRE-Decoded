@@ -3,13 +3,13 @@
 Each lane is its own program (Richmond Synchronization.py, Richmond Registration.py, Richmond
 Documentation.py) with its own lock, park, control file and log.  This program launches them together,
 in order, one door at a time, and watches them: it relaunches what a relaunch can cure and never
-relaunches what a person must decide.  The machinery is ../../../fleet.py, shared with every source;
+relaunches what a person must decide.  The machinery is ../../../rulebook/fleet.py, shared with every source;
 this file is the richmond site: its lanes in the cycle's order, their widths, its edge.
 
-    python "Richmond Reproduction.py" --drive NYCCRED1 --edge 2026-08-25      the cycle at home: synchronization x4, registration x4,
+    python "Richmond Reproduction.py" --drive OneTouch --edge 2026-08-25      the cycle at home: synchronization x4, registration x4,
                                                                               documentation x8 - one process per lane, launched --entry-gap apart
                                                                               (--edge only on the very first start: the last day walked)
-    python "Richmond Reproduction.py" --drive NYCCRED2 --lanes documentation:8
+    python "Richmond Reproduction.py" --drive <label> --lanes documentation:8
                                                                               workstation 2: documentation only - synchronization and
                                                                               registration WALK the county's listing, and two walkers of the
                                                                               same window would spend the county's requests twice (one station)

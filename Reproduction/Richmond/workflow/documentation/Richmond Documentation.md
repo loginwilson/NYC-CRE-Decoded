@@ -4,8 +4,8 @@ The documentation lane of the richmond reproduction, as one program: `Richmond D
 
 ## Launch
 
-    python "Richmond Documentation.py" --drive NYCCRED1          home
-    python3 "Richmond Documentation.py" --drive NYCCRED2         workstation 2
+    python "Richmond Documentation.py" --drive OneTouch          home
+    python3 "Richmond Documentation.py" --drive <label>         workstation 2
 
 The same file runs on every workstation. `--drive` names the drive by its label. `--width` defaults to 8 (the measured pull width on the courts host). While it runs, `documentation.control` beside it takes `width=N` or `stop`. `--also registration:4` hosts the registration crew in the same process through its own entry. `--limit N` is a test run. A lane that parked itself refuses to start again until `--unpark`.
 
@@ -35,11 +35,11 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 | two sources agree | `absent` needs the registry's `image_state` to agree; a registry that says present sends the document back to be asked again | rc_lane._no_image, 2026-08-26 |
 | unreadable date | a recorded date the lane cannot read keeps the document `pending`, never `absent` | rc_lane._in_lag |
 | whole or nothing | the pdf is written to a `.part` file and renamed | 2026-09-03 |
-| restricted vs refused | a 401/403 from the courts host is ambiguous: sealed records refuse at any rate. Every worker holds `--cooldown`, then ONE probe of a **different** claimed document decides — probe served: the document is RESTRICTED, its evidence goes to `documentation.restricted.jsonl`, the cell records `absent`, it is never asked again (the list survives a restart); probe also refused: the lane is refused — park, exit 2, no retry, no rotation | rc_lane.refusal_verdict; RC_1873622 (an exhibit filed to the City) silenced a 190,594-document run on 2026-08-24 — "richmond should never have stalled" |
+| restricted vs refused | a 401/403 from the courts host is ambiguous: sealed records refuse at any rate. Every worker holds `--cooldown`, then ONE probe of a **different** claimed document decides — probe served: the document is RESTRICTED, its evidence goes to `documentation.restricted.jsonl`, the cell records `absent`, it is never asked again (the list survives a restart); probe also refused (401/403): the lane is refused — park, exit 2, no retry, no rotation; a probe that answers neither a pdf nor a refusal (a 500, an html page) proves nothing - the document is asked again later and the lane resumes | rc_lane.refusal_verdict; RC_1873622 (an exhibit filed to the City) silenced a 190,594-document run on 2026-08-24 — "richmond should never have stalled" |
 | refusal on the clerk | a captcha, access-denied or block page on the mint: park at once, exit 2 | richmond.check_refused |
 | failures never stop it | a fetch error leaves the document empty for a later pass and writes the reason to `documentation.fails.jsonl` | login 2026-09-03 |
-| hang-up, wall, width, one door, drive, pending recheck, no overlap, the last word | shared with every lane. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every worker a transport error inside 60 s with nothing landed for 10 s - and then hangs up at once, drops the cut batch (the claims expire and come back), waits 60 s with no line open, re-enters once behind a settled exit pool with births 0.4 s apart; four refused re-entries in a row park it. 40 consecutive 503/429 park the lane; `documentation.lock`; the drive checked every minute; pendings re-asked after `--pending-age`; the claim table hands each workstation its slice; every stop leaves its reason | lane.py; RICHMOND REPRODUCTION.md §3 (the drumroll rule) |
-| maturation | a `pending` comes back from the claim after `--pending-age` and is minted again; past the 7-day lag it lands `absent`. The old 4 AM `rc_pdf_state --apply` pass lives inside this lane and cannot be separated from it | RICHMOND REPRODUCTION.md, the 4 AM tasks section: "fold it into the lane" |
+| hang-up, wall, width, one door, drive, pending recheck, no overlap, the last word | shared with every lane. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every worker a transport error inside 60 s with nothing landed for 10 s - and then hangs up at once, drops the cut batch (the claims expire and come back), waits 60 s with no line open, re-enters once behind a settled exit pool with births 0.4 s apart; four refused re-entries in a row park it. 40 consecutive 503/429 park the lane; `documentation.lock`; the drive checked every minute; pendings re-asked after `--pending-age`; the claim table hands each workstation its slice; every stop leaves its reason | lane.py; Richmond Reproduction.md §3 (the drumroll rule) |
+| maturation | a `pending` comes back from the claim after `--pending-age` and is minted again; past the 7-day lag it lands `absent`. The old 4 AM `rc_pdf_state --apply` pass lives inside this lane and cannot be separated from it | Richmond Reproduction.md, the 4 AM tasks section: "fold it into the lane" |
 
 ## Calibrations
 
@@ -55,17 +55,19 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 
 ## Working files
 
-Beside this file, never in git: `documentation.lock`, `documentation.control`, `documentation.parked`, `documentation.outbox.jsonl`, `documentation.fails.jsonl`, `documentation.restricted.jsonl` (the verdict evidence: id, code, probe, time). Exit codes: 0 stopped · 2 refused · 3 four re-entries in a row refused (the lane parked itself) · 4 wall · 5 crash · 6 drive gone.
+Beside this file, never in git: `documentation.lock`, `documentation.log` (every launch's output, appended), `documentation.control`, `documentation.parked`, `documentation.outbox.jsonl`, `documentation.fails.jsonl`, `documentation.restricted.jsonl` (the verdict evidence: id, code, probe, time). Exit codes: 0 stopped · 2 refused · 3 four re-entries in a row refused (the lane parked itself) · 4 wall · 5 crash · 6 drive gone.
 
 ## What it imports
 
-`Reproduction/lane.py`, `Reproduction/cloud.py`, `Reproduction/storage.py`, `Reproduction/Richmond/rulebook/richmond.py` (the mint url and its referer, the three outcomes, the pull headers, the lag, the path rule, the refusal detector).
+`Reproduction/rulebook/lane.py`, `Reproduction/rulebook/storage.py` (the cloud is reached through the crew), `Reproduction/Richmond/rulebook/richmond.py` (the mint url and its referer, the three outcomes, the pull headers, the lag, the path rule, the refusal detector).
 
 ## Open decision
 
 A RESTRICTED document is recorded `absent` (checked; the courts host refuses it at any rate) with its evidence kept beside the lane. The old lane left such rows empty and quarantined them only in memory, so every restart re-asked them and held the lane ten minutes each. `absent` lets completion reach 100 % and the evidence file says why; if login prefers a different word for a sealed record, it is one line.
 
 ## History
+
+2026-09-05 — the review against the code: the probe's verdict was two-valued - ANY non-pdf answer (a 500, a 404, an html page) read as "refused" and parked the lane with exit 2; now served / refused / unproven, and only a 401/403 on the probe refuses the lane. `prepare()` marks the session object (it remembered `id(session)`, which a re-entry's new session could reuse). The imports list is the code's; the working files list the log.
 
 2026-09-04 (night) — the review against the record: the cycle this lane inherits is dormant at this county and the row says so; births set to the county's 0.4 s; the maturation pass named as inside the lane. Nothing of the lane's own work changed. Proven again offline and by the simulation.
 

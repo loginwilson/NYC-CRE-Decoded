@@ -289,6 +289,9 @@ def census(args, c, rep, county):
             except Exception as ex:
                 failed.append((s, e, "%s: %s" % (type(ex).__name__, str(ex)[:100])))
                 continue
+            if county.stop.is_set():
+                failed.append((s, e, "stopped mid-window"))       # a cut window returned PARTIAL rows: never recorded as swept
+                return
             held, missing = compare(c, rows)
             ledger.record(s, e, rows, pages, missing)
             with county.lock:
@@ -417,7 +420,7 @@ def main():
                 else:
                     days = clamp_days(args.days, rep)
                     b = dt.date.today()
-                    wins = [(b - dt.timedelta(days=days), b)]
+                    wins = [(b - dt.timedelta(days=days - 1), b)]          # `days` inclusive days, as the walkers and richmond.windows() count them
                     what = "the trailing %d days" % days
                 listed, held, missing, unproven = audit_windows(args, c, rep, county, wins, what)
                 code = verdict(rep, listed, missing, unproven)

@@ -48,7 +48,7 @@ Three outcomes, never two - login 2026-08-25: "we have the url, if it doesnt sho
 | a redirect to a relative Location, or 200, or 404 | `noimage` - the endpoint answered and handed us no image; `fresh(registry)` then says `pending` (inside the lag) or `absent` |
 | 403, 429, 5xx | `error` - about us, never about the document; asked again |
 
-- The mint takes a bare id: no grant rule. `mint_referer(internal_id)` is the detail page it is reached from.
+- The mint takes a bare id: no grant rule. `mint_referer(internal_id)` is the detail page it is reached from (spelled `ViewDocumentInfo` as the browser sent it; `detail_url` spells the site's own link `viewDocumentInfo` - the county's routing answers both and both ran live).
 - The token EXPIRES (~10 min, 2026-08-22): mint and pull in one breath, never a buffer of tokens.
 - **The courts host gates on the user-agent** (2026-08-22, one variable, everything else identical): the library default `python-requests/2.34.2` hangs to a ReadTimeout at 45 s, 2 of 2; this project's honest `UA` answers 200 and the full PDF in 1.5 s, 2 of 2. So the pull carries the same honest string with `PULL_HEADERS` (Referer the clerk's front door, Accept `application/pdf,*/*`). A browser string was measured to buy nothing and would make the client dishonest.
 - `is_pdf(data)`: a PDF is a PDF only when the body starts `%PDF`.
@@ -57,7 +57,7 @@ Three outcomes, never two - login 2026-08-25: "we have the url, if it doesnt sho
 
 ## The access shape - and why the cycle is dormant here
 
-The county was measured under the DRUMROLL RULE (`RICHMOND REPRODUCTION.md` §3): no pacer, no governor, latency is the only governor; 160 concurrent connections ran 26 hours clean; restarts are free; the only safety is stop-on-refusal. What it objects to is a handshake burst - 160 cold TLS opens in one instant answered SSLError across the board - so births are 0.4 s apart and keep-alive removes every later handshake. The walkers keep the census's polite 0.3 s between the pages of one window, measured over 2.4 million requests without a trip. The courts host hangs the library-default user-agent and serves the honest one.
+The county was measured under the DRUMROLL RULE (`Richmond Reproduction.md` §3): no pacer, no governor, latency is the only governor; 160 concurrent connections ran 26 hours clean; restarts are free; the only safety is stop-on-refusal. What it objects to is a handshake burst - 160 cold TLS opens in one instant answered SSLError across the board - so births are 0.4 s apart and keep-alive removes every later handshake. Synchronization keeps the census's polite 0.3 s between the pages of one window and registration keeps it between the details of one page (its pages fan out across the walkers) - measured over 2.4 million requests without a trip. The courts host hangs the library-default user-agent and serves the honest one.
 
 The lanes inherit the cycle from `lane.py` (login's acris design: one entry, staggered births, a hang-up when the whole width dies with nothing landing, a 60-s wait, one re-entry on a fresh batch). At this county it is DORMANT: no session close was ever measured here, so the hang-up fires only when the wire itself dies (wifi, a dead host) - the right thing then. The walkers drop their cut windows and pages at a hang-up and ask them again at the next heal or walk; documentation drops its claims and takes fresh ones. login 2026-09-04: "the way it works doesnt require this whole batch, enter, stagger, redial, exit, rebatch approach ... richmond can just enter and hammer" - the record agrees.
 
@@ -79,6 +79,8 @@ The module imports `lane` (for `Refused`) and `storage` (the One Touch layout). 
 None. The county's refusal shapes are not preserved as files yet: a refusal here parks the lane with the reason written beside it, and the page can be re-fetched by hand once the lane is parked.
 
 ## History
+
+2026-09-05 — the review against the code: the 0.3-s pace is per page in synchronization and per detail in registration; the two spellings of the detail route named.
 
 2026-09-03 - the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the image section (two hosts, three outcomes, the honest user-agent at the courts host) added when the documentation lane was written. Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
 

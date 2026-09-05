@@ -1,6 +1,6 @@
 # Richmond Update
 
-The board of the richmond reproduction, as one program: `Richmond Update.py`. It always runs and only reads: every minute it takes the counters that the lanes keep exact, subtracts them from its own readings a minute and five minutes back, and writes the two tabs in the cloud. Its database is the two tables `reproduction.richmond_update` (tab 1: the phase) and `reproduction.richmond_update_lanes` (tab 2: one row per lane). The shared rules live in `Reproduction/board.py` - the same file the acris board runs on, so both boards say the same thing the same way; this file is the lane's own authority.
+The board of the richmond reproduction, as one program: `Richmond Update.py`. It always runs and only reads: every minute it takes the counters that the lanes keep exact, subtracts them from its own readings a minute and five minutes back, and writes the two tabs in the cloud. Its database is the two tables `reproduction.richmond_update` (tab 1: the phase) and `reproduction.richmond_update_lanes` (tab 2: one row per lane). The shared rules live in `Reproduction/rulebook/board.py` - the same file the acris board runs on, so both boards say the same thing the same way; this file is the lane's own authority.
 
 ## Launch
 

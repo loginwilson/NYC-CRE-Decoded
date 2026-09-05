@@ -12,21 +12,21 @@
 > **RICHMOND AUDIT** (the enumeration safety check — NOT part of the
 > cycle; run it whenever you want a proof).
 
-> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `SCHEMA.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `SCHEMA.md`, the lane md and `SCHEMA.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `fleet.py` roster is `Reproduction/fleet.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_lane.py`) are the lane programs under `workflow/`.
+> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `supabase/SCHEMA.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `supabase/SCHEMA.md`, the lane md and `supabase/SCHEMA.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `fleet.py` roster is `Reproduction/rulebook/fleet.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_lane.py`) are the lane programs under `workflow/`.
 
 ## 0 · THE FLEET PROGRAM — `Richmond Reproduction.py` (2026-09-03)
 
 The cycle's lanes as one launch: `Reproduction/Richmond/workflow/reproduction/Richmond Reproduction.py`
-in the NYC-CRE-Decoded tree, a thin site over the shared `Reproduction/fleet.py` (the same machinery
+in the NYC-CRE-Decoded tree, a thin site over the shared `Reproduction/rulebook/fleet.py` (the same machinery
 runs the acris fleet). Each lane is its own program with its own lock, park, control file and log; the
 fleet launches them in the cycle's order, one door at a time, and watches them. It relaunches what a
 relaunch can cure and never relaunches what a person must decide.
 
-    python "Richmond Reproduction.py" --drive NYCCRED1 --edge 2026-08-25     home: synchronization x4, registration x4, documentation x8 - one process per lane, 20 s apart; --edge on the FIRST start only
-    python "Richmond Reproduction.py" --drive NYCCRED2 --lanes documentation:8
+    python "Richmond Reproduction.py" --drive OneTouch --edge 2026-08-25     home: synchronization x4, registration x4, documentation x8 - one process per lane, 20 s apart; --edge on the FIRST start only
+    python "Richmond Reproduction.py" --drive <label> --lanes documentation:8
                                                                            workstation 2: documentation only (see "one station" below)
     python "Richmond Reproduction.py" status                                 this machine's lanes, and every workstation's heartbeats in the cloud
-    python "Richmond Reproduction.py" stop [lane]                            `stop` into the control file(s), a 90 s grace, then force
+    python "Richmond Reproduction.py" stop [lane]                            `stop` into the control file(s), a 180 s grace, then force
     python "Richmond Reproduction.py" width documentation=24                 into the lane's control file (read within a minute)
 
 | rule | what the fleet does | origin |
@@ -44,7 +44,7 @@ relaunch can cure and never relaunches what a person must decide.
 | a parked lane is never relaunched | the drive's return is the one exception, because the fleet can verify it | the park is the lane's word, or a person's |
 | logs appended, never truncated | `<lane>/<lane>.log` with a fleet banner at every launch | 2026-09-03 |
 | one fleet per machine | `reproduction.lock`; the lanes' own locks refuse a double, so a lane running by hand is left alone | trap 8 |
-| cross-station | `status` reads `reproduction.richmond_heartbeats` | SCHEMA.md |
+| cross-station | `status` reads `reproduction.richmond_heartbeats` | supabase/SCHEMA.md |
 
 Proven 2026-09-03 by the fleet simulation over fake `Richmond <Lane>.py` programs (the same
 simulation that proved the acris fleet, pointed at this site): the order and the gap; crashes
@@ -251,3 +251,5 @@ lane mints each one again, and past the 7-day lag (`richmond.IMAGE_LAG_DAYS`) it
 lands `absent` (`Richmond Documentation.md`, the maturation row). There is
 nothing to restore and no task to re-enable: the two 4 AM tasks stay disabled,
 and a long acris run can never be frozen by them again.
+
+**2026-09-05 05:xx - THE REVIEW OF EVERY FILE AGAINST THE CODE.** The fleet (shared `fleet.py`) handed `--edge` to every relaunch, and both walkers refuse an `--edge` that disagrees with their edge file - so a crash relaunch of synchronization or registration in a fleet started with `--edge` was refused and the lane stayed down; the edge goes on a lane's FIRST launch only now, as section 0 always said. A `stop` written to a control file was never cleared, so the next start read it at its first minute and left with 0 - the lane clears it when it acts and at start. The stop grace is 180 s (a lane reads `stop` on its minute, then joins its workers). The drive label in every launch line is the One Touch's real one (`OneTouch`). The documentation lane's probe verdict, the census's cut window and 31-day window, the monitor's lost insert - each in its lane's own md.
