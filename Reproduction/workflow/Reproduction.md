@@ -40,9 +40,9 @@ test_reproduction.py`, nothing asked of any source.
 ```
 Reproduction/
   rulebook/     lane.py · fleet.py · board.py · cloud.py · storage.py · rate_manager.py · requirements.txt   the rules every lane of every source shares (Rulebook.md)
+                schema/                                                                                    the phase's tables as numbered SQL, one file per dictated decision
   workflow/     Reproduction.md · Reproduction.py                                                          this file, and the phase run as one program
-  update/       Update.md                                                                                  the phase board across sources (a later migration)
-  supabase/     SCHEMA.md · migrations/ · db_push.ps1 · decoded_sql.py · test_claims.py                    the database, as migrations, until the Supabase step
+  update/       Update.md                                                                                  the phase board across sources (a later SQL decision)
   <Source>/
     rulebook/           <source>.py · <Source>.md                                          the source's rules as one module, and its authority
     workflow/
@@ -57,8 +57,8 @@ Reproduction/
 Every folder that holds code holds a **pair**: the md is that thing's own authority (what it does, its rules, its
 calibrations, its history), the py is its one program, runnable alone from its folder - `python "Acris
 Documentation.py" --drive OneTouch` is the whole command. A proof sits beside what it proves (`test_*.py`) and asks
-nothing of any source. A source folder is its three folders and nothing loose; the phase folder is its three folders,
-the database folder and the sources, and nothing loose.
+nothing of any source. A source folder is its three folders and nothing loose; the phase folder is its three folders
+and the sources, and nothing loose; the database's program is the project's, in the rulebook at the repo's root.
 
 The reproduction pair of a source is the cycle: its py is the fleet - one process per lane by default, launched one
 door at a time and watched (`--mega` hosts the crews in one process) - built on the rulebook's `fleet.py`. Each cycle
@@ -81,10 +81,11 @@ its own `<Source> Reproduction.md`.
 One Supabase project, one schema per phase: `reproduction`. Per source a workflow table (`acris`, `richmond`; one row
 per document, three cells `doc_id` · `registry` · `document`), two update tabs (`*_update`, `*_update_lanes`), a
 claims table and a heartbeats table; the functions `claim()`, `land()`, `heartbeat()`, `reconcile()` hold the
-cooperation rules so every workstation gets them by construction. The dictated concept is `../supabase/SCHEMA.md`; the
-migrations beside it are one numbered SQL file per dictated decision. The folder stays here until the Supabase step,
-then moves to the repo's root as the system's database (one project; each later phase its own schema). A master view
-over the sources' update tables is the phase board's later migration (`../update/Update.md`).
+cooperation rules so every workstation gets them by construction. The dictated concept is the section "The table" of
+`../rulebook/Rulebook.md`; the phase's schema is `../rulebook/schema/`, one numbered SQL file per dictated decision,
+applied and recorded by the project's program (`python ../../rulebook/supabase.py push`; the database as a whole is
+`../../rulebook/Supabase.md`). A master view over the sources' update tables is the phase board's later decision
+(`../update/Update.md`).
 
 ## History
 
@@ -93,3 +94,7 @@ entire phase itself code, which would kick off all reproductions ... I don't thi
 and the approved shape ("I like the rulebook workflow update approach ... and then you have all the sources
 underneath"). The phase's shared modules moved from loose files at the phase level into `rulebook/`, the schema doc
 into `supabase/`, and the phase README folded into this file.
+
+2026-09-05 — The database folder left the phase (login: "supabase shouldn't even be in reproduction"): its SQL to
+`../rulebook/schema/`, its dictated concept into `../rulebook/Rulebook.md`, its proof to `../rulebook/test_schema.py`,
+its program to the project's rulebook at the root (`rulebook/supabase.py` · `rulebook/Supabase.md`); the CLI's files retired.

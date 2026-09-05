@@ -25,7 +25,7 @@ No drive: the registry is text and lives in the cloud table only. `--width` defa
 | hang-up | the session closed (every worker a transport error inside 60 s, nothing landed for 10 s): hang up at once, drop the cut batch, wait `--redial-wait` (60 s, ×2 per refused re-entry, ÷2 per served), claim a fresh batch, re-enter once, births 5 s apart; four re-entries per incident, then park, exit 3 | the cycle, login 2026-09-04; see Acris Documentation.md |
 | wall | forty consecutive 503 or 429 with no success between: park, exit 4 | trap 2 |
 | pending goes back to the backfill | a registry pending is re-checked once its last check is `--pending-age` old, ahead of the empties | login 2026-09-03 23:5x |
-| no overlap | claim, land once a minute (or at 200 results) through `registration.outbox.jsonl`, heartbeat every minute | supabase/SCHEMA.md |
+| no overlap | claim, land once a minute (or at 200 results) through `registration.outbox.jsonl`, heartbeat every minute | rulebook/Rulebook.md |
 | the last word | every stop leaves its reason in the heartbeat and, for a park, in `registration.parked` | the board's status follows the lane |
 
 ## Calibrations

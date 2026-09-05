@@ -12,7 +12,7 @@
 > **RICHMOND AUDIT** (the enumeration safety check — NOT part of the
 > cycle; run it whenever you want a proof).
 
-> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `supabase/SCHEMA.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `supabase/SCHEMA.md`, the lane md and `supabase/SCHEMA.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `fleet.py` roster is `Reproduction/rulebook/fleet.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_lane.py`) are the lane programs under `workflow/`.
+> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `rulebook/Rulebook.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `rulebook/Rulebook.md`, the lane md and `rulebook/Rulebook.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `fleet.py` roster is `Reproduction/rulebook/fleet.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_lane.py`) are the lane programs under `workflow/`.
 
 ## 0 · THE FLEET PROGRAM — `Richmond Reproduction.py` (2026-09-03)
 
@@ -44,7 +44,7 @@ relaunch can cure and never relaunches what a person must decide.
 | a parked lane is never relaunched | the drive's return is the one exception, because the fleet can verify it | the park is the lane's word, or a person's |
 | logs appended, never truncated | `<lane>/<lane>.log` with a fleet banner at every launch | 2026-09-03 |
 | one fleet per machine | `reproduction.lock`; the lanes' own locks refuse a double, so a lane running by hand is left alone | trap 8 |
-| cross-station | `status` reads `reproduction.richmond_heartbeats` | supabase/SCHEMA.md |
+| cross-station | `status` reads `reproduction.richmond_heartbeats` | rulebook/Rulebook.md |
 
 Proven 2026-09-03 by the fleet simulation over fake `Richmond <Lane>.py` programs (the same
 simulation that proved the acris fleet, pointed at this site): the order and the gap; crashes

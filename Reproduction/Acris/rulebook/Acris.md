@@ -15,7 +15,7 @@ The rules every acris lane shares, as one module: `acris.py`. ACRIS is the Autom
 | a detail too short to trust | `MIN_DETAIL` = 20,000 bytes: a detail parsed from fewer bytes is suspect truncation and is never reported live | - |
 | the id a page is about | `detail_doc_id(html)`: the `DOCUMENT ID:` the page prints, None for the stub; `echoes(html, doc_id)`: the page prints the id that was asked for - a page that does not is a re-ask, never a failure and never a verdict (63 % of a floor's requests under load did not echo) | 2026-08-28 |
 
-Every URL is minted from the id. No URL, token or key is ever stored: the table holds `doc_id`, `registry`, `document` and `updated_at` (the re-check clock), nothing else (`../../supabase/SCHEMA.md`).
+Every URL is minted from the id. No URL, token or key is ever stored: the table holds `doc_id`, `registry`, `document` and `updated_at` (the re-check clock), nothing else (`../../rulebook/Rulebook.md`).
 
 ## The refusal
 

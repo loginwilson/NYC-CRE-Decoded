@@ -10,11 +10,14 @@ documents - the test refuses to run when reproduction.acris holds anything but T
   4. a wrong word is rejected by the cell rule
   5. heartbeat() from both hosts -> two rows
   6. delete the test rows (claims cascade), the test heartbeats and any test claim left; reconcile
-Uses decoded_sql.dsn() for the connection; never prints credentials."""
-import os, sys, json, threading
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+Uses the project's rulebook/supabase.py dsn() for the connection; never prints credentials."""
+import os, sys, json, threading, pathlib, importlib.util
 import psycopg2, psycopg2.errors
-from decoded_sql import dsn
+ROOT = pathlib.Path(__file__).resolve().parents[2]                       # rulebook -> Reproduction -> the repo
+_spec = importlib.util.spec_from_file_location("supabase_program", ROOT / "rulebook" / "supabase.py")
+_program = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_program)
+dsn = _program.dsn
 
 IDS = ["TEST-%04d" % i for i in range(1, 7)]
 PATH = r"D:\CRE Decoding System\Documents\acris\Manhattan\2004\08 Aug\TEST-0001.pdf"
@@ -22,7 +25,7 @@ REGISTRY = json.dumps({"doc type": "DEED", "test": True})
 
 
 def q(sql, params=None, fetch=True):
-    con = psycopg2.connect(dsn(), connect_timeout=30, application_name="test_claims")
+    con = psycopg2.connect(dsn(), connect_timeout=30, application_name="test_schema")
     try:
         with con.cursor() as cur:
             cur.execute(sql, params)

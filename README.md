@@ -9,15 +9,15 @@ phase is a folder at the root of this repo; only the first exists yet.
 | **CONSTRUCTION** | the event index, built from the reproduced documents (it never existed before - it is constructed, not re-constructed) | not started |
 | **PRODUCTION** | the products | not started |
 
-This repo is the process. The data is not in it. The concept of the first phase, in login's words, is
-`Reproduction/supabase/SCHEMA.md`.
+This repo is the process. The data is not in it. The concept of the first phase, in login's words, is the section
+"The table" of `Reproduction/rulebook/Rulebook.md`; the database that holds every phase is `rulebook/Supabase.md`.
 
 ## Three homes
 
 | what | where | shape |
 |---|---|---|
-| database | Supabase project **NYC CRE Decoded** (East US) | one schema per phase: `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table |
-| code | this repo | `Reproduction/` with the same three folders at every level (below) |
+| database | Supabase project **NYC CRE Decoded** (East US); `rulebook/Supabase.md` · `rulebook/supabase.py` | one schema per phase: `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table; each phase's schema as numbered SQL in `<Phase>/rulebook/schema/` |
+| code | this repo | the project's `rulebook/` at the root, then `Reproduction/` with the same three folders at every level (below) |
 | documents | the One Touch, `D:\CRE Decoding System\Documents\` | `source\borough\year\month\id.pdf` (richmond has no borough); a second workstation mounts its drive under the same letter and layout, then transfers |
 
 Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or printed.
@@ -25,13 +25,12 @@ Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or prin
 ## The layout - the same three folders at every level
 
 ```
+rulebook/       Supabase.md · supabase.py       the project's rules: the one database (one project, one schema per phase) and its program
 Reproduction/                                   the phase
-  rulebook/     lane.py · fleet.py · board.py · cloud.py · storage.py · rate_manager.py · requirements.txt · Rulebook.md
-                                                the rules every lane of every source shares, written once
+  rulebook/     Rulebook.md · lane.py · fleet.py · board.py · cloud.py · storage.py · rate_manager.py · requirements.txt · schema/
+                                                the rules every lane of every source shares, written once; schema/ = the phase's tables as numbered SQL
   workflow/     Reproduction.md · Reproduction.py   the phase's authority, and every source's fleet kicked off as configured
-  update/       Update.md                       the phase board across sources (a later migration)
-  supabase/     SCHEMA.md · migrations/ · db_push.ps1 · decoded_sql.py · test_claims.py
-                                                the database as migrations; moves to the root at the Supabase step
+  update/       Update.md                       the phase board across sources (a later SQL decision)
   Acris/                                        a source
     rulebook/   acris.py · Acris.md             the source's rules as one module, and its authority
     workflow/   reproduction/ enumeration/ synchronization/ registration/ documentation/
@@ -45,9 +44,9 @@ Three levels, one shape (login 2026-09-05): a **lane** is one program in its own
 configured in its fleet program (`Acris Reproduction.py`); the **phase** is every source's fleet, kicked off as
 configured (`Reproduction/workflow/Reproduction.py`). Every folder that holds code holds a pair - the md is that
 thing's own authority, the py its one program - and a proof beside it (`test_*.py`) that asks nothing of any source.
-Nothing is loose: a source folder is its three folders; the phase folder is its three folders, the database folder and
-the sources. The phase's authority is `Reproduction/workflow/Reproduction.md`; the rulebook's is
-`Reproduction/rulebook/Rulebook.md`.
+Nothing is loose: a source folder is its three folders; the phase folder is its three folders and the sources; the root
+is the phases and the project's own rulebook. The phase's authority is `Reproduction/workflow/Reproduction.md`; the
+rulebook's is `Reproduction/rulebook/Rulebook.md`; the database's is `rulebook/Supabase.md`.
 
 ## The phase: reproduction
 
