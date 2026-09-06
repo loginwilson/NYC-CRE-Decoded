@@ -57,3 +57,10 @@ Beside this file, never in git: `synchronization.edge.json`, `synchronization.ho
 2026-09-04 (night) — the review against the record: `rebatch` added so a dead wire can never leave a window stuck as in flight (the edge would have frozen behind it); births set to the county's 0.4 s; the inherited cycle named dormant. Proven again offline and by the simulation.
 
 2026-09-03 — written from `rc_lane.py` (the probe and the heal cadence), `rc_window.py` (the listing route, the row pattern, the control) and the richmond audit's window rules, every line read. Proven offline against a fake crew and a fake cloud (the control first, the catch-up from the edge, the heal window inclusive of thirty days, ids landed once, the edge moving only after the rows are in, a hole after three failed asks, a control that fails three asks re-asked, a broken control parking the lane, the fail-closed edge file) and by a simulated walk against the live cloud with throwaway ids and no county request: a catch-up window, a heal window, the day window with a filing appearing mid-run, a window failing every ask recorded as a hole, the edge file at today, the counters moved by exactly the rows inserted. Not yet proven: a real listing read from the lane, which waits for the data move.
+
+2026-09-05 23:54 — THE FIRST REAL RUN, against the cloud with the rows in (login: "spend the night resyncing ... Richmond, you
+could do more, but one batch"): `--edge 2026-08-31` (the old rc_lane's last live page was 09/01/2026 page 7 at 12:50; the
+cloud's newest recorded date was 2026-09-01), the calibrated width 4. Exit pool one block (173.239.217), entered 23:54:17,
+births 0 s apart. The control window parsed; the catch-up (09-01..09-05) and the trailing heal listed 2,625 ids and
+inserted 435 new rows by 23:56:09, holes 0, the edge at 2026-09-05; today's listing was empty at midnight (a blank is an
+answer). Stopped by `synchronization.control` at 23:57:09 (exit 0) so the registration lane could take the county alone.
