@@ -102,3 +102,21 @@ so those cells are to-dos until `apply-found` writes the new full path. Registry
 verdict words. The richmond side was counted through the RC_ band of the primary key (its 2,502,501 rows add up exactly);
 the acris side is the totals minus richmond. The load started 17:59:10: 50,000 rows per transaction, about 1,550 rows a
 second, 1 KB a row in the database (about 24 GB when done), zero rejects in the first 250,000.
+
+2026-09-05 19:44-19:58 — THE REFUSED SLICE AND THE NUL ESCAPE. At 19:44 the slice after `BK_8140137700677` was refused
+and the loader fell into its row-by-row retry: one COPY and one commit per row, 1.2 rows a second - eleven hours for the
+slice - and its log was invisible (the launch had not kept its output). The retry is now a HALVING: a refused set of rows
+is split in two and each half tried, so a bad row is found in about sixteen round trips and a passing refusal costs two;
+the leaf keeps the rule (the row goes to `population.rejects.jsonl` with the reason and lands with the failing cell empty,
+the cell read from the whole error text; a row that still fails is written NOT LANDED and the load goes on). The reason,
+seen once the log was on disk (`population.load.log`): `unsupported Unicode escape sequence` - a 1968 microfilm registry
+(`FT_1000008448800`, a party name ending in `\u0000`) carries the JSON escape for NUL, which PostgreSQL's jsonb cannot
+hold; the old lane had kept the character from the source page. `map_registry` now strips that six-character escape and
+`cell_rows` notes every such row in the rejects file (`nul escape stripped from the registry`, with the count), so the
+one unrepresentable character is the only thing lost and every modified row is on record. Proven on the real row before
+the restart (the raw text carries the escape once; the mapped text parses and carries none). The load resumed 19:58:34
+after `FT_1000008448700` - the halving had landed a contiguous prefix in id order, so the resume was exact - and the
+first slice passed at 1,861 rows a second; the stretch of FT_10000084xx rows carries the escape in more than a thousand
+registries (all noted). Also: the start-up row count is the planner's estimate now (a full count of the populated
+table is minutes of IO on the small compute, and it was only a log line), and `load` is launched with its output on
+disk (`python -u Population.py load` with stdout to `population.load.log`).

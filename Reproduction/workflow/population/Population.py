@@ -106,12 +106,17 @@ def map_document(doc_id, pdf, found):
     return None, pdf
 
 
+NUL_ESCAPE = "\\u0000"        # the six characters \u0000 inside JSON text: a NUL the old lane kept; jsonb cannot hold it
+
+
 def map_registry(rd):
+    """The registry cell, or (None, <unknown shape>).  A JSON text carrying the NUL escape is returned without it (the one
+    character PostgreSQL's jsonb cannot represent) - the caller notes the row as modified."""
     if rd == "":
         return None, None
     s = rd.strip()
     if s.startswith("{") and s.endswith("}"):
-        return s, None
+        return s.replace(NUL_ESCAPE, ""), None
     if s in ('"pending"', '"absent"'):
         return s, None
     return None, rd[:40]
@@ -374,6 +379,8 @@ def cell_rows(batch, found, rejects):
         r, unk_r = map_registry(rd)
         if unk_d is not None or unk_r is not None:
             rejects.write(json.dumps({"doc_id": did, "reason": "no mapping", "document": unk_d, "registry": unk_r}) + "\n")
+        if r is not None and NUL_ESCAPE in rd:
+            rejects.write(json.dumps({"doc_id": did, "reason": "nul escape stripped from the registry (jsonb cannot hold \\u0000)", "count": rd.count(NUL_ESCAPE)}) + "\n")
         s = source_of(did)
         out[s].append((s, did, r, d))
     return out
@@ -388,6 +395,60 @@ def copy_rows(cur, source, rows):
         w.writerow(["" if v is None else v for v in r])   # an unquoted empty field is NULL in COPY csv; no cell is ever the empty string
     buf.seek(0)
     cur.copy_expert("copy reproduction.%s (source, doc_id, registry, document) from stdin with (format csv)" % source, buf)
+
+
+def land_one(pg, s, r, rejects):
+    """One refused row: written to the rejects with the reason, landed with the failing cell EMPTY (the lane fills it again)."""
+    import psycopg2
+    try:
+        with pg.cursor() as cur:
+            copy_rows(cur, s, [r])
+        pg.commit()
+    except psycopg2.Error as e:
+        pg.rollback()
+        full = str(e).strip()
+        reason = full.splitlines()[0][:160]
+        low = full.lower()                       # the COPY context names the column: "column registry" / "column document"
+        bad_reg = "registry" in low or "json" in low or "unicode" in low
+        bad_doc = "document" in low
+        if not (bad_reg or bad_doc):
+            bad_reg = bad_doc = True             # cannot tell: both cells empty, the lanes fill them again
+        rejects.write(json.dumps({"doc_id": r[1], "reason": reason, "blanked": [c for c, b in (("registry", bad_reg), ("document", bad_doc)) if b],
+                                  "registry": (r[2] or "")[:80], "document": r[3]}) + "\n")
+        rejects.flush()
+        blank = (s, r[1], None if bad_reg else r[2], None if bad_doc else r[3])
+        try:
+            with pg.cursor() as cur:
+                copy_rows(cur, s, [blank])
+            pg.commit()
+            log("REJECT %s %s: %s - landed with %s empty" % (s, r[1], reason, "+".join(c for c, b in (("registry", bad_reg), ("document", bad_doc)) if b)))
+        except psycopg2.Error as e2:
+            pg.rollback()
+            rejects.write(json.dumps({"doc_id": r[1], "reason": "NOT LANDED: " + str(e2).strip().splitlines()[0][:160]}) + "\n")
+            rejects.flush()
+            log("NOT LANDED %s %s: %s" % (s, r[1], str(e2).strip().splitlines()[0][:160]))
+
+
+def land_split(pg, s, rows, rejects):
+    """A refused set of rows lands by halving: a bad row is found in log2(n) round trips (a row-by-row retry of a
+    50,000-row slice ran at 1.2 rows/s on 2026-09-05), a transient refusal costs two.  In id order, so a resume after
+    max(doc_id) stays exact."""
+    import psycopg2
+    if not rows:
+        return
+    if len(rows) == 1:
+        land_one(pg, s, rows[0], rejects)
+        return
+    try:
+        with pg.cursor() as cur:
+            copy_rows(cur, s, rows)
+        pg.commit()
+    except psycopg2.Error as e:
+        pg.rollback()
+        half = len(rows) // 2
+        log("  %s rows %s..%s refused (%s) - halving" % ("{:,}".format(len(rows)), rows[0][1], rows[-1][1], str(e).strip().splitlines()[0][:120]))
+        land_split(pg, s, rows[:half], rejects)
+        land_split(pg, s, rows[half:], rejects)
 
 
 def load(a):
@@ -408,11 +469,12 @@ def load(a):
         a_max = cur.fetchone()[0]
         cur.execute("select coalesce(max(doc_id), '') from reproduction.richmond")
         r_max = cur.fetchone()[0]
-        cur.execute("select (select count(*) from reproduction.acris), (select count(*) from reproduction.richmond)")
-        have = cur.fetchone()
+        cur.execute("select (select reltuples::bigint from pg_class where oid = 'reproduction.acris'::regclass),"
+                    " (select reltuples::bigint from pg_class where oid = 'reproduction.richmond'::regclass)")
+        have = cur.fetchone()                   # the planner's estimate: a full count on the populated table is minutes of IO
     pg.commit()
     after = max(a_max, r_max)
-    log("cloud holds acris %s / richmond %s rows; continuing after id %r" % ("{:,}".format(have[0]), "{:,}".format(have[1]), after))
+    log("cloud holds about acris %s / richmond %s rows (planner estimate); continuing after id %r" % ("{:,}".format(have[0]), "{:,}".format(have[1]), after))
     t0, n, slices = time.time(), 0, 0
     with open(REJECTS, "a", encoding="utf-8") as rejects:
         while a.limit is None or n < a.limit:
@@ -429,23 +491,9 @@ def load(a):
                 pg.commit()
             except psycopg2.Error as e:
                 pg.rollback()
-                log("slice after %r refused (%s) - loading it row by row" % (after, str(e).strip().splitlines()[0][:120]))
+                log("slice after %r refused (%s) - halving it" % (after, str(e).strip().splitlines()[0][:160]))
                 for s in ("acris", "richmond"):
-                    for r in rows[s]:
-                        try:
-                            with pg.cursor() as cur:
-                                copy_rows(cur, s, [r])
-                            pg.commit()
-                        except psycopg2.Error as e2:
-                            pg.rollback()
-                            reason = str(e2).strip().splitlines()[0][:160]
-                            rejects.write(json.dumps({"doc_id": r[1], "reason": reason, "registry": (r[2] or "")[:80], "document": r[3]}) + "\n")
-                            rejects.flush()
-                            low = reason.lower()
-                            blank = (s, r[1], None if ("registry" in low or "json" in low) else r[2], None if "document" in low else r[3])
-                            with pg.cursor() as cur:
-                                copy_rows(cur, s, [blank])
-                            pg.commit()
+                    land_split(pg, s, rows[s], rejects)
             after = batch[-1][0]
             n += len(batch)
             slices += 1
