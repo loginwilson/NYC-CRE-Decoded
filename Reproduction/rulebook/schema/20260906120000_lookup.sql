@@ -13,7 +13,9 @@
 -- (4) Two views, acris_fields and richmond_fields, that show the registry's fields as columns; a filter on a view column
 -- is the very expression its index was built on, so the Table Editor's filters and sorts use the indexes.
 -- Three small immutable functions read the fields as the lanes wrote them ('1/23/2003 9:26:58 AM' -> a date,
--- '$1,250,000.00' -> a number, '4' -> an integer) and give null for anything else, so no value can break a build.
+-- '$1,250,000.00' -> a number, '4' -> an integer) and give null for anything else, so no value can break a build;
+-- all three are plpgsql without a regular expression - the two written in SQL with one brought the instance down
+-- three times, each a minute or two into the pages index, where the three indexes before it had built in a row.
 -- Built while the lanes are idle, STATEMENT BY STATEMENT (the first line): each index its own transaction with the
 -- instance's default build memory and no parallel worker - the one-transaction build of 11:36 brought the 1 GB
 -- instance down at 11:48 (restart, everything rolled back).  A crash now costs one index; a re-run skips what exists.
@@ -33,15 +35,24 @@ exception when others then
 end $$;
 
 create or replace function reproduction.us_money(t text) returns numeric
-language sql immutable strict parallel safe as $$
-  -- '$1,250,000.00' -> 1250000.00; anything else -> null
-  select case when t ~ '^\$?-?[0-9,]+(\.[0-9]+)?$' then replace(replace(t, '$', ''), ',', '')::numeric end
-$$;
+language plpgsql immutable strict parallel safe as $$
+begin
+  -- '$1,250,000.00' -> 1250000.00; anything else -> null.  plpgsql, no regular expression: the instance restarted
+  -- three times under an index built on a SQL function with a per-row regular expression (2026-09-06 12:13, 12:36, 13:18)
+  return replace(replace(t, '$', ''), ',', '')::numeric;
+exception when others then
+  return null;
+end $$;
 
 create or replace function reproduction.whole_number(t text) returns integer
-language sql immutable strict parallel safe as $$
-  select case when t ~ '^[0-9]{1,9}$' then t::integer end
-$$;
+language plpgsql immutable strict parallel safe as $$
+begin
+  -- '4' -> 4; anything but one to nine digits -> null; no regular expression (see us_money)
+  if t = '' or length(t) > 9 or translate(t, '0123456789', '') <> '' then
+    return null;
+  end if;
+  return t::integer;
+end $$;
 
 -- acris: the fields a person filters by
 create index if not exists acris_type      on reproduction.acris ((registry->>'type'));
