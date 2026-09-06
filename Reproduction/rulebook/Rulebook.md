@@ -15,7 +15,7 @@ says what each module is for and how a program reaches it.
 | `storage.py` | WHERE A DOCUMENT LIVES: the drive found by its label on Windows or Mac, the One Touch tree `D:\NYC CRE Decoded\Reproduction\<Source>\By Document\<year>\<MM Mon>\<day>\<id>.pdf` (the day from the recorded date, else a digital id's date, else the id split - the old lane's rule kept), recorded in canonical `D:\` form whichever machine fetched the file | `../Acris/rulebook/test_acris_offline.py` (the drive lookup, the path rule and the acris rules) |
 | `rate_manager.py` | THE RATE MANAGER and the session cap: `next_width()` is pure arithmetic (the graduated hand around the docs band, the request ceiling as a projection at the exit's recent speed, the door curve), the `Governor` thread only calls it and the crew's resize | `test_managers.py` (fake exits at 10x speed: the band, the ceiling, the stall, the door curve, the ramp, the session knob) |
 | `requirements.txt` | the one install a workstation needs: `pip install -r requirements.txt` | |
-| `schema/` | THE TABLE's definition: the phase's schema `reproduction` as numbered SQL files, one per dictated decision, applied once and never edited after (a new decision is a new file) - 0001 the tables, the cell rule as constraints, the to-do indexes, the claims, the heartbeats, the counters and the four functions `claim` / `land` / `heartbeat` / `reconcile`; 0002 pendings first, and documentation claims only where a registry is; 0003 the `source` column first in both tables (a constant per table, for the cross-source tables of construction). Applied and recorded by the project's program, `python ../../supabase/supabase.py push` (`--dry` first; `../../supabase/Supabase.md`). The dictated concept is the section "The table" below | `test_schema.py` (claim / land / heartbeat / reconcile on the live project with throwaway TEST- rows; refuses a populated table) |
+| `schema/` | THE TABLE's definition: the phase's schema `reproduction` as numbered SQL files, one per dictated decision, applied once and never edited after (a new decision is a new file) - 0001 the tables, the cell rule as constraints, the to-do indexes, the claims, the heartbeats, the counters and the four functions `claim` / `land` / `heartbeat` / `reconcile`; 0002 pendings first, and documentation claims only where a registry is; 0003 the `source` column first in both tables (a constant per table, for the cross-source tables of construction); 0004 the re-check clock out of the table (a landed pending keeps its claim as its cooldown); 0005 the lookup - an index for each field a person filters by, a GIN over the whole registry, an index on the document cell, and the `acris_fields` / `richmond_fields` views (written 2026-09-06, applied on login's word). Applied and recorded by the project's program, `python ../../supabase/supabase.py push` (`--dry` first; `../../supabase/Supabase.md`). The dictated concept is the section "The table" below | `test_schema.py` (claim / land / heartbeat / reconcile on the live project with throwaway TEST- rows; refuses a populated table) |
 
 ## How a program reaches it
 
@@ -90,6 +90,28 @@ Apply with the project's program: `python ../../supabase/supabase.py push --dry`
 `python test_managers.py` runs the managers' proof offline - fake exits, a fake cloud, nothing asked of any source; its
 last line is `THREE MANAGERS: ALL OK`. The simulations named above run the shared modules against fake lane programs
 or throwaway rows on the live cloud table (never a source); each one says in its first line what it touches.
+
+## Filtering the table (0005, 2026-09-06)
+
+login: "say i wanted to look up deeds, or page numbers, or boroughs" - "assure filtering works on any row and column if
+its possible, without causing massive load issues." The registry stays jsonb: text would take the same space and could
+only be searched by LIKE, a scan of 21.6 million rows every time; jsonb can be filtered by field and indexed by field.
+Migration 0005 puts beside the table, without changing a row: an expression index on each field a person filters by
+(acris: type, borough, recorded, doc_date, pages, amount, crfn; richmond: doc_type, recorded, book + page, instrument,
+amount), so equality, ranges and ORDER BY on those fields read the index; one GIN index per table over the whole registry
+(`jsonb_path_ops`), so a containment test on any key and value at any depth reads the index -
+`registry @> '{"parcels":[{"bbl":"4001230001"}]}'`, `registry @> '{"parties":[{"name":"CITY OF NEW YORK"}]}'`; an
+index on the document cell for a prefix (one day folder: `document like 'D:\...\23\%' escape ''`) or one path; and
+two views, `acris_fields` and `richmond_fields`, that show the registry's fields as typed columns (the dates as dates, the
+amount as a number, pages as an integer) - a filter on a view column is the very expression its index was built on, so
+the Table Editor's filters and sorts on the views use the indexes. Three immutable functions (`us_date`, `us_money`,
+`whole_number`) read the fields as the lanes wrote them and give null for anything else. Load: the indexes are ~8-12 GB
+(the GIN the largest), built while no lane lands (the push program runs a file as one transaction, where CONCURRENTLY
+cannot run; a plain CREATE INDEX holds the table against writes for the build - an hour or two on the project's
+compute); afterwards a landing maintains them at a cost no lane will notice at its rate, and an indexed filter answers
+in milliseconds. A filter on something not indexed still scans, and the dashboard's two-minute statement timeout cuts
+it off - so a stray query costs at most two minutes, never a runaway. The disk goes to 60 GB by hand before the build
+(22 GB used of 40 today; the indexes and the lanes' growth need the room).
 
 ## History
 
