@@ -227,3 +227,10 @@ said too: the old lane saved nothing for them. POLICY (login's call, reported be
 '' so the documentation lane claims and fetches them again in gate 4, and stage the empty files; until then the audit reads
 them as EXACT, because the audit is the migration's mirror, not a wholeness check. 16:11 the AUDIT (gate 1) launched over the
 whole table in a hidden window (population.audit.1611.log) beside 0006's keys scan; the full `verify` follows the audit.
+
+2026-09-06 16:2x — THE EIGHT EMPTY FILES, TRACED: the old table's cell for each is '' (never documented), the moves log and
+the found map never touched them, and the cloud cell for each is NULL - they are ALREADY IN THE BACKFILL, and the empty files
+are orphans a cut write left in the tree (the lane writes the file, then the cell; a drop between the two leaves an empty
+file and no cell). login: "add those back into the backfill" - they never left it. Done 16:2x: the eight empty files staged
+under D:/Ignore/Staged by population/empty (logged in the moves log as kind staged, why empty), NO cell written, the
+documentation lane fetches them again in gate 4. The audit, running since 16:11, is untouched.
