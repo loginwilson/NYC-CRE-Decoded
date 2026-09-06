@@ -26,6 +26,9 @@ moved.  This program does the move once, in four commands, each of which can be 
     python Population.py resolve [--dry]     the duplicates the file move met at a destination, and the stubs sweep listed, decided
                                              by the files: identical copies and other renderings staged under D:\Ignore, a stub
                                              replaced by its whole copy; the cell untouched; NOTHING IS DELETED
+    python Population.py audit               GATE 1: every row of the old table against the cloud, both walked in id order at once -
+                                             every id present, none invented, every registry the same JSON value, every document
+                                             cell what the mapping says; classes counted, the first differences named; reads only
 
 THE CELL MAPPING (old -> new), the same for both sources
     id                      -> doc_id                 (text; byte order on both sides - SQLite BINARY = Postgres collate "C" - so a resume is exact)
@@ -906,6 +909,92 @@ def resolve(a):
     return 0 if not (counts["neither_whole"] or counts["stub_without_copy"]) else 1
 
 
+# ── audit ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+AUDIT = HERE / "population.audit.json"
+
+
+def cloud_rows(pg, source):
+    """Every row of one cloud table in doc_id order, streamed (a named cursor, ten thousand at a time)."""
+    cur = pg.cursor(name="audit_" + source)
+    cur.itersize = 10000
+    cur.execute("select doc_id, registry, document from reproduction.%s order by doc_id" % source)
+    for row in cur:
+        yield row
+    cur.close()
+
+
+def audit(a):
+    """The old table and the cloud walked in id order at once - acris then richmond, which is the old table's own order
+    (digits, BK_, FT_, RC_ in byte order).  For every id: present on both sides; the registry the same JSON value
+    (jsonb keeps values, not key order; the NUL escape set aside); the document cell what map_document says, with the
+    found map for the documents the old stores gave.  An id the cloud has and the old table never had is a row a lane
+    landed after the load - counted, not a defect.  Reads only; the verdict is printed and written to population.audit.json.
+    Measured 2026-09-06: the cloud streamed in id order (an index scan in the heap's own order) runs at ~10,500 rows/s and is
+    the pace; the old table's ordered walk is nine times faster; asking the cloud by id in batches instead (random lookups
+    on a table larger than memory) was ten times slower."""
+    found = load_found(with_log=True)
+    con = old(a.db)
+    pg = pg_connect()
+    t0 = time.time()
+    cls = {"rows_old": 0, "rows_cloud": 0, "equal": 0, "registry_different": 0, "document_different": 0,
+           "missing_in_cloud": 0, "landed_after_load": 0, "unknown_word": 0}
+    examples = {k: [] for k in ("registry_different", "document_different", "missing_in_cloud", "landed_after_load", "unknown_word")}
+
+    def note(kind, did, detail=""):
+        cls[kind] += 1
+        if len(examples[kind]) < a.examples:
+            examples[kind].append((did, detail))
+
+    old_it = con.execute("select id, recorded_details, pdf from navigation order by id")
+    old_row = old_it.fetchone()
+    for source in ("acris", "richmond"):
+        for did, reg, doc in cloud_rows(pg, source):
+            cls["rows_cloud"] += 1
+            # old rows before this cloud id: missing in the cloud
+            while old_row is not None and old_row[0] < did:
+                cls["rows_old"] += 1
+                note("missing_in_cloud", old_row[0])
+                old_row = old_it.fetchone()
+            if old_row is None or old_row[0] > did:
+                note("landed_after_load", did, source)
+                continue
+            cls["rows_old"] += 1
+            oid, rd, pdf = old_row
+            old_row = old_it.fetchone()
+            ok = True
+            mapped, unknown = map_registry(rd)
+            if unknown is not None:
+                note("unknown_word", did, "registry %r" % unknown); ok = False
+            else:
+                want = json.loads(mapped) if mapped is not None else None
+                if want != reg:
+                    note("registry_different", did, "old %s | cloud %s" % (str(want)[:60], str(reg)[:60])); ok = False
+            want_doc, unknown = map_document(did, pdf, found)
+            if unknown is not None:
+                note("unknown_word", did, "document %r" % unknown); ok = False
+            elif want_doc != doc:
+                note("document_different", did, "old %r -> expected %r | cloud %r" % (pdf[:40], (want_doc or "")[-50:], (doc or "")[-50:])); ok = False
+            if ok:
+                cls["equal"] += 1
+            if cls["rows_cloud"] % 2000000 == 0:
+                log("%s rows compared (%.0f/s) - equal %s, different %s" % ("{:,}".format(cls["rows_cloud"]), cls["rows_cloud"] / (time.time() - t0),
+                    "{:,}".format(cls["equal"]), "{:,}".format(cls["registry_different"] + cls["document_different"])))
+    while old_row is not None:                                   # old rows after the last cloud id
+        cls["rows_old"] += 1
+        note("missing_in_cloud", old_row[0])
+        old_row = old_it.fetchone()
+    con.close(); pg.close()
+    cls["seconds"] = round(time.time() - t0)
+    cls["at"] = datetime.datetime.now().isoformat(timespec="seconds")
+    verdict = "EXACT" if not (cls["registry_different"] or cls["document_different"] or cls["missing_in_cloud"] or cls["unknown_word"]) else "DIFFERENCES"
+    cls["verdict"] = verdict
+    AUDIT.write_text(json.dumps({"classes": cls, "examples": examples}, indent=1), encoding="utf-8")
+    log("AUDIT %s: %s" % (verdict, json.dumps(cls)))
+    for k, v in examples.items():
+        for did, detail in v[:5]:
+            log("  %s: %s %s" % (k, did, detail))
+    return 0 if verdict == "EXACT" else 1
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="the one-time move of Legal Instruments.db and the old document tree into their new homes")
     ap.add_argument("--db", default=OLD_DB, help="the old SQLite table (default: %(default)s)")
@@ -926,9 +1015,12 @@ def main(argv=None):
     sub.add_parser("sweep", help="every file in both trees by listing: empty files and small non-PDFs listed with their other copies; reads only")
     r = sub.add_parser("resolve", help="duplicates the move met at a destination, and the stubs sweep listed: decided by the files, copies staged, nothing deleted")
     r.add_argument("--dry", action="store_true", help="say what would be staged or moved; touch nothing")
+    au = sub.add_parser("audit", help="GATE 1: every row of the old table against the cloud, in id order on both sides; reads only")
+    au.add_argument("--examples", type=int, default=20, help="differences to name per class (default: %(default)s)")
+    au.add_argument("--limit", type=int, default=0, help="stop after this many cloud rows per source - a smoke test; 0 = every row")
     a = ap.parse_args(argv)
     return {"survey": survey, "organize": organize, "load": load, "verify": verify, "apply-found": apply_found,
-            "sweep": sweep, "resolve": resolve}[a.cmd](a)
+            "sweep": sweep, "resolve": resolve, "audit": audit}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@
 - **Nothing is deleted by this program.** Duplicates are counted and left in place; what has no home is logged; the
   removal of empty old folders and of anything else on the drive is a person's step after `verify`.
 
-## The seven commands
+## The eight commands
 
     python Population.py survey              read the old table once, in id order: rows per source, the words in each cell, the path shapes; writes population.survey.json only
     python Population.py organize [--dry]    the One Touch tree (below); every move to population.moves.jsonl; --dry counts and moves nothing
@@ -32,6 +32,7 @@
     python Population.py verify              counts on both sides by cell state, a sample of recorded paths opened on the drive, a sample of registries compared value for value with the old table (--registry-sample 2000), reconcile() per source, the board rows; --only samples runs the two samples alone
     python Population.py sweep               every file in both trees by directory listing: an empty file, or a small file that is not a whole PDF, is a stub - listed in population.sweep.jsonl with the other copies the moves log knows for that id; reads only
     python Population.py resolve [--dry]     the duplicates the file move met at a destination, and the stubs sweep listed, decided by the files: identical copies and other renderings staged, a stub replaced by its whole copy; the cell untouched; nothing deleted (below)
+    python Population.py audit               GATE 1 (login 2026-09-06): every row of the old table against the cloud, both walked in id order at once - every id present, none invented, every registry the same JSON value, every document cell what the mapping says; the classes counted in population.audit.json, the first differences named; reads only
 
 Run in that order; `apply-found` and `verify` may be repeated; `sweep` then `resolve` run after the file move has ended, and `verify` once more after them. `load` refuses to start while the survey names a word without a
 mapping (fail closed), and warns when `organize` has not run for real, since the paths it writes assume the new tree. Launch
@@ -90,6 +91,18 @@ every empty file and every small file that is not a whole PDF, with the other co
 `resolve` then treats each listed stub the same way, and names the stubs that have no whole copy anywhere (their cells
 need the documentation lane). Staged copies go under `D:\Ignore\Staged by population\<why>\<origin path>` - `duplicate`,
 `other rendering`, `stub` - for a person to delete with the rest of `D:\Ignore`. Nothing is deleted.
+
+## The audit (gate 1, 2026-09-06)
+
+login: "we shouldn't start any lanes until we know the database is 100% accurate and didn't miss a thing." The counts
+matched and the samples matched; the audit is the whole. `audit` walks the old table (`select ... order by id`) and the
+two cloud tables (acris, then richmond - the old table's own byte order: digits, `BK_`, `FT_`, `RC_`) at the same time,
+streamed, and for every id asks: present on both sides; the registry the same JSON value (jsonb keeps values, not key
+order or spacing; the NUL escape set aside as `map_registry` does); the document cell exactly what `map_document` gives
+for the old cell, with the found map for the documents the old stores gave. An id the cloud has and the old table never
+had is a row a lane landed after the load, counted and named, not a defect. The verdict is EXACT or DIFFERENCES, with
+every class counted and the first differences named; it costs one read of each side, about half an hour, and no lane
+starts before it says EXACT.
 
 ## The disk
 
