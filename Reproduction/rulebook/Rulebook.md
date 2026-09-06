@@ -236,3 +236,14 @@ batches at any width (login: "for Richmond you could do max"). Widths on acris 5
 (`test_*_sim.py` under rulebook/ and the sources' rulebooks, `test_lane_policies.py`) still name the tables 0007 replaces
 (`<source>_update`, `_update_lanes`, `_heartbeats`, `_claims`): they stay guarded and unrun until reworked for
 `reproduction.updates` / `machinery.claims`.
+
+2026-09-06 17:1x — GATE 2's THREE MIGRATIONS DONE: 0005 (15:36, proven 15:37: twelve filters every plan an index scan, a landed
+row found within 2 s), 0006 (17:07, proven 17:08: four populated profile views, a facet in about 200 ms), 0007 (17:08, proven
+17:10: test_schema.py ALL OK on the live table - two workstations claiming at once, the cooldown, the counters on the lane row
+and the workstation's own row). The key census against the index: every key answers by containment, ranges on the typed
+fields; two gaps named and written as 0008 (`schema/20260906150000_lookup_more.sql`): block keys with their own GIN and the
+helpers block_key / bbl / parcel that build the key from words ("Manhattan block 573 lot 24" without assembling ten digits),
+party names as one text with a trigram GIN (a name by part of it), a typed expiration date, and the parcels views with borough,
+block and lot derived. Its functions proven in a rolled-back transaction; the build follows the audit. The proof of 0008 after
+the build: `prove_0008_filters` (plans and timings of a block, a lot from words, a partial name, an expiration range, the
+parcels view, and a landed row found by block and by part of a name).

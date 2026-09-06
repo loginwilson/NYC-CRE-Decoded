@@ -156,3 +156,27 @@ in, will it fall into that index?"): one throwaway row landed with a registry an
 (type + borough + crfn; amount + pages), by containment on its parcel and on its party, and by its day folder, each by an
 index scan, within 2.0 s of landing; then deleted (0 left). The indexes are maintained on every insert and update: nothing
 is a snapshot but 0006's profile, which refreshes on command.
+
+2026-09-06 17:08 — 0006 AND 0007 APPLIED AND RECORDED. 0006 statement by statement: acris_profile 1,721 s (29 min; the
+grouping pass over 21.6 M rows), its key index instant, acris_keys about 40 min (the keys of every registry, parcel and party),
+richmond_profile 133 s, richmond_keys under a minute. At 16:51 the SESSION POOLER closed every client session at once - the
+push's (statement 8/9, richmond_keys, "server closed the connection unexpectedly" after 50 s) and the audit's (at 6.5 M rows
+compared) - while the server itself never restarted (postmaster up since 13:18 local): the statement had completed on the
+server (the view stands, populated), the push relaunched at 17:07 found statements 8 and 9 already there and went on to 0007,
+which applied in one transaction: reproduction.updates (the phase, lane and workstation rows of both sources) and
+machinery.claims carried over from the eight old tables, claim/land/heartbeat/reconcile rewritten over them, the old tables
+dropped. PROVEN: 0006 read 17:08 (read_0006_profile) - four materialized views populated (acris_profile 3.1 MB, 13,098 rows of
+type x borough x year among 15,022; acris_keys 40 keys; richmond_profile 2,369 rows; richmond_keys 18 keys), a facet answered
+in 168-267 ms; 0007 by Reproduction/rulebook/test_schema.py 17:10 on the live table: two hosts claiming at once took disjoint
+slices and together exactly the six test pendings, a pending landed keeps its claim as a cooldown, the expired cooldown is
+handed to the next claim, the two empty rows landed moved the lane row, the phase row and HOST-A's own workstation row by 2,
+the cell rule rejected a wrong word, heartbeats from two hosts made two workstation rows, cleanup left nothing, reconcile
+measured phase 3,716,943 / 21,623,562 - ALL OK. The key census (keys_vs_index): every one of acris's 40 keys and richmond's 18
+answers by containment, the ranges by the typed indexes; the gaps named - a block without the bbl, a party by part of a name -
+are 0008 (`20260906150000_lookup_more.sql`, written 17:1x, its functions proven in a rolled-back transaction on login's own
+example registry and real rows; built after the audit ends so gate 1's verdict comes first).
+
+⚠ THE POOLER DROP (16:51): a long-lived session through the session pooler can be closed mid-statement while the server stays
+up; the statement may still complete on the server. The audit now reopens its connection and resumes after the last id it
+saw (Population.py cloud_rows, 17:07), and `push` is re-runnable by design. A `FAILED ... server closed the connection`
+in a push log is checked against the server's uptime before anything is called a restart.
