@@ -16,7 +16,7 @@
 -- Built while the lanes are idle: the push program runs a file as one transaction, where CONCURRENTLY cannot run, and a
 -- plain CREATE INDEX holds the table against writes for the build.  Nothing in any row changes.
 set statement_timeout = 0;
-set maintenance_work_mem = '256MB';
+set maintenance_work_mem = '128MB';   -- the instance has 1 GB; the build's working memory stays within it
 
 create or replace function reproduction.us_date(t text) returns date
 language plpgsql immutable strict parallel safe as $$
