@@ -6,7 +6,7 @@ The board of the richmond reproduction, as one program: `Richmond Update.py`. It
 
     python "Richmond Update.py"                 the board, a tick every 60 s
     python "Richmond Update.py" --once          one tick, written
-    python "Richmond Update.py" show            read and print both tabs, nothing written
+    python "Richmond Update.py" show            read and print every row, nothing written
     python "Richmond Update.py" reconcile       recount the counters from the table's indexes and overwrite them
 
 One board per source, on one machine; its `as_of` stamp is its pulse, and a stale stamp is the signal the board died. `update.lock` refuses a second board on the same machine.
@@ -33,3 +33,10 @@ Beside this file, never in git: `update.state.json` (the readings ring), `update
 ## History
 
 2026-09-03 - the acris board's twin: `board.py` with the richmond source and lanes, nothing else. Proven by the board's own offline proof and its live-cloud simulation (run on the acris tables; the richmond tables are the same shape from the same migration) and by `show` against the empty richmond tabs. Not yet run beside real lanes: that waits for the data move.
+
+2026-09-06 — 0007: THE TWO TABS ARE ONE TABLE. login: "You have a database, and you have an updating table that shows you how
+you're progressing on filling in that database." `reproduction.updates`, source first: the phase row (`lane = reproduction`),
+the three lane rows, and a row per workstation running a lane - its own landed count (moved by `land()` and `insert_ids`),
+its rate from the board's own subtraction, its workers, `last_seen` (the heartbeat; fresher than `--fresh` = alive) and its
+last word. The heartbeats table is gone into those rows; the claims moved out of sight into the schema `machinery`. The
+board reads and writes the one table; `show` prints every row.

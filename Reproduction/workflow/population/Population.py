@@ -644,7 +644,7 @@ def verify(a):
                 cur.execute("select * from reproduction.reconcile(%s)", (s,))
                 log("%-8s reconcile: %s" % (s, cur.fetchall()))
                 pg.commit()
-                cur.execute("select lane, landed, needed from reproduction.%s_update_lanes order by lane" % s)
+                cur.execute("select lane, landed, needed from reproduction.updates where source = %s and workstation = '' and lane <> 'reproduction' order by lane", (s,))
                 for lane, landed, needed in cur.fetchall():
                     log("  board %-16s landed %s / needed %s (%.2f%%)" % (lane, "{:,}".format(landed), "{:,}".format(needed), 100.0 * landed / needed if needed else 0))
     pg.close()

@@ -1,5 +1,6 @@
-"""THE BOARD every source's update program shares: read the counters and the heartbeats once a minute,
-subtract, write the two tabs, print the rows.  It only reads the workflow's progress - it never counts
+"""THE BOARD every source's update program shares: read reproduction.updates once a minute - the phase and
+lane rows (the counters) and the workstation rows (each machine's own count and last heartbeat) - subtract,
+write the rates, eta and status back onto every row, print the rows.  It only reads the workflow's progress - it never counts
 the workflow table (land() and insert_ids() keep the counters exact; reconcile() recounts on demand).
 
 A source's update program (Acris Update.py, Richmond Update.py) names the source and its lanes and
@@ -27,9 +28,10 @@ The rules, kept from the board that ran before this one (routine_update.py / boa
                          reports a false level)
   no scan on a tick      reconcile() is on demand only - after a load, after a hand edit - never hourly
                          (login 2026-09-03: "why are we counting all rows every hour?")
-  the heartbeats         folded into the lane row: hosts "HOST:width, HOST2:width" of the lanes alive
-                         (a heartbeat fresher than --fresh seconds), the width across them, the
-                         freshest heartbeat, the last word of the freshest
+  the workstations       each machine running a lane has its own row (0007): its landed count, its
+                         rate from the same subtraction, its workers, last_seen (a heartbeat fresher
+                         than --fresh seconds = alive), its last word; the lane row carries the sum of
+                         workers alive, the freshest last_seen and its last word
   as_of is the pulse     stamped every tick by the board; a stale stamp IS the signal the board died
 """
 import json
@@ -125,14 +127,20 @@ class Board:
     # ── read ──
     def read(self):
         s = self.source
-        phase = self.cloud._run("select landed, needed from reproduction.%s_update" % s, (), True)[0]
-        lanes = self.cloud._run("select lane, landed, needed from reproduction.%s_update_lanes" % s, (), True)
-        beats = self.cloud._run("select lane, host, width, heartbeat_at, extract(epoch from now() - heartbeat_at)::int, last_event"
-                                " from reproduction.%s_heartbeats" % s, (), True)
-        counters = {"phase": (int(phase[0]), int(phase[1]))}
-        for name, landed, needed in lanes:
-            counters[name] = (int(landed), int(needed))
+        totals = self.cloud._run("select lane, landed, needed from reproduction.updates where source = %s and workstation = ''", (s,), True)
+        beats = self.cloud._run("select lane, workstation, workers, last_seen, extract(epoch from now() - last_seen)::int, last_word, landed"
+                                " from reproduction.updates where source = %s and workstation <> '' order by lane, workstation", (s,), True)
+        counters = {}
+        for name, landed, needed in totals:
+            counters["phase" if name == "reproduction" else name] = (int(landed), int(needed))
+        if "phase" not in counters:
+            raise RuntimeError("reproduction.updates holds no phase row for %s - migration 0007 not applied?" % s)
         return counters, beats
+
+    @staticmethod
+    def wkey(b):
+        """The readings key of a workstation row: lane@workstation."""
+        return "%s@%s" % (b[0], b[1])
 
     # ── compute ──
     def fold(self, beats, name):
@@ -197,28 +205,63 @@ class Board:
             elif status != "active":
                 r["eta_60s"] = r["eta_5m"] = "paused"
             rows[key] = r
+        # the workstation rows: each machine's own count, its rate from the same subtraction, its own status; no
+        # percentage (needed is the lane's ruler, not the machine's) and no eta
+        for b in beats:
+            key = self.wkey(b)
+            landed = int(b[6] or 0) if len(b) > 6 else 0       # the machine's own count (0007); a bare heartbeat tuple counts 0
+            word = b[5] or ""
+            r = {"landed": landed, "needed": 0, "hosts": b[1], "width": b[2], "heartbeat_at": b[3], "last_event": b[5] or None,
+                 "why": None, "pct": None}
+            moved = False
+            for tag, back in (("60s", 60), ("5m", 300)):
+                then = self._then(now, back, key)
+                if then is None:
+                    r["rate_" + tag] = r["increase_" + tag] = r["pct_" + tag] = r["eta_" + tag] = None
+                    continue
+                t, v = then
+                inc = landed - int(v[key])
+                dt = now - t
+                rate = inc / dt if dt > 0 else None
+                r["increase_" + tag] = inc
+                r["rate_" + tag] = round(rate, 2) if rate is not None else None
+                r["pct_" + tag] = None
+                r["eta_" + tag] = None
+                moved = moved or inc > 0
+            if word.startswith("REFUSED") or word.startswith("wall"):
+                status = "stalled"
+            elif moved:
+                status = "active"
+            else:
+                status = "pending"
+            r["status"] = status
+            if status != "active":
+                r["eta_60s"] = r["eta_5m"] = "paused"
+            rows[key] = r
         return rows
 
     # ── write ──
     def write(self, rows):
         s = self.source
-        p = rows["phase"]
-        self.cloud._run("update reproduction.%s_update set pct=%%s, rate_60s=%%s, increase_60s=%%s, pct_60s=%%s, eta_60s=%%s,"
-                        " rate_5m=%%s, increase_5m=%%s, pct_5m=%%s, eta_5m=%%s, status=%%s::reproduction.lane_status, as_of=now()" % s,
-                        tuple(p[c] for c in COLUMNS), False)
-        for name in self.lanes:
-            r = rows.get(name)
-            if r is None:
-                continue
-            self.cloud._run("update reproduction.%s_update_lanes set pct=%%s, rate_60s=%%s, increase_60s=%%s, pct_60s=%%s, eta_60s=%%s,"
-                            " rate_5m=%%s, increase_5m=%%s, pct_5m=%%s, eta_5m=%%s, status=%%s::reproduction.lane_status, as_of=now(),"
-                            " hosts=%%s, width=%%s, heartbeat_at=%%s, last_event=%%s where lane=%%s" % s,
-                            tuple(r[c] for c in COLUMNS) + (r["hosts"], r["width"], r["heartbeat_at"], r["last_event"], name), False)
+        for key, r in rows.items():
+            if "@" in key:                                  # a workstation's own row: its metrics and status
+                lane_name, ws = key.split("@", 1)
+                self.cloud._run("update reproduction.updates set pct=%s, rate_60s=%s, increase_60s=%s, pct_60s=%s, eta_60s=%s,"
+                                " rate_5m=%s, increase_5m=%s, pct_5m=%s, eta_5m=%s, status=%s::reproduction.lane_status, as_of=now()"
+                                " where source=%s and lane=%s and workstation=%s",
+                                tuple(r[c] for c in COLUMNS) + (s, lane_name, ws), False)
+            else:                                           # the phase or a lane: its metrics, status and the fold of its workstations
+                lane_name = "reproduction" if key == "phase" else key
+                self.cloud._run("update reproduction.updates set pct=%s, rate_60s=%s, increase_60s=%s, pct_60s=%s, eta_60s=%s,"
+                                " rate_5m=%s, increase_5m=%s, pct_5m=%s, eta_5m=%s, status=%s::reproduction.lane_status, as_of=now(),"
+                                " workers=%s, last_seen=%s, last_word=%s where source=%s and lane=%s and workstation=''",
+                                tuple(r[c] for c in COLUMNS) + (r["width"], r["heartbeat_at"], r["last_event"], s, lane_name), False)
 
     # ── print ──
     def line(self, key, r):
+        name = "reproduction" if key == "phase" else key.replace("@", " @ ")
         if r["why"]:
-            return "UPDATE %-8s | %-15s | %s | %s / %s" % (self.source, key if key != "phase" else "reproduction", r["why"], fmt(r["landed"]), fmt(r["needed"]))
+            return "UPDATE %-8s | %-15s | %s | %s / %s" % (self.source, name, r["why"], fmt(r["landed"]), fmt(r["needed"]))
         def kit(tag):
             rate, inc, pct, eta = r["rate_" + tag], r["increase_" + tag], r["pct_" + tag], r["eta_" + tag]
             if rate is None and inc is None:
@@ -226,9 +269,9 @@ class Board:
             return "%-3s %6.2f/s %8s %+8.4f%%  eta %s" % (tag, rate or 0.0, fmt_signed(inc), pct or 0.0, eta or "-")
         pct = ("%.2f%%" % r["pct"]) if r["pct"] is not None else "-"
         out = "UPDATE %-8s | %-15s | %s | %s | %s / %s = %s | %s" % (
-            self.source, key if key != "phase" else "reproduction", kit("60s"), kit("5m"), fmt(r["landed"]), fmt(r["needed"]), pct,
+            self.source, name, kit("60s"), kit("5m"), fmt(r["landed"]), fmt(r["needed"]), pct,
             (r["status"] or "?").upper())
-        if key != "phase":
+        if key != "phase" and "@" not in key:
             beat = ""
             if r["heartbeat_at"] is not None:
                 beat = " - %s" % (r["hosts"] or "no lane alive")
@@ -244,9 +287,11 @@ class Board:
         rows = self.compute(now, counters, beats)
         if write:
             self.write(rows)
-        self.readings.append((now, {k: v[0] for k, v in counters.items()}))
+        reading = {k: v[0] for k, v in counters.items()}
+        reading.update({self.wkey(b): (int(b[6] or 0) if len(b) > 6 else 0) for b in beats})
+        self.readings.append((now, reading))
         self._save()
-        for key in ("phase",) + self.lanes:
+        for key in ("phase",) + self.lanes + tuple(sorted(k for k in rows if "@" in k)):
             if key in rows:
                 self.log(self.line(key, rows[key]))
         return rows
@@ -307,11 +352,11 @@ class Board:
         now = time.time()
         counters, beats = self.read()
         rows = self.compute(now, counters, beats)
-        for key in ("phase",) + self.lanes:
+        for key in ("phase",) + self.lanes + tuple(sorted(k for k in rows if "@" in k)):
             if key in rows:
                 print(self.line(key, rows[key]), flush=True)
         for b in sorted(beats, key=lambda b: (b[0], b[1])):
-            print("  heartbeat %-16s %-14s width %-4s %6ds ago  %s" % (b[0], b[1], b[2], b[4] or 0, (b[5] or "")[:80]), flush=True)
+            print("  workstation %-16s %-14s workers %-4s %6ds ago  landed %s  %s" % (b[0], b[1], b[2], b[4] or 0, fmt(int(b[6] or 0) if len(b) > 6 else 0), (b[5] or "")[:80]), flush=True)
         self.cloud.close()
         return 0
 

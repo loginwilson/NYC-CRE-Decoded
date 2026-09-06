@@ -54,6 +54,16 @@ for key in rows:
     if not ok:
         check("line renders for " + key, False, line)
 check("lines render", True)
+# the workstation rows (0007): each machine's own count and rate from the same subtraction, its own status
+b.readings = [(now - 300, {"documentation": 2000, "documentation@H1": 1200, "documentation@H2": 800}),
+              (now - 60, {"documentation": 2100, "documentation@H1": 1280, "documentation@H2": 800})]
+beats5 = [("documentation", "H1", 40, ts, 30, "started 1x40 at 2026-09-04 09:00", 1320),
+          ("documentation", "H2", 20, ts, 600, "REFUSED at 2004113001335001", 800)]
+rows5 = b.compute(now, {"phase": (1150, 10000), "documentation": (2150, 10000)}, beats5)
+w1, w2 = rows5["documentation@H1"], rows5["documentation@H2"]
+check("workstation H1: landed 1,320, +40 in 60 s = 0.67/s, +120 in 5 min, active, no pct", w1["landed"] == 1320 and w1["increase_60s"] == 40 and abs(w1["rate_60s"] - 0.67) < 0.01 and w1["increase_5m"] == 120 and w1["status"] == "active" and w1["pct"] is None, w1)
+check("workstation H2: refused -> stalled, eta paused, nothing moved", w2["status"] == "stalled" and w2["eta_5m"] == "paused" and w2["increase_5m"] == 0, w2)
+check("a workstation line renders with lane @ machine", "documentation @ H1" in b.line("documentation@H1", w1) and "ACTIVE" in b.line("documentation@H1", w1), b.line("documentation@H1", w1))
 print(b.line("documentation", rows["documentation"]))
 print(b.line("phase", rows3["phase"]))
 print("\nBOARD OFFLINE:", "ALL OK" if not fails else "FAILURES: %s" % fails)

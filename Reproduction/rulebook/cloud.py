@@ -134,7 +134,8 @@ class Cloud:
     def insert_ids(self, ids):
         """synchronization: new document ids into the workflow table - one row per document, nothing
         else filled - and the counters moved in the SAME transaction by exactly the rows that were new:
-        needed (the phase and every lane) and synchronization's landed.  Returns the rows inserted."""
+        needed on the phase and lane rows of reproduction.updates, synchronization's landed, and this
+        workstation's own synchronization row.  Returns the rows inserted."""
         if not ids:
             return 0
         for attempt in (1, 2):
@@ -148,10 +149,12 @@ class Cloud:
                                     % self.source, (list(ids),))
                         n = cur.rowcount
                         if n:
-                            cur.execute("update reproduction.%s_update set needed = needed + %%s" % self.source, (n,))
-                            cur.execute("update reproduction.%s_update_lanes set needed = needed + %%s" % self.source, (n,))
-                            cur.execute("update reproduction.%s_update_lanes set landed = landed + %%s where lane = 'synchronization'"
-                                        % self.source, (n,))
+                            cur.execute("update reproduction.updates set needed = needed + %s where source = %s and workstation = ''", (n, self.source))
+                            cur.execute("update reproduction.updates set landed = landed + %s where source = %s and lane = 'synchronization' and workstation = ''",
+                                        (n, self.source))
+                            cur.execute("insert into reproduction.updates as u (source, lane, workstation, landed) values (%s, 'synchronization', %s, %s)"
+                                        " on conflict (source, lane, workstation) do update set landed = u.landed + excluded.landed",
+                                        (self.source, self.host, n))
                     self.con.commit()
                     return n
                 except Exception:
@@ -212,9 +215,9 @@ class Cloud:
         if not ids:
             return set()
         rows = self._run("select w.doc_id from reproduction.%s w where w.doc_id = any(%%s) and (w.registry is null or"
-                         " (w.registry = '\"pending\"'::jsonb and not exists (select 1 from reproduction.%s_claims c"
-                         " where c.doc_id = w.doc_id and c.lane = 'registration' and c.until > now())))" % (self.source, self.source),
-                         (list(ids),), True)
+                         " (w.registry = '\"pending\"'::jsonb and not exists (select 1 from machinery.claims c"
+                         " where c.source = %%s and c.doc_id = w.doc_id and c.lane = 'registration' and c.until > now())))" % self.source,
+                         (list(ids), self.source), True)
         return {r[0] for r in rows}
 
     def held(self, ids):
@@ -229,10 +232,11 @@ class Cloud:
         return self._run("select max(doc_id) from reproduction.%s%s" % (self.source, where), params, True)[0][0]
 
     def alive(self, within="3 minutes"):
-        """[(lane, host, width, age_seconds, last_event)] for every lane heard from within the interval."""
-        return self._run("select lane, host, width, extract(epoch from now() - heartbeat_at)::int, last_event"
-                         " from reproduction.%s_heartbeats where heartbeat_at > now() - %%s::interval order by lane, host"
-                         % self.source, (within,), True)
+        """[(lane, workstation, workers, age_seconds, last_word)] for every lane heard from within the interval - the
+        workstation rows of reproduction.updates (0007)."""
+        return self._run("select lane, workstation, workers, extract(epoch from now() - last_seen)::int, last_word"
+                         " from reproduction.updates where source = %s and workstation <> '' and last_seen > now() - %s::interval"
+                         " order by lane, workstation", (self.source, within), True)
 
 
 class Outbox:

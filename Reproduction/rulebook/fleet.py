@@ -46,7 +46,7 @@ Lanes together - the rules:
                          a live lane's log was truncated once, 2026-09-03), with a fleet banner at every launch
   stop                   `stop` into each control file; the lanes finish their minute and leave; after --stop-wait
                          seconds (180) what is left is terminated and logged as such
-  cross-station          `status` reads reproduction.<source>_heartbeats: every lane on every workstation, its
+  cross-station          `status` reads the workstation rows of reproduction.updates: every lane on every workstation, its
                          width, its age, its last word - a second workstation runs the same file with its own --drive
 
 Exit codes: 0 stopped · 2 a lane was refused (everything stilled) · 5 crash.

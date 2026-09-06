@@ -6,7 +6,7 @@ The board of the acris reproduction, as one program: `Acris Update.py`. It alway
 
     python "Acris Update.py"                 the board, a tick every 60 s
     python "Acris Update.py" --once          one tick, written
-    python "Acris Update.py" show            read and print both tabs, nothing written
+    python "Acris Update.py" show            read and print every row, nothing written
     python "Acris Update.py" reconcile       recount the counters from the table's indexes and overwrite them
 
 One board per source, on one machine; its `as_of` stamp is its pulse, and a stale stamp is the signal the board died. `update.lock` refuses a second board on the same machine.
@@ -55,3 +55,10 @@ Beside this file, never in git: `update.state.json` (the readings ring), `update
 2026-09-05 — the review against the code: stalled outranks active (board.py tests the rejection before the movement); the increase now prints with its sign (`+288`), as this file's example always showed.
 
 2026-09-03 - written from `routine_update.py` and `board_truth.py` (the five metrics, the two windows, the four statuses, one subtraction, never clamp, no scan on a tick) against the tables and functions of migration 0001, every line read. Proven offline (the rate, increase, percentage and eta math over synthetic readings; the status table; the fold of heartbeats; the out-of-bounds gate) and by a simulation against the live cloud with throwaway counters and heartbeats (the rows written and read back, active on movement, pending without a heartbeat, stalled on a refusal's last word, complete at needed, the fold of two workstations, the ring surviving a restart, reconcile restoring the empty table's zeros). Not yet run beside real lanes: that waits for the data move.
+
+2026-09-06 — 0007: THE TWO TABS ARE ONE TABLE. login: "You have a database, and you have an updating table that shows you how
+you're progressing on filling in that database." `reproduction.updates`, source first: the phase row (`lane = reproduction`),
+the three lane rows, and a row per workstation running a lane - its own landed count (moved by `land()` and `insert_ids`),
+its rate from the board's own subtraction, its workers, `last_seen` (the heartbeat; fresher than `--fresh` = alive) and its
+last word. The heartbeats table is gone into those rows; the claims moved out of sight into the schema `machinery`. The
+board reads and writes the one table; `show` prints every row.

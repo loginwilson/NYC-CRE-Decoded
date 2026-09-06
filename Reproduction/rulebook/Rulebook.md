@@ -15,7 +15,7 @@ says what each module is for and how a program reaches it.
 | `storage.py` | WHERE A DOCUMENT LIVES: the drive found by its label on Windows or Mac, the One Touch tree `D:\NYC CRE Decoded\Reproduction\<Source>\By Document\<year>\<MM Mon>\<day>\<id>.pdf` (the day from the recorded date, else a digital id's date, else the id split - the old lane's rule kept), recorded in canonical `D:\` form whichever machine fetched the file | `../Acris/rulebook/test_acris_offline.py` (the drive lookup, the path rule and the acris rules) |
 | `rate_manager.py` | THE RATE MANAGER and the session cap: `next_width()` is pure arithmetic (the graduated hand around the docs band, the request ceiling as a projection at the exit's recent speed, the door curve), the `Governor` thread only calls it and the crew's resize | `test_managers.py` (fake exits at 10x speed: the band, the ceiling, the stall, the door curve, the ramp, the session knob) |
 | `requirements.txt` | the one install a workstation needs: `pip install -r requirements.txt` | |
-| `schema/` | THE TABLE's definition: the phase's schema `reproduction` as numbered SQL files, one per dictated decision, applied once and never edited after (a new decision is a new file) - 0001 the tables, the cell rule as constraints, the to-do indexes, the claims, the heartbeats, the counters and the four functions `claim` / `land` / `heartbeat` / `reconcile`; 0002 pendings first, and documentation claims only where a registry is; 0003 the `source` column first in both tables (a constant per table, for the cross-source tables of construction); 0004 the re-check clock out of the table (a landed pending keeps its claim as its cooldown); 0005 the lookup - an index for each field a person filters by, a GIN over the whole registry, an index on the document cell, and the `acris_fields` / `richmond_fields` views (written 2026-09-06, applied on login's word); 0006 the profile - `<source>_profile` (documents by type, borough, year, parcels, parties, pages) and `<source>_keys` (which keys appear where, how often), materialized, refreshed on demand (written 2026-09-06 12:0x). Applied and recorded by the project's program, `python ../../supabase/supabase.py push` (`--dry` first; `../../supabase/Supabase.md`). The dictated concept is the section "The table" below | `test_schema.py` (claim / land / heartbeat / reconcile on the live project with throwaway TEST- rows; refuses a populated table) |
+| `schema/` | THE TABLE's definition: the phase's schema `reproduction` as numbered SQL files, one per dictated decision, applied once and never edited after (a new decision is a new file) - 0001 the tables, the cell rule as constraints, the to-do indexes, the claims, the heartbeats, the counters and the four functions `claim` / `land` / `heartbeat` / `reconcile`; 0002 pendings first, and documentation claims only where a registry is; 0003 the `source` column first in both tables (a constant per table, for the cross-source tables of construction); 0004 the re-check clock out of the table (a landed pending keeps its claim as its cooldown); 0005 the lookup - an index for each field a person filters by, a GIN over the whole registry, an index on the document cell, and the `acris_fields` / `richmond_fields` views (written 2026-09-06, applied on login's word); 0006 the profile - `<source>_profile` (documents by type, borough, year, parcels, parties, pages) and `<source>_keys` (which keys appear where, how often), materialized, refreshed on demand (written 2026-09-06 12:0x); 0007 the updates table and the claims out of sight - `reproduction.updates` (source, lane, workstation: the phase, lane and workstation rows) replaces the two tabs and the heartbeats of both sources, `machinery.claims` replaces the two claims tables; the four functions keep their signatures (written and proven in a rolled-back run 2026-09-06 13:1x). Applied and recorded by the project's program, `python ../../supabase/supabase.py push` (`--dry` first; `../../supabase/Supabase.md`). The dictated concept is the section "The table" below | `test_schema.py` (claim / land / heartbeat / reconcile on the live project with throwaway TEST- rows; refuses a populated table) |
 
 ## How a program reaches it
 
@@ -132,6 +132,24 @@ shape through 0005's indexes: `select * from reproduction.acris_fields where typ
 recorded between '1995-01-01' and '1995-12-31' and jsonb_array_length(parcels) >= 3 limit 20`. Refresh after a lane has
 landed a lot: `refresh materialized view concurrently reproduction.acris_profile` (the unique index on each allows
 `concurrently`, so readers are never blocked); a refresh is one scan of the table.
+
+## What a person sees (0007, 2026-09-06)
+
+login: "You have a database, and you have an updating table that shows you how you're progressing on filling in that
+database ... the update table shows how workstations are performing and how we're progressing on reproducing. That's
+important, but in terms of actually building our own tables for it, it's probably unnecessary ... build it behind the
+scenes so you don't see it." The schema `reproduction` holds three tables: `acris` and `richmond`, the record, and
+`updates` - source first, then lane, then workstation: a row per source for the phase (`lane = reproduction`, rows with
+every cell filled), a row per lane (its cells filled), and a row per workstation running a lane, that machine's own
+landed count, rate, workers, `last_seen` (its heartbeat, every minute while it runs) and `last_word`. The heartbeats
+tables are gone into those rows. What the code needs and a person never reads - which doc_ids each workstation holds
+for which lane, until when - lives out of sight in the schema `machinery`, table `claims`: two machines can only avoid
+taking the same document through a list both can see, so the list stays in the cloud, and a landed pending's wait lives
+there as before (0004). The functions `claim`, `land`, `heartbeat`, `reconcile` keep their signatures: `land()` moves the
+lane's row and the landing machine's own row; `heartbeat()` is the machine's row; `reconcile()` recounts the totals rows
+and leaves each machine's count alone. A way to have no list at all - a fixed share of the ids per machine, by a rule in
+the code, each machine remembering its own re-check times - is the follow-up if wanted; its cost is that adding or losing
+a machine means restarting the others with the new count, where the list rebalances by itself.
 
 ## History
 

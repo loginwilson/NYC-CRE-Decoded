@@ -1,15 +1,15 @@
 """ACRIS UPDATE - the board, one program, always running, reading only.
 
-Two tabs in the cloud: reproduction.acris_update (tab 1: the phase - rows with all three cells filled
-against rows) and reproduction.acris_update_lanes (tab 2: one row per lane - that lane's cells filled
-against rows, with the lane's heartbeats folded in).  Every minute this program reads the counters
+One table in the cloud, reproduction.updates (migration 0007), source first: a row for the phase (rows with all
+three cells filled against rows), a row per lane (that lane's cells filled against rows), and a row per
+workstation running a lane (its own landed count, rate, workers, last seen, last word).  Every minute this program reads the counters
 that land() and insert_ids() keep exact, subtracts them from its own readings a minute and five
 minutes back, and writes rate, increase, percentage, eta, status and the as-of stamp.  It never counts
 the workflow table.
 
     python "Acris Update.py"                 the board: a tick every 60 s until stopped
     python "Acris Update.py" --once          one tick, written
-    python "Acris Update.py" show            read and print the two tabs; nothing written
+    python "Acris Update.py" show            read and print every row; nothing written
     python "Acris Update.py" reconcile       recount landed and needed from the table's indexes and overwrite
                                              the counters: after the data move, after a hand edit - never on the tick
 
@@ -37,7 +37,7 @@ LANES = ("synchronization", "registration", "documentation")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="acris update: the board - reads the counters and the heartbeats, writes the two tabs")
+    ap = argparse.ArgumentParser(description="acris update: the board - reads reproduction.updates, writes the rates, eta and status back")
     ap.add_argument("command", nargs="?", default="run", choices=["run", "show", "reconcile"])
     ap.add_argument("--every", type=int, default=60, help="seconds between ticks")
     ap.add_argument("--once", action="store_true", help="one tick, then exit")

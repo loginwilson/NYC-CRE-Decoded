@@ -121,3 +121,11 @@ after last night's verify scans; an instance that stops answering under the load
 statements of 0005 (then 0006's nine) are built one at a time, the first watched as the test, after a half hour's rest;
 if a paced build dies, the rest goes overnight. Nothing in any row was touched by any restart; four indexes stand.
 
+2026-09-06 13:1x — 0007 WRITTEN AND PROVEN, TO BE APPLIED AFTER THE BUILDS. The reproduction schema will show three
+tables - acris, richmond, updates - and the claims will sit in the schema `machinery`. The whole migration ran inside one
+transaction on the live project and was rolled back: 12 updates rows carried over (8 totals, 4 workstation rows from the
+heartbeats), 96 claims carried, then a heartbeat, a claim of one, a landing as pending (the cooldown), a landing as absent
+(released; the lane row and the machine's row each +1), reconcile - and nothing kept. `push` applies it in order after
+0005 and 0006; the code that reads and writes the new table (cloud.py, board.py, the update programs, Population.py's
+verify, test_schema.py) is committed with it.
+
