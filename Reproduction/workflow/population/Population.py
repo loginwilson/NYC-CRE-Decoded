@@ -574,6 +574,7 @@ def verify(a):
     pg = pg_connect()
     con = old(OLD_DB)
     reg_total = {"empty": 0, "object": 0, "word": 0}
+    rows_added = 0                                   # rows the cloud holds beyond the old table (landed after the load)
     ok = True
     if samples_only:
         shift = None
@@ -608,11 +609,21 @@ def verify(a):
                        p["document"]["absent"] + p["document"]["imageless"] - sh["absent"], p["document"]["path"] + moved)
                 log("%-8s old:   rows %s | document empty %s pending %s absent %s path %s   (apply-found wrote %s cells: %s were empty, %s pending, %s absent)" % (
                     (s,) + tuple("{:,}".format(x) for x in exp) + tuple("{:,}".format(x) for x in (moved, sh["empty"], sh["pending"], sh["absent"]))))
-                if exp != tuple(got[:5]):
-                    ok = False
-                    log("%-8s DIFFERENT - read population.rejects.jsonl and the two lines above" % s)
+                g = tuple(got[:5])
+                if exp != g:
+                    # THE CLOUD MOVES FORWARD (2026-09-06 19:23: richmond had 435 rows the lanes landed after the load, their
+                    # documents empty): rows may only grow, and pending / absent / path may only grow - a lane's landings;
+                    # anything that shrank, or a path count that fell, is a difference
+                    forward = g[0] >= exp[0] and all(g[i] >= exp[i] for i in (2, 3, 4)) and (g[0] - exp[0]) == (g[1] - exp[1]) + sum(g[i] - exp[i] for i in (2, 3, 4))
+                    if forward:
+                        log("%-8s MATCH, the cloud moved forward: %s rows landed after the load (%s empty documents more, %s pending, %s absent, %s paths more)" % (
+                            s, "{:,}".format(g[0] - exp[0]), "{:,}".format(g[1] - exp[1]), "{:+,}".format(g[2] - exp[2]), "{:+,}".format(g[3] - exp[3]), "{:+,}".format(g[4] - exp[4])))
+                    else:
+                        ok = False
+                        log("%-8s DIFFERENT - read population.rejects.jsonl and the two lines above" % s)
                 for k, v in zip(("empty", "object", "word"), got[5:]):
                     reg_total[k] += v
+                rows_added += max(0, g[0] - exp[0])
             cur.execute("select doc_id, document from reproduction.%s tablesample system (0.02) where left(document, %%s) = %%s limit %%s" % s,
                         (len(storage.CANON_ROOT), storage.CANON_ROOT, a.sample))
             sample = cur.fetchall()
@@ -656,8 +667,16 @@ def verify(a):
         rt = sv.get("registry_totals") or {}
         log("registry, both sources together: cloud %s | old %s" % (json.dumps(reg_total), json.dumps(rt)))
         if any(reg_total[k] != rt.get(k) for k in reg_total):
-            ok = False
-            log("registry DIFFERENT")
+            # registries only move forward: a word never appears, objects never become empties, and the cloud may hold
+            # more rows (unregistered or registered) than the old table had
+            filled = rt.get("empty", 0) - reg_total["empty"]
+            forward = reg_total["word"] == rt.get("word", 0) and reg_total["object"] >= rt.get("object", 0) and reg_total["empty"] <= rt.get("empty", 0) + max(0, rows_added)
+            if forward:
+                log("registry MATCH, the cloud moved forward: %s old empties registered after the load, %s registries on rows the old table never had" % (
+                    "{:,}".format(max(filled, 0)), "{:,}".format(reg_total["object"] - rt.get("object", 0) - max(filled, 0))))
+            else:
+                ok = False
+                log("registry DIFFERENT")
     log("VERIFY: %s" % ("MATCH on both sources" if ok else "DIFFERENCES - see above"))
     return 0 if ok else 1
 

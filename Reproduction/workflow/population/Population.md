@@ -245,3 +245,15 @@ the load. Every old value is in the cloud unchanged, nothing is missing, and eve
 forward. The audit's rule now names that shape `registry_landed_after_load` (a landing, never a defect; the reverse - a
 registry gone - would be one) and the same run would read EXACT under it; a rerun for the printed word is 75 minutes and can
 go overnight on login's word. GATE 1: the migration is exact. The full `verify` (18:24) closes the record.
+
+2026-09-06 19:23 — THE FULL VERIFY (18:24 -> 19:23, beside 0008's builds): acris - rows 21,623,562 both sides; documents empty
+17,906,619 / pending 0 / absent 156,583 / path 3,560,360 both sides (apply-found's 353,014 cells counted in); 200 of 200 sampled
+paths open a file on the drive; 2,000 of 2,000 sampled registries equal value for value; reconcile measured phase 3,716,943
+(17.19%), synchronization and registration 100%. richmond - the cloud holds 2,502,936 rows against the old 2,502,501: the 435
+rows the sync lane landed after the load, their documents empty (499 empty against 64), pending 174 / absent 9,622 / path
+2,492,641 equal both sides; 200 of 200 paths open; 2,000 of 2,000 registries equal; reconcile 99.98% documentation. Registries
+together: cloud 0 empty / 24,126,498 objects / 0 words against the old 64 / 24,125,999 / 0 - the 499 registrations of 00:00 on
+09-06 the audit named. The verify's rule printed DIFFERENT for the same forward movement; it now reads a cloud that only moved
+forward (rows and states grown, no word, no path lost) as "MATCH, the cloud moved forward" and says by how much. GATE 1
+CLOSED: the audit over every row and the verify over every count agree - nothing missing, nothing changed, the cloud ahead by
+what the lanes landed.
