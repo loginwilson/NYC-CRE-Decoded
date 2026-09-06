@@ -183,7 +183,7 @@ def check():
     return 0
 
 
-def push(dry):
+def push(dry, rest=0):
     files = sql_files()
     con = connect()
     try:
@@ -205,7 +205,7 @@ def push(dry):
             if dry:
                 continue
             if STATEMENT_BY_STATEMENT in text.splitlines()[0]:
-                if not push_statements(con, v, n, text):
+                if not push_statements(con, v, n, text, rest):
                     return 1
                 continue
             try:
@@ -273,7 +273,7 @@ def label(stmt):
     return stmt[:100]
 
 
-def push_statements(con, v, n, text):
+def push_statements(con, v, n, text, rest=0):
     """One statement at a time, each its own transaction, timed; stop at the first failure (what ran stays - the file is
     re-runnable); the ledger row after the last.  Returns True when the file is recorded."""
     import time
@@ -292,7 +292,11 @@ def push_statements(con, v, n, text):
                     print("  %2d/%d FAILED after %.0f s - %s: %s" % (k, len(stmts), time.time() - t0, type(e).__name__, str(e).strip().splitlines()[0]))
                     print("  the statements before it stand; fix and run push again - it skips what exists")
                     return False
-                print("  %2d/%d %6.0f s  %s" % (k, len(stmts), time.time() - t0, label(stmt)), flush=True)
+                took = time.time() - t0
+                print("  %2d/%d %6.0f s  %s" % (k, len(stmts), took, label(stmt)), flush=True)
+                if rest and took >= 10 and k < len(stmts):
+                    print("  resting %d s (the disk's budget)" % rest, flush=True)
+                    time.sleep(rest)
             cur.execute("insert into %s (version, statements, name) values (%%s, %%s, %%s)" % LEDGER, (v, [text], n))
         print("  applied and recorded")
         return True
@@ -329,6 +333,7 @@ def main(argv=None):
     sub.add_parser("check", help="server, schemas, tables; every schema file on disk against the ledger")
     p = sub.add_parser("push", help="apply the schema files not yet applied, in version order")
     p.add_argument("--dry", action="store_true", help="list what would be applied; run nothing")
+    p.add_argument("--rest", type=int, default=0, help="statement by statement: seconds to rest after each statement that ran 10 s or longer (a small instance's disk budget)")
     s = sub.add_parser("sql", help="one statement (-c) or a script (-f), logged beside this file")
     g = s.add_mutually_exclusive_group(required=True)
     g.add_argument("-c", "--command")
@@ -338,7 +343,7 @@ def main(argv=None):
     if a.cmd == "check":
         return check()
     if a.cmd == "push":
-        return push(a.dry)
+        return push(a.dry, a.rest)
     sql = a.command if a.command else open(a.file, encoding="utf-8").read()
     return run_sql(sql, a.dry)
 

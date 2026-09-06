@@ -109,3 +109,15 @@ stopped. Two restarts in 25 minutes, both under a sustained index build, with th
 parallel worker: the Micro instance (1 GB, shared with Supabase's own services) is not enough for a build of this size.
 The build waits for a Small instance (2 GB) - login's setting - and resumes where it stands (`push` skips what exists).
 
+2026-09-06 12:36 — THE THIRD RESTART, AND WHAT THE LOG SAYS. The push resumed on a Small instance (2 GB; login's
+setting, 12:33) and two minutes into acris_pages the instance restarted again (16:36:28 UTC). The Postgres log, read by
+login: before each of the 12:13 and 12:36 restarts there is no "out of memory" and no "terminated by signal" - the log
+simply stops and resumes with "database system was interrupted; last known up at ...": the whole server was killed from
+outside, by the platform, not by a Postgres error (the 12:32 stop is the compute change, a clean "fast shutdown request").
+Reading: Micro and Small run on a burstable disk (about 87 and 174 MB/s baseline, a daily budget of bursting above it),
+an index build reads the 18 GB table at 125 MB/s or more for minutes at a stretch, and today had forty minutes of that
+after last night's verify scans; an instance that stops answering under the load is restarted. The remedy is pacing:
+`push --rest 600` rests ten minutes after every statement that ran ten seconds or longer, and the remaining twelve
+statements of 0005 (then 0006's nine) are built one at a time, the first watched as the test, after a half hour's rest;
+if a paced build dies, the rest goes overnight. Nothing in any row was touched by any restart; four indexes stand.
+
