@@ -99,3 +99,13 @@ now runs a file whose first line says `-- statement by statement` one statement 
 own transaction, so a crash costs one index and a re-run skips what exists (`if not exists`); 0005 carries the marker,
 the instance's default build memory (64 MB) and `max_parallel_maintenance_workers = 0`. The dashboard was unreachable
 for about a minute; a compute of Small (2 GB) is the safer instance for a build of this size.
+
+2026-09-06 12:13 — THE SECOND RESTART, STATEMENT BY STATEMENT. The push re-run at 12:04 (hidden window; a first re-run's
+client had vanished at 12:00 while the server finished its index - the statement-by-statement shape held: acris_type stood
+committed, 146 MB, and the re-run skipped it) built acris_borough, acris_recorded and acris_doc_date in 160 s each (144-148
+MB each; the type index of 21.6 million short values is a tenth of the 1 GB estimated) and one minute into acris_pages the
+instance restarted again (16:13:25 UTC). Four indexes stand committed; the client hung on the pooler's dead socket and was
+stopped. Two restarts in 25 minutes, both under a sustained index build, with the default 64 MB of build memory and no
+parallel worker: the Micro instance (1 GB, shared with Supabase's own services) is not enough for a build of this size.
+The build waits for a Small instance (2 GB) - login's setting - and resumes where it stands (`push` skips what exists).
+
