@@ -58,6 +58,9 @@ def dsn():
     return url
 
 
+NUL_ESCAPE = "\\u0000"        # the JSON escape for NUL: PostgreSQL jsonb refuses it ("unsupported Unicode escape sequence")
+
+
 class Cloud:
     """claim / registries / land / heartbeat for one source, one lane, one workstation."""
 
@@ -119,8 +122,9 @@ class Cloud:
         pending keeps its claim as a cooldown for pending_age; claim() offers it again after that (migration 0004)."""
         if not rows:
             return 0
+        payload = json.dumps(rows).replace(NUL_ESCAPE, "")   # jsonb cannot hold NUL; a source page's stray NUL is dropped, nothing else
         out = self._run("select reproduction.land(%s, %s, %s, %s::jsonb, %s::interval)",
-                        (self.source, self.lane, self.host, json.dumps(rows), pending_age), True)
+                        (self.source, self.lane, self.host, payload, pending_age), True)
         return out[0][0]
 
     def heartbeat(self, width, last_event=None):

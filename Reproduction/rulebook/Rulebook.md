@@ -127,3 +127,5 @@ before anything else: every document cell in the table is a real path or a verdi
 never moved (0), no outbox or parked file was left; the 28 claims were deleted (they would have expired by 19:42
 anyway). Each of the three now refuses a table that holds anything but SIM rows, before it inserts a row. `test_schema.py`
 is the one proof written for the populated table: it inserts its own pendings and claims exactly those.
+
+2026-09-05 20:1x — THE NUL ESCAPE IN A LANDING. The population load met 8,710+ old registries whose JSON carries `\u0000` (a NUL from the source page inside a party name); PostgreSQL's jsonb refuses it (`unsupported Unicode escape sequence`). The new lanes would meet the same character in a fresh registry, and a landing jsonb refuses would fail `land()` forever and sit in the outbox - so `cloud.py` `land()` strips that six-character escape from the landing's JSON before it goes to the table; nothing else is touched. Proven offline on a value carrying a real NUL.

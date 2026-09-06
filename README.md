@@ -76,6 +76,16 @@ pendings due for a re-check come first. It fills them with `land()` once a minut
 claims go back on the list. Each running lane writes `heartbeat()` once a minute. Synchronization runs at home;
 registration and documentation on any machine.
 
+**Joining a second workstation (the steps, 2026-09-05; on login's word).** 1. `git clone https://github.com/loginwilson/NYC-CRE-Decoded`
+and `pip install -r Reproduction/rulebook/requirements.txt` (Python 3.12). 2. The env file - `C:\dev\nyc-cre-decoded.env` on
+Windows, `~/nyc-cre-decoded.env` on a Mac, or wherever `NYC_CRE_DECODED_ENV` points - with `SUPABASE_DB_URL` (the session
+pooler) and `SUPABASE_DB_PASSWORD`, typed in by hand, never committed. 3. `python supabase/supabase.py check` prints the
+ledger: every migration applied. 4. A drive for the documents, named by its label; a lane is launched from its own folder
+with that label and this machine's name - `python "Acris Documentation.py" --drive <label> --host <name> --width 20` - the
+files land under that drive in the same tree, every cell carries the One Touch path (`Reproduction/rulebook/storage.py`),
+and the claims table hands each machine its own slice. 5. Synchronization stays on one machine. Nothing else is
+configured: the code, the rules and the to-do list are the same everywhere.
+
 **The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells
 filled against rows), tab 2 is the lanes (each cell filled against rows), both with 60-second and 5-minute rate,
 increase, percent and eta, landed, needed, percent of total, status and as-of. The status follows the lane's own
