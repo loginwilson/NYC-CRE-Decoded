@@ -234,3 +234,14 @@ are orphans a cut write left in the tree (the lane writes the file, then the cel
 file and no cell). login: "add those back into the backfill" - they never left it. Done 16:2x: the eight empty files staged
 under D:/Ignore/Staged by population/empty (logged in the moves log as kind staged, why empty), NO cell written, the
 documentation lane fetches them again in gate 4. The audit, running since 16:11, is untouched.
+
+2026-09-06 18:23 — THE AUDIT (gate 1), the whole table, 75 minutes (16:11 launch dropped by the pooler at 6.5 M rows; relaunched
+17:08 resumable; 24,126,063 old rows against 24,126,498 cloud rows at about 5,200 rows/s): EQUAL 24,125,999 · registry
+different 64 · document different 0 · MISSING IN THE CLOUD 0 · landed after the load 435 · unknown word 0. The 64 and the 435
+are ONE thing, proven by query afterwards: 499 richmond rows whose registry the cloud stamped between 2026-09-06T00:00:11 and
+00:01:44 - the richmond registration lane's run at midnight, after the load - the old table's registry cell empty for all 499
+(the 64 that were in the old table as empties, the 435 the sync lane added after the load); no acris registry stamped after
+the load. Every old value is in the cloud unchanged, nothing is missing, and every difference is the cloud having moved
+forward. The audit's rule now names that shape `registry_landed_after_load` (a landing, never a defect; the reverse - a
+registry gone - would be one) and the same run would read EXACT under it; a rerun for the printed word is 75 minutes and can
+go overnight on login's word. GATE 1: the migration is exact. The full `verify` (18:24) closes the record.

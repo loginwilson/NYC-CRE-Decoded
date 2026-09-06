@@ -914,13 +914,33 @@ AUDIT = HERE / "population.audit.json"
 
 
 def cloud_rows(pg, source):
-    """Every row of one cloud table in doc_id order, streamed (a named cursor, ten thousand at a time)."""
-    cur = pg.cursor(name="audit_" + source)
-    cur.itersize = 10000
-    cur.execute("select doc_id, registry, document from reproduction.%s order by doc_id" % source)
-    for row in cur:
-        yield row
-    cur.close()
+    """Every row of one cloud table in doc_id order, streamed (a named cursor, ten thousand at a time).  A connection
+    the pooler drops mid-stream (2026-09-06 16:51: both the audit's and the push's sessions closed at once, the server
+    itself up) is reopened and the stream resumes after the last id seen - the walk never restarts from the top."""
+    import psycopg2
+    last = ""
+    tries = 0
+    while True:
+        try:
+            cur = pg[0].cursor(name="audit_" + source)
+            cur.itersize = 10000
+            cur.execute("select doc_id, registry, document from reproduction.%s where doc_id > %%s order by doc_id" % source, (last,))
+            for row in cur:
+                last = row[0]
+                yield row
+            cur.close()
+            return
+        except psycopg2.OperationalError as e:
+            tries += 1
+            if tries > 20:
+                raise
+            log("cloud: the connection dropped after %s (%s) - reconnecting in 30 s and resuming after it (try %d)" % (last or "the start", str(e).splitlines()[0][:60], tries))
+            time.sleep(30)
+            try:
+                pg[0].close()
+            except Exception:
+                pass
+            pg[0] = pg_connect()
 
 
 def audit(a):
@@ -928,17 +948,17 @@ def audit(a):
     (digits, BK_, FT_, RC_ in byte order).  For every id: present on both sides; the registry the same JSON value
     (jsonb keeps values, not key order; the NUL escape set aside); the document cell what map_document says, with the
     found map for the documents the old stores gave.  An id the cloud has and the old table never had is a row a lane
-    landed after the load - counted, not a defect.  Reads only; the verdict is printed and written to population.audit.json.
+    landed after the load - counted, not a defect; so is a registry where the old table had none (registered after the load).  Reads only; the verdict is printed and written to population.audit.json.
     Measured 2026-09-06: the cloud streamed in id order (an index scan in the heap's own order) runs at ~10,500 rows/s and is
     the pace; the old table's ordered walk is nine times faster; asking the cloud by id in batches instead (random lookups
     on a table larger than memory) was ten times slower."""
     found = load_found(with_log=True)
     con = old(a.db)
-    pg = pg_connect()
+    pg = [pg_connect()]                                      # a one-element list: cloud_rows swaps in a fresh connection after a drop
     t0 = time.time()
     cls = {"rows_old": 0, "rows_cloud": 0, "equal": 0, "registry_different": 0, "document_different": 0,
-           "missing_in_cloud": 0, "landed_after_load": 0, "unknown_word": 0}
-    examples = {k: [] for k in ("registry_different", "document_different", "missing_in_cloud", "landed_after_load", "unknown_word")}
+           "missing_in_cloud": 0, "landed_after_load": 0, "registry_landed_after_load": 0, "unknown_word": 0}
+    examples = {k: [] for k in ("registry_different", "document_different", "missing_in_cloud", "landed_after_load", "registry_landed_after_load", "unknown_word")}
 
     def note(kind, did, detail=""):
         cls[kind] += 1
@@ -968,7 +988,13 @@ def audit(a):
             else:
                 want = json.loads(mapped) if mapped is not None else None
                 if want != reg:
-                    note("registry_different", did, "old %s | cloud %s" % (str(want)[:60], str(reg)[:60])); ok = False
+                    if want is None and isinstance(reg, dict):
+                        # the old table had no registry and the cloud has one: a lane REGISTERED it after the load (the first run
+                        # said DIFFERENCES over 64 of these, every one stamped 2026-09-06T00:00 by the richmond registration lane,
+                        # every old cell empty) - a landing, counted and named, never a defect; the reverse would be one
+                        note("registry_landed_after_load", did, "registered %s" % (reg.get("at") if isinstance(reg, dict) else ""))
+                    else:
+                        note("registry_different", did, "old %s | cloud %s" % (str(want)[:60], str(reg)[:60])); ok = False
             want_doc, unknown = map_document(did, pdf, found)
             if unknown is not None:
                 note("unknown_word", did, "document %r" % unknown); ok = False
@@ -983,7 +1009,7 @@ def audit(a):
         cls["rows_old"] += 1
         note("missing_in_cloud", old_row[0])
         old_row = old_it.fetchone()
-    con.close(); pg.close()
+    con.close(); pg[0].close()
     cls["seconds"] = round(time.time() - t0)
     cls["at"] = datetime.datetime.now().isoformat(timespec="seconds")
     verdict = "EXACT" if not (cls["registry_different"] or cls["document_different"] or cls["missing_in_cloud"] or cls["unknown_word"]) else "DIFFERENCES"
