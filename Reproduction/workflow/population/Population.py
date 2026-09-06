@@ -509,11 +509,46 @@ def load(a):
 
 # ── verify ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+def found_shift(pg, con, found):
+    """What apply-found has written so far, by the cell it overwrote: a found document counts only when its cloud cell IS
+    the found path (so verify is exact whatever the timing of the placement still running), and it is classed by its cell
+    in the OLD table - empty (or an old-store path), pending, absent / imageless; an old path (a restored or a duplicate
+    file) shifts nothing.  {source: {"empty": n, "pending": n, "absent": n}}."""
+    shift = {s: {"empty": 0, "pending": 0, "absent": 0} for s in ("acris", "richmond")}
+    ids = sorted(found)
+    with pg.cursor() as cur:
+        for i in range(0, len(ids), 10000):
+            by_source = {}
+            for did in ids[i:i + 10000]:
+                by_source.setdefault(source_of(did), []).append(did)
+            for s, part in by_source.items():
+                cur.execute("select doc_id, document from reproduction.%s where doc_id = any(%%s)" % s, (part,))
+                for did, doc in cur.fetchall():
+                    if doc != found[did]:
+                        continue
+                    row = con.execute("select pdf from navigation where id = ?", (did,)).fetchone()
+                    if row is None:
+                        continue
+                    pdf = row[0]
+                    if pdf == "" or old_store_cell(pdf):
+                        shift[s]["empty"] += 1
+                    elif pdf in ("absent", "imageless"):
+                        shift[s]["absent"] += 1
+                    elif pdf == "pending":
+                        shift[s]["pending"] += 1
+    pg.commit()
+    return shift
+
+
 def verify(a):
     import psycopg2
     sv = json.loads(SURVEY.read_text(encoding="utf-8")) if SURVEY.exists() else None
     found = load_found(with_log=True)
     pg = psycopg2.connect(cloud.dsn(), connect_timeout=30, application_name="population")
+    con = old(OLD_DB)
+    log("found documents on record: %s - reading which of them apply-found has written, and what their old cell was" % "{:,}".format(len(found)))
+    shift = found_shift(pg, con, found)
+    reg_total = {"empty": 0, "object": 0, "word": 0}
     ok = True
     with pg.cursor() as cur:
         for s in ("acris", "richmond"):
@@ -521,23 +556,28 @@ def verify(a):
                                   count(*) filter (where document is null),
                                   count(*) filter (where document = 'pending'),
                                   count(*) filter (where document = 'absent'),
-                                  count(*) filter (where document like %s),
+                                  count(*) filter (where left(document, %s) = %s),
                                   count(*) filter (where registry is null),
                                   count(*) filter (where jsonb_typeof(registry) = 'object'),
                                   count(*) filter (where jsonb_typeof(registry) = 'string')
-                           from reproduction.%s""" % ("%s", s), (storage.CANON_ROOT + "%",))
+                           from reproduction.%s""" % ("%s", "%s", s), (len(storage.CANON_ROOT), storage.CANON_ROOT))
             got = cur.fetchone()
             log("%-8s cloud: rows %s | document empty %s pending %s absent %s path %s | registry empty %s object %s word %s" % ((s,) + tuple("{:,}".format(x) for x in got)))
             if sv:
                 p = sv["per_source"][s]
-                placed = sum(1 for d in found if source_of(d) == s)
-                exp = (p["rows"], p["document"]["empty"] - placed, p["document"]["pending"], p["document"]["absent"] + p["document"]["imageless"],
-                       p["document"]["path"] + placed, p["registry"]["empty"], p["registry"]["object"], p["registry"]["word"])
-                log("%-8s old:   rows %s | document empty %s pending %s absent %s path %s | registry empty %s object %s word %s" % ((s,) + tuple("{:,}".format(x) for x in exp)))
-                if exp != tuple(got):
+                sh = shift[s]
+                moved = sh["empty"] + sh["pending"] + sh["absent"]
+                exp = (p["rows"], p["document"]["empty"] - sh["empty"], p["document"]["pending"] - sh["pending"],
+                       p["document"]["absent"] + p["document"]["imageless"] - sh["absent"], p["document"]["path"] + moved)
+                log("%-8s old:   rows %s | document empty %s pending %s absent %s path %s   (apply-found wrote %s cells: %s were empty, %s pending, %s absent)" % (
+                    (s,) + tuple("{:,}".format(x) for x in exp) + tuple("{:,}".format(x) for x in (moved, sh["empty"], sh["pending"], sh["absent"]))))
+                if exp != tuple(got[:5]):
                     ok = False
                     log("%-8s DIFFERENT - read population.rejects.jsonl and the two lines above" % s)
-            cur.execute("select doc_id, document from reproduction.%s tablesample system (0.02) where document like %%s limit %%s" % s, (storage.CANON_ROOT + "%", a.sample))
+                for k, v in zip(("empty", "object", "word"), got[5:]):
+                    reg_total[k] += v
+            cur.execute("select doc_id, document from reproduction.%s tablesample system (0.02) where left(document, %%s) = %%s limit %%s" % s,
+                        (len(storage.CANON_ROOT), storage.CANON_ROOT, a.sample))
             sample = cur.fetchall()
             exists = sum(1 for _, p in sample if os.path.exists(p))
             log("%-8s paths: %d of %d sampled cells open a file on the drive" % (s, exists, len(sample)))
@@ -550,6 +590,13 @@ def verify(a):
             for lane, landed, needed in cur.fetchall():
                 log("  board %-16s landed %s / needed %s (%.2f%%)" % (lane, "{:,}".format(landed), "{:,}".format(needed), 100.0 * landed / needed if needed else 0))
     pg.close()
+    con.close()
+    if sv:
+        rt = sv.get("registry_totals") or {}
+        log("registry, both sources together: cloud %s | old %s" % (json.dumps(reg_total), json.dumps(rt)))
+        if any(reg_total[k] != rt.get(k) for k in reg_total):
+            ok = False
+            log("registry DIFFERENT")
     log("VERIFY: %s" % ("MATCH on both sources" if ok else "DIFFERENCES - see above"))
     return 0 if ok else 1
 
