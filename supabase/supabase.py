@@ -279,6 +279,7 @@ def push_statements(con, v, n, text):
     import time
     stmts = statements(text)
     print("  statement by statement: %d statements" % len(stmts))
+    con.rollback()                                            # end the ledger's read transaction: autocommit cannot be set inside one
     con.autocommit = True
     try:
         with con.cursor() as cur:
