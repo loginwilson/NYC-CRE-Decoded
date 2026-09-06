@@ -30,6 +30,8 @@ registration.edge.json
 registration.edge.tmp
 enumeration.*.json
 enumeration.*.txt
+*.launch.out
+*.launch.err
 update.state.json
 update.state.tmp
 
