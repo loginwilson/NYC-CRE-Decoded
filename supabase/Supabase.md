@@ -129,3 +129,13 @@ heartbeats), 96 claims carried, then a heartbeat, a claim of one, a landing as p
 0005 and 0006; the code that reads and writes the new table (cloud.py, board.py, the update programs, Population.py's
 verify, test_schema.py) is committed with it.
 
+2026-09-06 13:18 — THE FOURTH RESTART, AND THE INDEX THEY SHARE. The paced push (`--rest 600`, launched 13:16 after a
+half hour's rest, on Small) restarted the instance two minutes into acris_pages (17:18:35 UTC). Three of the four restarts
+- 12:13 on Micro, 12:36 and 13:18 on Small - came one to two minutes into that same index, while the three indexes before
+it (borough, recorded, doc_date) had built back to back in 160 s each without trouble, which rules out the disk's budget as
+the reading and points at the index itself. `whole_number` (pages) and `us_money` (amount) were the two functions written
+in SQL with a regular expression evaluated per row; `us_date`, plpgsql without one, built twice. Both are now plpgsql
+without a regular expression (the 13 cases pass unchanged), committed as df253e4; the push re-creates them (statements 4
+and 5, `create or replace`) before it reaches the pages index again. The 11:48 restart, four minutes into borough on Micro
+with 128 MB of build memory and a parallel worker, stays read as memory.
+
