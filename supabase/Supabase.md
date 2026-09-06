@@ -52,6 +52,14 @@ storage of the same order; its compute is the GPU machine, not the database. The
 database holds what more than one machine or person must read or write; the drive holds what one machine builds and
 reads in bulk, and the documents.
 
+## The program's connection
+
+`supabase.py` connects through the session pooler with TCP keepalives and **no statement timeout**: the project's default
+is two minutes on the `postgres` role (`show statement_timeout`), enough for a lane's claim or landing and too short for
+a migration that builds an index over the populated table or for a count over it. The population program does the same
+(`pg_connect()` in `Reproduction/workflow/population/Population.py`); the lanes keep the default - their statements are
+small, and a lane that waits two minutes on the table has something else wrong.
+
 ## The state
 
 | when | what |
@@ -62,6 +70,7 @@ reads in bulk, and the documents.
 | 2026-09-05 17:0x | 0003 applied: `source` first in `acris` and `richmond` (`source | doc_id | registry | document | updated_at`); test_schema ALL OK on the empty tables |
 | 2026-09-05 17:59 - 21:10 | THE DATA MOVE (`Reproduction/workflow/population/Population.py load`): 24,126,063 rows by COPY from `Legal Instruments.db` - acris 21,623,562, richmond 2,502,501 - zero rejects; 19,095 registries noted for a stripped NUL escape (jsonb cannot hold `\u0000`); database about 23 GB on the 40 GB disk |
 | 2026-09-05 21:16 - 21:52 | `apply-found` (233,381 acris cells filled with placed documents' paths) and `verify`: MATCH on both sources, every cell state equal to the old table's; acris path sample 200 of 200 on the drive; richmond 9 of 200 until its file move completes (the cells lead the disk) |
+| 2026-09-05 22:04 | 0004 applied with `push` after the load and `verify` (the column drop takes the table's lock; the two acris pending indexes were rebuilt over 21.6M rows, about seven minutes each): `updated_at` and its trigger gone, a row is `source | doc_id | registry | document`, a pending's wait between checks is its claim; test_schema.py ALL OK on the populated table (22:13, its connections without the statement timeout; the first run's recount was cut at two minutes) |
 
 ## History
 

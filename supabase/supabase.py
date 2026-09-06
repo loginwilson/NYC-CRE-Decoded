@@ -71,8 +71,12 @@ def dsn():
 
 def connect(app="supabase.py"):
     import psycopg2
-    con = psycopg2.connect(dsn(), connect_timeout=30, application_name=app)
+    con = psycopg2.connect(dsn(), connect_timeout=30, application_name=app,
+                           keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3)
     con.autocommit = False
+    with con.cursor() as cur:
+        cur.execute("set statement_timeout = 0")    # the project's default is two minutes on the postgres role; a migration over the populated table needs more
+    con.commit()
     return con
 
 

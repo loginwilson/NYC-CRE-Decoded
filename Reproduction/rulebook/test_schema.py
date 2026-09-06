@@ -34,6 +34,7 @@ def q(sql, params=None, fetch=True):
     con = psycopg2.connect(dsn(), connect_timeout=30, application_name="test_schema")
     try:
         with con.cursor() as cur:
+            cur.execute("set statement_timeout = 0")     # reconcile() over the populated table outlasts the project's two-minute default
             cur.execute(sql, params)
             out = cur.fetchall() if fetch and cur.description else None
         con.commit()
