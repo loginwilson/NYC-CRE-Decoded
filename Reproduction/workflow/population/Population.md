@@ -148,3 +148,14 @@ already say where each file will be, and the move runs after the old-store place
 (21:27) hung on a cloud connection that had died under it (no keepalive; no session for it on the server); the
 population's connection now asks for TCP keepalives and `found_shift` redoes a chunk on a fresh line. The old table
 `Legal Instruments.db` is now a copy: the cloud is the record.
+
+2026-09-05 22:49 — THE OLD STORES ARE PLACED. `organize --only old` read all four stores (By Parcel, By Party, Ignore's
+`Acquisition by parcel` and `Documents`; 17:40-22:49 with the pause 20:24-21:53): 353,012 documents placed into
+`Acris\By Document` by their recorded date, 63 restored to the place their cell already named (the file had been missing
+there), 556,658 duplicates left in place, 0 files unknown to the table, 0 unreadable names; the found map holds 353,014.
+What remains in the four old stores is therefore duplicates only - files the tree already has - and can go on login's
+word. `organize --only richmond` began at 22:49: richmond's 2.49 million files move one by one from `Acris\By Document`
+to `Richmond\By Document`, about 75 files a second on the One Touch (a rename is a metadata write on a USB disk), so it
+runs into the morning; the richmond cells already name the destination.
+
+2026-09-05 22:59 — APPLY-FOUND, SECOND PASS: 119,633 more acris cells filled (353,014 in all - every document the old stores gave the tree now has its path in its cell), 0 cells that held a different path; richmond 0 (its 63 restored files' cells already named the place). Run again after any later placement: the command is idempotent.
