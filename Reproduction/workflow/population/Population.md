@@ -159,3 +159,13 @@ to `Richmond\By Document`, about 75 files a second on the One Touch (a rename is
 runs into the morning; the richmond cells already name the destination.
 
 2026-09-05 22:59 — APPLY-FOUND, SECOND PASS: 119,633 more acris cells filled (353,014 in all - every document the old stores gave the tree now has its path in its cell), 0 cells that held a different path; richmond 0 (its 63 restored files' cells already named the place). Run again after any later placement: the command is idempotent.
+
+2026-09-05 23:32 — VERIFY, SECOND PASS: MATCH ON BOTH SOURCES with every placed document in its cell. acris: rows
+21,623,562 | document empty 17,906,619 · pending 0 · absent 156,583 · path 3,560,360 (the old table's 18,259,633 empties
+less the 353,014 placed; its 3,207,346 paths plus the same) | registry object 21,623,562; 200 of 200 sampled paths open a
+file. richmond unchanged and equal (empty 64 · pending 174 · absent 9,622 · path 2,492,641; registry 2,502,437 / 64);
+its path sample 35 of 200, rising as the file move goes on (116,014 files moved at 23:15). Registry totals equal
+(24,125,999 / 64). The board: acris documentation 3,716,943 / 21,623,562 (17.19 %), registration and synchronization
+100 %; richmond documentation 2,502,437 / 2,502,501. The mover was paused 23:16-23:32 so verify's match stage had the
+drive (88 documents a second against it, 300 without); it resumed the moment verify ended. The record of the move is
+complete but for richmond's files; `verify` once more when the move has ended shows the richmond sample at 200 of 200.
