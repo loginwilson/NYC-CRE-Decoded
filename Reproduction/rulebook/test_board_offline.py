@@ -50,7 +50,7 @@ check("eta_text", (board.eta_text(86400 * 2.5, 1.0), board.eta_text(7200, 1.0), 
       == ("2.5 days", "2.0 hours", "10 min", "under a minute", None, None))
 for key in rows:
     line = b.line(key, rows[key])
-    ok = line.startswith("UPDATE acris") and ("ACTIVE" in line or "PENDING" in line or "COMPLETE" in line)
+    ok = line.startswith("UPDATE acris") and ("ACTIVE" in line or "PENDING" in line or "COMPLETE" in line or "STALLED" in line)
     if not ok:
         check("line renders for " + key, False, line)
 check("lines render", True)
