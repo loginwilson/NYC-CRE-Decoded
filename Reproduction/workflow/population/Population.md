@@ -218,3 +218,12 @@ read %PDF- and %%EOF afterwards), 41 identical copies and 2 other renderings STA
 (nothing deleted, the cells untouched), 0 neither-whole, 0 without a copy. 15:43 `sweep` launched over both trees for the
 stubs the move never met (hidden window, population.sweep.1543.log); `resolve` again for what it lists, then the full
 `verify`, then the audit (gate 1) once 0006 and 0007 have finished their scans.
+
+2026-09-06 16:11 — THE SWEEP (15:43 -> 16:11, 1,646 s): 6,053,150 files in 41,151 folders under both trees; 65 files under
+16 KB opened; 8 stubs, all of them EMPTY (0 bytes), all acris microfilm documents (FT_1050008687105 / -405 / -505 / -605 of
+1968-03, FT_3530001540653 of 1990-05, FT_3090007635509 / -637209 / -638609 of 2001-04/05), none with a whole copy anywhere
+(`resolve --dry`: stub_without_copy 8, nothing to stage). Their cells point at these empty files, which is what the old table
+said too: the old lane saved nothing for them. POLICY (login's call, reported before any cell write): set the eight cells to
+'' so the documentation lane claims and fetches them again in gate 4, and stage the empty files; until then the audit reads
+them as EXACT, because the audit is the migration's mirror, not a wholeness check. 16:11 the AUDIT (gate 1) launched over the
+whole table in a hidden window (population.audit.1611.log) beside 0006's keys scan; the full `verify` follows the audit.
