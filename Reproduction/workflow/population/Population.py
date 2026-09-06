@@ -462,7 +462,7 @@ def load(a):
     if not ORGANIZE.exists() or json.loads(ORGANIZE.read_text(encoding="utf-8")).get("dry"):
         log("WARNING: organize has not run for real - the paths written assume the tree under %s" % NEW_ROOT)
     con = old(a.db)
-    pg = psycopg2.connect(cloud.dsn(), connect_timeout=30, application_name="population")
+    pg = pg_connect()
     pg.autocommit = False
     with pg.cursor() as cur:
         cur.execute("select coalesce(max(doc_id), '') from reproduction.acris")
@@ -514,40 +514,57 @@ def found_shift(pg, con, found):
     the found path (so verify is exact whatever the timing of the placement still running), and it is classed by its cell
     in the OLD table - empty (or an old-store path), pending, absent / imageless; an old path (a restored or a duplicate
     file) shifts nothing.  {source: {"empty": n, "pending": n, "absent": n}}."""
+    import psycopg2
     shift = {s: {"empty": 0, "pending": 0, "absent": 0} for s in ("acris", "richmond")}
     ids = sorted(found)
-    with pg.cursor() as cur:
-        for i in range(0, len(ids), 10000):
-            by_source = {}
-            for did in ids[i:i + 10000]:
-                by_source.setdefault(source_of(did), []).append(did)
-            for s, part in by_source.items():
-                cur.execute("select doc_id, document from reproduction.%s where doc_id = any(%%s)" % s, (part,))
-                for did, doc in cur.fetchall():
-                    if doc != found[did]:
-                        continue
-                    row = con.execute("select pdf from navigation where id = ?", (did,)).fetchone()
-                    if row is None:
-                        continue
-                    pdf = row[0]
-                    if pdf == "" or old_store_cell(pdf):
-                        shift[s]["empty"] += 1
-                    elif pdf in ("absent", "imageless"):
-                        shift[s]["absent"] += 1
-                    elif pdf == "pending":
-                        shift[s]["pending"] += 1
-    pg.commit()
-    return shift
+    t0 = time.time()
+    for i in range(0, len(ids), 10000):
+        by_source = {}
+        for did in ids[i:i + 10000]:
+            by_source.setdefault(source_of(did), []).append(did)
+        for s, part in by_source.items():
+            for attempt in (1, 2, 3):
+                try:
+                    with pg.cursor() as cur:
+                        cur.execute("select doc_id, document from reproduction.%s where doc_id = any(%%s)" % s, (part,))
+                        cloud_cells = cur.fetchall()
+                    pg.commit()
+                    break
+                except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                    log("found_shift: the cloud line died (%s) - reconnecting, chunk redone (attempt %d)" % (str(e).strip().splitlines()[0][:80], attempt))
+                    if attempt == 3:
+                        raise
+                    try:
+                        pg.close()
+                    except Exception:
+                        pass
+                    pg = pg_connect()
+            for did, doc in cloud_cells:
+                if doc != found[did]:
+                    continue
+                row = con.execute("select pdf from navigation where id = ?", (did,)).fetchone()
+                if row is None:
+                    continue
+                pdf = row[0]
+                if pdf == "" or old_store_cell(pdf):
+                    shift[s]["empty"] += 1
+                elif pdf in ("absent", "imageless"):
+                    shift[s]["absent"] += 1
+                elif pdf == "pending":
+                    shift[s]["pending"] += 1
+        if (i // 10000) % 5 == 4:
+            log("found_shift: %s of %s read (%.0f/s)" % ("{:,}".format(min(i + 10000, len(ids))), "{:,}".format(len(ids)), min(i + 10000, len(ids)) / (time.time() - t0)))
+    return shift, pg
 
 
 def verify(a):
     import psycopg2
     sv = json.loads(SURVEY.read_text(encoding="utf-8")) if SURVEY.exists() else None
     found = load_found(with_log=True)
-    pg = psycopg2.connect(cloud.dsn(), connect_timeout=30, application_name="population")
+    pg = pg_connect()
     con = old(OLD_DB)
     log("found documents on record: %s - reading which of them apply-found has written, and what their old cell was" % "{:,}".format(len(found)))
-    shift = found_shift(pg, con, found)
+    shift, pg = found_shift(pg, con, found)           # the connection may have been renewed on the way
     reg_total = {"empty": 0, "object": 0, "word": 0}
     ok = True
     with pg.cursor() as cur:
@@ -601,37 +618,58 @@ def verify(a):
     return 0 if ok else 1
 
 
+def pg_connect():
+    """The population's connection: no statement timeout - the project's default (two minutes) cancels a count or an update
+    over the populated table (apply-found was cancelled at 21:13 on 2026-09-05); one program name."""
+    import psycopg2
+    pg = psycopg2.connect(cloud.dsn(), connect_timeout=30, application_name="population",
+                          keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3)
+    with pg.cursor() as cur:
+        cur.execute("set statement_timeout = 0")
+    pg.commit()
+    return pg
+
+
 def apply_found(a):
     """The documents organize placed from the old stores: their full paths into the cells that had none (NULL, pending, absent -
-    a file on disk outranks a verdict word), never over an existing path.  One COPY into a temporary table, one UPDATE per
-    source, then reconcile."""
-    import psycopg2
+    a file on disk outranks a verdict word), never over an existing path.  In chunks of 5,000 by the primary key, one
+    transaction per chunk (one UPDATE over the whole join was cancelled by the statement timeout); then reconcile."""
     found = load_found(with_log=True)
     if not found:
         raise SystemExit("nothing found: no population.found.json and no placed move in the log - run organize first")
     log("documents to write: %s (the found map and the moves log together)" % "{:,}".format(len(found)))
-    pg = psycopg2.connect(cloud.dsn(), connect_timeout=30, application_name="population")
-    pg.autocommit = False
+    pg = pg_connect()
+    per = {"acris": [], "richmond": []}
+    for did in sorted(found):
+        per[source_of(did)].append((did, found[did]))
     with pg.cursor() as cur:
-        cur.execute("create temporary table found (doc_id text collate \"C\" primary key, document text) on commit drop")
-        buf = io.StringIO()
-        w = csv.writer(buf, lineterminator="\n")
-        for did, path in found.items():
-            w.writerow([did, path])
-        buf.seek(0)
-        cur.copy_expert("copy found (doc_id, document) from stdin with (format csv)", buf)
         for s in ("acris", "richmond"):
-            cur.execute("""update reproduction.%s w set document = f.document from found f
-                           where f.doc_id = w.doc_id and f.doc_id %s and (w.document is null or w.document in ('pending', 'absent'))""" % (
-                        s, "like 'RC\\_%%'" if s == "richmond" else "not like 'RC\\_%%'"))
-            log("%-8s cells filled from the found map: %s" % (s, "{:,}".format(cur.rowcount)))
-            cur.execute("select count(*) from found f join reproduction.%s w on w.doc_id = f.doc_id where w.document like 'D:%%' and w.document <> f.document" % s)
-            log("%-8s cells that already held a different path (left alone): %s" % (s, "{:,}".format(cur.fetchone()[0])))
-        pg.commit()
+            filled = other = 0
+            pairs = per[s]
+            for i in range(0, len(pairs), 5000):
+                chunk = pairs[i:i + 5000]
+                ids = [d for d, _ in chunk]
+                paths = [q for _, q in chunk]
+                cur.execute("""select count(*) from reproduction.%s w
+                               join unnest(%%s::text[], %%s::text[]) as v(doc_id, document) on v.doc_id = w.doc_id
+                               where left(w.document, %%s) = %%s and w.document <> v.document""" % s,
+                            (ids, paths, len(storage.CANON_ROOT), storage.CANON_ROOT))
+                other += cur.fetchone()[0]
+                cur.execute("""update reproduction.%s w set document = v.document
+                               from unnest(%%s::text[], %%s::text[]) as v(doc_id, document)
+                               where w.doc_id = v.doc_id and (w.document is null or w.document in ('pending', 'absent'))""" % s,
+                            (ids, paths))
+                filled += cur.rowcount
+                pg.commit()
+                if (i // 5000) % 10 == 0:
+                    log("%-8s %s of %s found documents read - %s cells filled so far" % (
+                        s, "{:,}".format(min(i + 5000, len(pairs))), "{:,}".format(len(pairs)), "{:,}".format(filled)))
+            log("%-8s cells filled from the found map: %s" % (s, "{:,}".format(filled)))
+            log("%-8s cells that already held a different path (left alone): %s" % (s, "{:,}".format(other)))
         for s in ("acris", "richmond"):
             cur.execute("select * from reproduction.reconcile(%s)", (s,))
             log("%-8s reconcile: %s" % (s, cur.fetchall()))
-        pg.commit()
+            pg.commit()
     pg.close()
     return 0
 

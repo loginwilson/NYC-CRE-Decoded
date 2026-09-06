@@ -58,7 +58,10 @@ reads in bulk, and the documents.
 |---|---|
 | 2026-09-03 17:01 | schema `reproduction` created by 0001 (ten tables, four functions), applied with the Supabase CLI and recorded in the ledger |
 | 2026-09-05 15:55 | 0002 (pendings first; documentation claims only where a registry is) applied from here with `push` and recorded in the ledger; `test_schema.py` ALL OK on the empty table after it |
-| until the data move | every table empty (verified 15:55: 0 rows, 0 claims, 0 heartbeats per source; the board rows in place - one phase row and three lane rows per source); the repo's lanes cannot run for real before the rows are in. READY TO RECEIVE: the cell rules as check constraints, the four to-do indexes per source (pendings keyed on `updated_at`), `claim` with its six arguments, `land`, `heartbeat`, `reconcile` |
+| 2026-09-05 15:55 - 17:59 | every table empty (verified 15:55: 0 rows, 0 claims, 0 heartbeats per source; the board rows in place - one phase row and three lane rows per source); the repo's lanes cannot run for real before the rows are in. READY TO RECEIVE: the cell rules as check constraints, the four to-do indexes per source (pendings keyed on `updated_at`), `claim` with its six arguments, `land`, `heartbeat`, `reconcile` |
+| 2026-09-05 17:0x | 0003 applied: `source` first in `acris` and `richmond` (`source | doc_id | registry | document | updated_at`); test_schema ALL OK on the empty tables |
+| 2026-09-05 17:59 - 21:10 | THE DATA MOVE (`Reproduction/workflow/population/Population.py load`): 24,126,063 rows by COPY from `Legal Instruments.db` - acris 21,623,562, richmond 2,502,501 - zero rejects; 19,095 registries noted for a stripped NUL escape (jsonb cannot hold `\u0000`); database about 23 GB on the 40 GB disk |
+| 2026-09-05 21:16 - 21:52 | `apply-found` (233,381 acris cells filled with placed documents' paths) and `verify`: MATCH on both sources, every cell state equal to the old table's; acris path sample 200 of 200 on the drive; richmond 9 of 200 until its file move completes (the cells lead the disk) |
 
 ## History
 

@@ -123,3 +123,28 @@ first slice passed at 1,861 rows a second; the stretch of FT_10000084xx rows car
 registries (all noted). Also: the start-up row count is the planner's estimate now (a full count of the populated
 table is minutes of IO on the small compute, and it was only a log line), and `load` is launched with its output on
 disk (`python -u Population.py load` with stdout to `population.load.log`).
+
+2026-09-05 21:10 — THE LOAD IS IN. `load` read the old table to its last id (`RC_999999`) at 21:10:16: 24,126,063 rows in
+two runs (17:59-19:44 and 19:58-21:10, about 2,300 rows a second each; the gap is the refused slice above), ZERO rows
+rejected, 19,095 registries noted for a stripped NUL escape, the one 19:57 reject line superseded by the restart. The
+placement (`organize --only old`) was suspended 20:24-21:53 so the load had the One Touch to itself (a table lookup and a
+rename per file had the drive's queue at 3.8 and the load down to 500 rows a second; alone, the load ran at up to 3,300).
+
+2026-09-05 21:16-21:27 — APPLY-FOUND: 233,381 acris cells filled with the full path of a document placed from an old
+store, 0 cells that already held a different path; richmond's one found file (restored) already had its cell. The first
+attempt (21:11) was cancelled by the project's two-minute statement timeout on one UPDATE over the whole join; the
+population's connection now runs without a statement timeout (`pg_connect()`) and the update goes in chunks of 5,000 by
+the primary key. `reconcile`: acris phase 3,597,310 / 21,623,562, registration 21,623,562, documentation 3,597,310;
+richmond phase 2,502,437 / 2,502,501, registration 2,502,437, documentation 2,502,437.
+
+2026-09-05 21:52 — VERIFY: MATCH ON BOTH SOURCES. acris: rows 21,623,562 | document empty 18,026,252 · pending 0 ·
+absent 156,583 · path 3,440,727 | registry object 21,623,562, empty 0 - every number equal to the old table's, with
+apply-found's 233,381 cells moved from empty to path and the 156,583 `imageless` read as `absent`. richmond: rows
+2,502,501 | document empty 64 · pending 174 · absent 9,622 · path 2,492,641 | registry object 2,502,437, empty 64.
+Registry over both sources: 24,125,999 objects, 64 empty - the survey's totals. Paths on the drive: acris 200 of 200
+sampled cells open a file; richmond 9 of 200 - EXPECTED, not a defect: richmond's files still sit under
+`Acris\By Document` until the file move (`organize --only richmond`) carries them to `Richmond\By Document`; the cells
+already say where each file will be, and the move runs after the old-store placement, overnight. The first verify
+(21:27) hung on a cloud connection that had died under it (no keepalive; no session for it on the server); the
+population's connection now asks for TCP keepalives and `found_shift` redoes a chunk on a fresh line. The old table
+`Legal Instruments.db` is now a copy: the cloud is the record.
