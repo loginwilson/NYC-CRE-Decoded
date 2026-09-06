@@ -247,3 +247,14 @@ party names as one text with a trigram GIN (a name by part of it), a typed expir
 block and lot derived. Its functions proven in a rolled-back transaction; the build follows the audit. The proof of 0008 after
 the build: `prove_0008_filters` (plans and timings of a block, a lot from words, a partial name, an expiration range, the
 parcels view, and a landed row found by block and by part of a name).
+
+2026-09-06 19:4x — GATE 2 CLOSED. 0008 built (the trigram over party names 37 min, 1.9 GB) and proven: a block from words
+(`reproduction.block_keys(registry) @> array[reproduction.block_key('MANHATTAN', 573)]`, 522 ms), a lot from words
+(`registry @> reproduction.parcel('MANHATTAN', 573, 24)`, 320 ms), an expiration range (1.4 s), a landed row found by all of
+them. The honest limits, recorded in Supabase.md: a party by PART of a name reads its index but a common name takes 30-45 s
+cold on the Small instance (the exact full name stays at 300 ms; a word-level index is the candidate 0009); the parcels views
+read a document's parcels with borough / block / lot spelled out - finding a parcel goes through containment or the block
+keys. Gate 1 closed the same hour (Population.md). Next: gate 3 on login's word - the acris phase lane as ONE BATCH,
+`--lanes synchronization:10,registration:20 --unpark --edge 2026000245705` (the highest CRFN the table holds, read from the
+table 18:5x; the lane's old state file said 2026000247108 and does not exist any more - the number comes from the table, never
+a guess), the richmond phase lane `--lanes synchronization:10,registration:20 --mega`.

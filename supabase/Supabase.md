@@ -180,3 +180,18 @@ example registry and real rows; built after the audit ends so gate 1's verdict c
 up; the statement may still complete on the server. The audit now reopens its connection and resumes after the last id it
 saw (Population.py cloud_rows, 17:07), and `push` is re-runnable by design. A `FAILED ... server closed the connection`
 in a push log is checked against the server's uptime before anything is called a restart.
+
+2026-09-06 19:29 — 0008 APPLIED AND RECORDED (push --rest 60, launched 18:24 the minute the audit ended, beside the full verify).
+Build times: acris_blocks (GIN over the block keys) 562 s, acris_expiration 170 s, acris_party_names (trigram GIN over every
+party name) 2,221 s = 37 min, richmond_blocks 303 s, richmond_party_names 142 s, the parcels views instant, analyze 60 + 65 s.
+Sizes: acris_party_names 1,890 MB, acris_blocks 116 MB, acris_expiration 144 MB, richmond_party_names 256 MB, richmond_blocks
+14 MB; the database 32 GB. PROVEN 19:36-19:40 (prove_0008_filters): everything on Manhattan block 573 from words 522 ms via
+acris_blocks; one lot from words (parcel('MANHATTAN', 573, 24)) 320 ms via the registry GIN; expirations in one month 1.4 s via
+acris_expiration; a Staten Island block 419 ms; a landed throwaway row found by its block, its lot, its expiration, part of a
+party's name and in the parcels view with borough / block / lot, then deleted. TWO THINGS TO KNOW: (1) a party by PART of a
+name reads the trigram index but a common name is slow on this instance - '%deutsche bank%' 36 s, a rare name 45 s cold - the
+1.9 GB index is read from the burstable disk for every common trigram; the exact full name through the registry GIN stays at
+about 300 ms; a word-level index (full-text on the names) is the better tool for names and is the candidate 0009, not tonight.
+(2) the parcels views are for READING a document's parcels with borough, block and lot spelled out and for joins by doc_id;
+a filter by bbl on the view is a full scan (it unnests every row) - finding goes through containment or block_keys, which
+read an index. GATE 2 CLOSED: 0005, 0006, 0007, 0008 applied, recorded and proven.
