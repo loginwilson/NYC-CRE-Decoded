@@ -139,3 +139,20 @@ without a regular expression (the 13 cases pass unchanged), committed as df253e4
 and 5, `create or replace`) before it reaches the pages index again. The 11:48 restart, four minutes into borough on Micro
 with 128 MB of build memory and a parallel worker, stays read as memory.
 
+2026-09-06 15:36 — 0005 APPLIED AND RECORDED (`push --rest 60`, statement by statement, on the Small instance, no restart
+since 13:18). The index functions rewritten without regular expressions (13:3x) were the cure: the builds that had killed the
+instance four times ran through. Build times: acris_amount 183 s, acris_crfn 199 s, acris_registry (GIN, jsonb_path_ops over
+the whole registry) 5,332 s = 89 min, acris_document 156 s; richmond_doc_type 19 s, richmond_recorded 18 s, richmond_book_page
+22 s, richmond_instrument 18 s, richmond_amount 20 s, richmond_registry 94 s, richmond_document 23 s; the two views instant;
+analyze 10 s + 9 s. Sizes: acris_registry 4,066 MB, acris_amount 472 MB, acris_crfn 415 MB, acris_document 389 MB, the other
+acris field indexes 143-148 MB each; richmond_registry 314 MB, richmond_document 272 MB, its field indexes 17-54 MB. The
+database is 29 GB (acris with its indexes 26 GB, richmond 2.9 GB). PROVEN 15:37 (prove_0005_filters, read-only but for one
+throwaway row): twelve filters a person or a model would write - deeds in Queens newest first, a year of deeds by recorded
+date, pages >= 50, amount >= ten million, one crfn, a parcel by bbl and a party by name through containment on the whole
+registry, one day folder by the document cell, richmond book and page, one instrument, deeds in 2020, a parcel by bbl -
+every plan an index scan, never the table; 173-311 ms each on the pooled connection (the year-of-deeds COUNT over 54,581
+rows took 13 s while 0006's profile was scanning the table beside it). THE DYNAMIC PROOF (login: "as soon as the file comes
+in, will it fall into that index?"): one throwaway row landed with a registry and a document path was found by the typed view
+(type + borough + crfn; amount + pages), by containment on its parcel and on its party, and by its day folder, each by an
+index scan, within 2.0 s of landing; then deleted (0 left). The indexes are maintained on every insert and update: nothing
+is a snapshot but 0006's profile, which refreshes on command.

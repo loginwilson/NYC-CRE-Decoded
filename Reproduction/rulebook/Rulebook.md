@@ -118,6 +118,34 @@ in milliseconds. A filter on something not indexed still scans, and the dashboar
 it off - so a stray query costs at most two minutes, never a runaway. The disk goes to 60 GB by hand before the build
 (22 GB used of 40 today; the indexes and the lanes' growth need the room).
 
+### The proven filters (2026-09-06 15:37, every plan an index scan)
+
+Write filters against the views `reproduction.acris_fields` and `reproduction.richmond_fields` (typed columns: type,
+borough, recorded, doc_date, pages, amount, crfn / doc_type, recorded, book, page, instrument, amount) - a filter on a
+view column IS the indexed expression - and against the registry itself with containment (`@>`) for anything else: a
+parcel, a party, a unit, any key at any depth. The document cell answers a prefix (`like 'D:\...\2003\01 Jan\23\%'
+escape ''`, the day folder). Measured on the pooled connection, a Small instance, the table larger than memory:
+
+| filter | query | ms |
+|---|---|---|
+| deeds in Queens, newest first | `select doc_id, recorded, pages, document from reproduction.acris_fields where type = 'DEED' and borough = 'QUEENS' order by doc_id desc limit 20` | 207 |
+| a year of deeds by recorded date | `select count(*) from reproduction.acris_fields where type = 'DEED' and recorded between '1995-01-01' and '1995-12-31'` (54,581 rows) | 13,282 beside a running profile build; two indexes ANDed |
+| long documents | `select doc_id, type, pages from reproduction.acris_fields where pages >= 50 order by pages desc limit 20` | 199 |
+| amount above ten million | `select doc_id, type, amount from reproduction.acris_fields where amount >= 10000000 order by amount desc limit 20` | 200 |
+| one crfn | `select doc_id from reproduction.acris_fields where crfn = '2003000003997'` | 181 |
+| a parcel by bbl | `select doc_id, registry->>'type' from reproduction.acris where registry @> '{"parcels":[{"bbl":"1015131008"}]}' limit 20` | 191 |
+| a party by name | `select doc_id, registry->>'type' from reproduction.acris where registry @> '{"parties":[{"name":"CITY OF NEW YORK"}]}' limit 20` | 311 |
+| one day folder | `select doc_id, document from reproduction.acris where document like 'D:\NYC CRE Decoded\Reproduction\Acris\By Document\2003\01 Jan\23\%' escape '' limit 20` | 180 |
+| richmond book and page | `select doc_id, doc_type, recorded, document from reproduction.richmond_fields where book = '8770' and page = '221'` | 180 |
+| one instrument | `select doc_id, doc_type from reproduction.richmond_fields where instrument = '48402'` | 182 |
+| richmond deeds in 2020 | `select count(*) from reproduction.richmond_fields where doc_type = 'Deed' and recorded between '2020-01-01' and '2020-12-31'` (7,118 rows) | 553 |
+| a richmond parcel | `select doc_id from reproduction.richmond where registry @> '{"parcels":[{"bbl":"5001570097"}]}' limit 20` | 184 |
+
+The dynamic proof, the same run: one throwaway row landed with a registry and a document path was found by five of these
+shapes within 2.0 s of landing, each by an index scan, then deleted. The indexes are maintained on every insert and update
+(the GIN batches new entries in a pending list that queries also search); the lanes' landings are filterable the moment
+they land. Only 0006's profile is a snapshot, refreshed on command.
+
 ## The profile (0006, 2026-09-06)
 
 login: "the things we'd want to filter on ... are the things found in the registry realistically ... when training a
