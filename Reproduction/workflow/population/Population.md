@@ -23,15 +23,18 @@
 - **Nothing is deleted by this program.** Duplicates are counted and left in place; what has no home is logged; the
   removal of empty old folders and of anything else on the drive is a person's step after `verify`.
 
-## The four commands
+## The five commands
 
     python Population.py survey              read the old table once, in id order: rows per source, the words in each cell, the path shapes; writes population.survey.json only
     python Population.py organize [--dry]    the One Touch tree (below); every move to population.moves.jsonl; --dry counts and moves nothing
     python Population.py load [--limit N]    the rows into both cloud tables by COPY, --slice 50,000 per transaction, routed by the id, resuming after the last id in either table
+    python Population.py apply-found         the paths organize found for documents the table had no file for, into cells that are empty / pending / absent (never over a path); then reconcile - runs any time after load and again as the placement goes on
     python Population.py verify              counts on both sides by cell state, a sample of recorded paths opened on the drive, reconcile() per source, the board rows
 
-Run in that order. `load` refuses to start while the survey names a word without a mapping (fail closed), and warns when
-`organize` has not run for real, since the paths it writes assume the new tree.
+Run in that order; `apply-found` and `verify` may be repeated. `load` refuses to start while the survey names a word without a
+mapping (fail closed), and warns when `organize` has not run for real, since the paths it writes assume the new tree. Launch
+`load` with its output on disk: `python -u Population.py load > population.load.log` (PowerShell: Start-Process with
+-RedirectStandardOutput) - a refused slice and its reason are otherwise invisible.
 
 ## The cell mapping (old → new), the same for both sources
 
@@ -40,7 +43,7 @@ Run in that order. `load` refuses to start while the survey names a word without
 | `id` | `doc_id` | text; byte order on both sides (SQLite BINARY = Postgres `collate "C"`), so a resume after the last id is exact. `RC_` ids go to `richmond`, every other id to `acris` |
 | `recorded_details` = `''` | `registry` NULL | registration's to-do |
 | `recorded_details` = `{…}` | `registry` (jsonb) | the recorded details as the old lane landed them |
-| `pdf` = `''` | `document` NULL | documentation's to-do - unless `organize` found the document in By Parcel / By Party and placed it, then the new full path |
+| `pdf` = `''` | `document` NULL | documentation's to-do - unless `organize` found the document in an old store and placed it: then `apply-found` writes the new full path |
 | `pdf` = `pending` / `absent` | the same word | the cell words, unchanged |
 | `pdf` = `imageless` | `absent` | the old lane's word for "the source has no image": checked, none |
 | `pdf` = `By Document\…` | `D:\NYC CRE Decoded\Reproduction\<Source>\By Document\…` | the full path, the tree as `organize` leaves it |
@@ -61,8 +64,8 @@ again. Nothing dropped, nothing invented.
    a file that is not there - reported, never invented).
 4. The documents in `By Parcel` and `By Party` (files named `YYYY-MM-DD_<id>.pdf`) are placed by the table: a document
    the table already has a file for is a **duplicate** and stays where it is (counted); a document the table has no file
-   for is **placed** into `By Document` by its recorded date and remembered in `population.found.json`, which `load` uses
-   to fill that cell; a document whose recorded file is missing is **restored** to that place; an id not in the table is
+   for is **placed** into `By Document` by its recorded date and remembered in the moves log and `population.found.json`,
+   which `apply-found` uses to fill that cell; a document whose recorded file is missing is **restored** to that place; an id not in the table is
    logged and left.
 5. Folders under `Acris\By Document` left empty by the richmond move are removed (empty folders only).
 
