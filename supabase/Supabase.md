@@ -29,7 +29,8 @@ the CLI applied (0001, 2026-09-03) and every file applied from here sit in one r
 
     python supabase.py check               the server, the schemas and their tables, every SQL file on disk against the ledger
     python supabase.py push --dry          what would be applied, in version order; nothing runs
-    python supabase.py push                apply it, one transaction per file, stop at the first failure
+    python supabase.py push                apply it, one transaction per file, stop at the first failure; a file whose first line says
+                                           `-- statement by statement` runs each statement on its own (index builds; CONCURRENTLY)
     python supabase.py sql -c "select 1"   a statement; -f file.sql a script; --dry prints only; every run logged to supabase.log beside this file
 
 Credentials live in the env file (`C:/dev/nyc-cre-decoded.env` at home, `~/nyc-cre-decoded.env` on a Mac, or the path
@@ -89,3 +90,12 @@ CLI's 0001; `check` shows both applied; the proof ran ALL OK against the live, e
 counters move by what was new, a wrong cell word is refused, heartbeats land, cleanup leaves nothing). The plan must be Pro
 before the data move (the free plan's 500 MB cannot hold the table; the database is 11 MB today). Next, on login's word: the
 data move (Legal Instruments.db → `reproduction.acris`, every lane paused) - populate is the last step of the sequence.
+
+2026-09-06 11:48 — THE ONE-TRANSACTION INDEX BUILD BROUGHT THE INSTANCE DOWN. 0005 (sixteen indexes over the two
+tables) was pushed at 11:36 as one transaction, as every file before it; twelve minutes in, during the second index,
+the Micro instance (1 GB, shared with Supabase's own services) ran out of memory and Postgres restarted at 11:48:42
+(15:48:42 UTC): the transaction rolled back, the first index with it, nothing recorded, no row touched. The push program
+now runs a file whose first line says `-- statement by statement` one statement at a time in autocommit, each index its
+own transaction, so a crash costs one index and a re-run skips what exists (`if not exists`); 0005 carries the marker,
+the instance's default build memory (64 MB) and `max_parallel_maintenance_workers = 0`. The dashboard was unreachable
+for about a minute; a compute of Small (2 GB) is the safer instance for a build of this size.

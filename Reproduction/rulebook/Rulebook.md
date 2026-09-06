@@ -106,9 +106,10 @@ two views, `acris_fields` and `richmond_fields`, that show the registry's fields
 amount as a number, pages as an integer) - a filter on a view column is the very expression its index was built on, so
 the Table Editor's filters and sorts on the views use the indexes. Three immutable functions (`us_date`, `us_money`,
 `whole_number`) read the fields as the lanes wrote them and give null for anything else. Load: the indexes are ~8-12 GB
-(the GIN the largest), built while no lane lands (the push program runs a file as one transaction, where CONCURRENTLY
-cannot run; a plain CREATE INDEX holds the table against writes for the build - an hour or two on the project's
-compute); afterwards a landing maintains them at a cost no lane will notice at its rate, and an indexed filter answers
+(the GIN the largest), built while no lane lands, statement by statement - each index its own transaction with the
+instance's default build memory and no parallel worker, after the one-transaction build of 11:36 brought the 1 GB
+instance down at 11:48 (a crash now costs one index; a re-run skips what exists; a plain CREATE INDEX holds the
+table against writes for its build); afterwards a landing maintains them at a cost no lane will notice at its rate, and an indexed filter answers
 in milliseconds. A filter on something not indexed still scans, and the dashboard's two-minute statement timeout cuts
 it off - so a stray query costs at most two minutes, never a runaway. The disk goes to 60 GB by hand before the build
 (22 GB used of 40 today; the indexes and the lanes' growth need the room).

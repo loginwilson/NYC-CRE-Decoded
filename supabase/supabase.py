@@ -9,7 +9,10 @@ this program applies them and keeps the record of which are applied in the proje
 
     python supabase.py check               the server, the schemas and their tables, every SQL file on disk against the ledger
     python supabase.py push --dry          list the files not yet applied, in version order; run nothing
-    python supabase.py push                apply them, one transaction per file (the file, then its ledger row); stop at the first failure
+    python supabase.py push                apply them, one transaction per file (the file, then its ledger row); stop at the first failure.
+                                           A file whose first line says `-- statement by statement` runs each statement on its own
+                                           (autocommit) - for index builds, which must not be one transaction on a small instance,
+                                           and for CREATE INDEX CONCURRENTLY; such a file must be re-runnable (if not exists / or replace)
     python supabase.py sql -c "select 1"   one statement, or several separated by ;
     python supabase.py sql -f file.sql     a script, as one transaction
     python supabase.py sql ... --dry       print only
@@ -201,6 +204,10 @@ def push(dry):
             print("%s %s  %s/rulebook/schema/%s  (%d lines)" % ("would apply" if dry else "applying", v, ph, f.name, text.count("\n")))
             if dry:
                 continue
+            if STATEMENT_BY_STATEMENT in text.splitlines()[0]:
+                if not push_statements(con, v, n, text):
+                    return 1
+                continue
             try:
                 with con.cursor() as cur:
                     cur.execute(text)                                       # the whole file, one transaction; no parameters, so % is literal
@@ -215,6 +222,81 @@ def push(dry):
         return 0
     finally:
         con.close()
+
+
+STATEMENT_BY_STATEMENT = "-- statement by statement"
+
+
+def statements(text):
+    """The file's statements, split on the semicolons that are outside quotes, dollar-quoted bodies and comments."""
+    out, buf, i, n = [], [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if text.startswith("--", i):                              # a comment to the end of the line
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            buf.append(text[i:j]); i = j; continue
+        if c == "'":                                              # a string, '' inside it
+            j = i + 1
+            while j < n:
+                if text[j] == "'":
+                    if j + 1 < n and text[j + 1] == "'":
+                        j += 2; continue
+                    break
+                j += 1
+            buf.append(text[i:j + 1]); i = j + 1; continue
+        if c == "$":                                              # $$ or $tag$ ... the same tag closes it
+            j = text.find("$", i + 1)
+            tag = text[i:j + 1] if j > 0 and all(ch.isalnum() or ch == "_" for ch in text[i + 1:j]) else None
+            if tag:
+                k = text.find(tag, i + len(tag))
+                k = n if k < 0 else k + len(tag)
+                buf.append(text[i:k]); i = k; continue
+        if c == ";":
+            stmt = "".join(buf).strip()
+            if stmt and not all(line.strip().startswith("--") or not line.strip() for line in stmt.splitlines()):
+                out.append(stmt)
+            buf = []; i += 1; continue
+        buf.append(c); i += 1
+    stmt = "".join(buf).strip()
+    if stmt and not all(line.strip().startswith("--") or not line.strip() for line in stmt.splitlines()):
+        out.append(stmt)
+    return out
+
+
+def label(stmt):
+    """The statement's first real line, for the log."""
+    for line in stmt.splitlines():
+        t = line.strip()
+        if t and not t.startswith("--"):
+            return " ".join(t.split())[:100]
+    return stmt[:100]
+
+
+def push_statements(con, v, n, text):
+    """One statement at a time, each its own transaction, timed; stop at the first failure (what ran stays - the file is
+    re-runnable); the ledger row after the last.  Returns True when the file is recorded."""
+    import time
+    stmts = statements(text)
+    print("  statement by statement: %d statements" % len(stmts))
+    con.autocommit = True
+    try:
+        with con.cursor() as cur:
+            cur.execute("set statement_timeout = 0")
+            for k, stmt in enumerate(stmts, 1):
+                t0 = time.time()
+                try:
+                    cur.execute(stmt)
+                except Exception as e:
+                    print("  %2d/%d FAILED after %.0f s - %s: %s" % (k, len(stmts), time.time() - t0, type(e).__name__, str(e).strip().splitlines()[0]))
+                    print("  the statements before it stand; fix and run push again - it skips what exists")
+                    return False
+                print("  %2d/%d %6.0f s  %s" % (k, len(stmts), time.time() - t0, label(stmt)), flush=True)
+            cur.execute("insert into %s (version, statements, name) values (%%s, %%s, %%s)" % LEDGER, (v, [text], n))
+        print("  applied and recorded")
+        return True
+    finally:
+        con.autocommit = False
 
 
 def run_sql(sql, dry):

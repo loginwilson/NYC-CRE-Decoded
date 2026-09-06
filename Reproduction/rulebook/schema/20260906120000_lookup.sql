@@ -1,3 +1,4 @@
+-- statement by statement
 -- 0005  filtering on any field, without a scan  (login, 2026-09-06 11:5x)
 --
 -- "say i wanted to look up deeds, or page numbers, or boroughs, etc."  "i think we need to assure filtering works on
@@ -13,10 +14,12 @@
 -- is the very expression its index was built on, so the Table Editor's filters and sorts use the indexes.
 -- Three small immutable functions read the fields as the lanes wrote them ('1/23/2003 9:26:58 AM' -> a date,
 -- '$1,250,000.00' -> a number, '4' -> an integer) and give null for anything else, so no value can break a build.
--- Built while the lanes are idle: the push program runs a file as one transaction, where CONCURRENTLY cannot run, and a
--- plain CREATE INDEX holds the table against writes for the build.  Nothing in any row changes.
+-- Built while the lanes are idle, STATEMENT BY STATEMENT (the first line): each index its own transaction with the
+-- instance's default build memory and no parallel worker - the one-transaction build of 11:36 brought the 1 GB
+-- instance down at 11:48 (restart, everything rolled back).  A crash now costs one index; a re-run skips what exists.
+-- A plain CREATE INDEX holds the table against writes for its build.  Nothing in any row changes.
 set statement_timeout = 0;
-set maintenance_work_mem = '128MB';   -- the instance has 1 GB; the build's working memory stays within it
+set max_parallel_maintenance_workers = 0;   -- one process per build, the instance's default 64 MB of build memory
 
 create or replace function reproduction.us_date(t text) returns date
 language plpgsql immutable strict parallel safe as $$
