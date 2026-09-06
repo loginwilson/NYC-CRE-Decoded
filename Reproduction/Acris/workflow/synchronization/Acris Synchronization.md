@@ -56,3 +56,10 @@ Beside this file, never in git: `synchronization.edge.json`, `synchronization.ho
 2026-09-04 — the review against the cycle: `rebatch` added (the cut window dropped and forgotten as in flight, asked again from the edge after the re-entry); the lane module's amendments apply. Proven by the simulation again the same night.
 
 2026-09-03 — written from the sync floor of `acris_reproduction.py` (monitor, crew, land, edge) and `acris_edge.py` (the probe), every line read. Proven offline (the probe URL, the id from a live page, the stub, the truncation guard, the edge file's fail-closed start) and by a simulated walk against the live cloud with throwaway numbers and no ACRIS request: a burst behind the edge walked in bites, personal-property blanks passed, a failing number recorded as a hole and passed, the edge moved only after the rows were in, the level watch and the wider look. Not yet proven: a real probe, which waits for the data move. The old edge file's last movement was 2026-08-31; the table has been behind since, which the audit will show.
+
+2026-09-05 23:52 — THE FIRST REAL LAUNCH, against the cloud with the rows in (login: "spend the night resyncing ... one
+batch, 10 workers"): `--edge 2026000247108 --width 10`. The entry was right (exit pool one block, 173.239.217; ten births
+5 s apart; one entry) and the first request - CRFN 2026000247109 - was ACRIS's Bandwidth Notice: parked at once, exit 2,
+`synchronization.parked` written, the page saved under `../../rulebook/refusals/`. The lane did what its rules say; the
+notice is the source's and is cleared by a person (`--unpark` after the exit changes). The full reading is in the D:
+record (ACRIS DOCUMENTATION NIGHT 2026-09-04.md): three exit blocks answered with the notice today.
