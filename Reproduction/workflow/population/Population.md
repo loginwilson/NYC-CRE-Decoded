@@ -211,3 +211,10 @@ consecutive ids whose files the move has already carried, not yet the whole tree
 The one deliberate change to any registry on the way in stands recorded: the six-character NUL escape removed from
 19,095 registries (jsonb cannot hold it), each noted by id in population.rejects.jsonl.
 
+2026-09-06 15:42 — THE RICHMOND MOVE ENDED (pid 27752, 09-05 22:49 -> 15:42, exit 0): richmond_moved 2,460,075 +
+already in place 32,503 + duplicate at destination 63 = 2,492,641, missing 0; the folders the moves emptied removed. 15:43
+`resolve` (after its dry run said the same 65 pairs as the morning): 22 stubs replaced by their whole documents (all 22
+read %PDF- and %%EOF afterwards), 41 identical copies and 2 other renderings STAGED under D:\Ignore\Staged by population
+(nothing deleted, the cells untouched), 0 neither-whole, 0 without a copy. 15:43 `sweep` launched over both trees for the
+stubs the move never met (hidden window, population.sweep.1543.log); `resolve` again for what it lists, then the full
+`verify`, then the audit (gate 1) once 0006 and 0007 have finished their scans.
