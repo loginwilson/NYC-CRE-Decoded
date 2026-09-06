@@ -29,7 +29,7 @@
     python Population.py organize [--dry]    the One Touch tree (below); every move to population.moves.jsonl; --dry counts and moves nothing
     python Population.py load [--limit N]    the rows into both cloud tables by COPY, --slice 50,000 per transaction, routed by the id, resuming after the last id in either table
     python Population.py apply-found         the paths organize found for documents the table had no file for, into cells that are empty / pending / absent (never over a path); then reconcile - runs any time after load and again as the placement goes on
-    python Population.py verify              counts on both sides by cell state, a sample of recorded paths opened on the drive, reconcile() per source, the board rows
+    python Population.py verify              counts on both sides by cell state, a sample of recorded paths opened on the drive, a sample of registries compared value for value with the old table (--registry-sample 2000), reconcile() per source, the board rows; --only samples runs the two samples alone
     python Population.py sweep               every file in both trees by directory listing: an empty file, or a small file that is not a whole PDF, is a stub - listed in population.sweep.jsonl with the other copies the moves log knows for that id; reads only
     python Population.py resolve [--dry]     the duplicates the file move met at a destination, and the stubs sweep listed, decided by the files: identical copies and other renderings staged, a stub replaced by its whole copy; the cell untouched; nothing deleted (below)
 
@@ -187,3 +187,14 @@ its path sample 35 of 200, rising as the file move goes on (116,014 files moved 
 100 %; richmond documentation 2,502,437 / 2,502,501. The mover was paused 23:16-23:32 so verify's match stage had the
 drive (88 documents a second against it, 300 without); it resumed the moment verify ended. The record of the move is
 complete but for richmond's files; `verify` once more when the move has ended shows the richmond sample at 200 of 200.
+
+2026-09-06 11:15 — THE REGISTRY, VALUE FOR VALUE (login: "confirm nothing in registry has changed from the Legal Instruments
+db"). The counts had matched as totals (24,125,999 objects, 64 empties); this pass compares cells: `verify --only samples`
+takes 2,000 random cells per source from the cloud, reads each old row back by id, and asks whether the old
+`recorded_details` text (the NUL escape set aside) and the cloud's jsonb are the same JSON value - jsonb keeps values, not
+key order or spacing. acris 2,000 of 2,000 equal, richmond 2,000 of 2,000 equal, 0 different, 0 rows landed after the
+load in either sample. The path samples: acris 200 of 200 open a file (the third time); richmond 200 of 200 - one page of
+consecutive ids whose files the move has already carried, not yet the whole tree (1,861,468 of 2,492,641 moved at 11:14).
+The one deliberate change to any registry on the way in stands recorded: the six-character NUL escape removed from
+19,095 registries (jsonb cannot hold it), each noted by id in population.rejects.jsonl.
+

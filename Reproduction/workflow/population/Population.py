@@ -18,7 +18,8 @@ moved.  This program does the move once, in four commands, each of which can be 
     python Population.py load [--limit N]    stream the rows into reproduction.acris and reproduction.richmond by COPY, --slice
                                              rows per transaction, routed by the id, resuming after the last id landed
     python Population.py verify              counts on both sides by cell state, a sample of the recorded paths opened on the
-                                             drive, reconcile() for both sources, the board rows
+                                             drive, a sample of registries compared value for value with the old table,
+                                             reconcile() for both sources, the board rows; --only samples = the two samples
     python Population.py sweep               every file in both trees by directory listing: an empty file, or a small file that is
                                              not a whole PDF, is a stub - listed in population.sweep.jsonl with the other copies the
                                              moves log knows for that id; reads only
@@ -565,28 +566,38 @@ def found_shift(pg, con, found):
 
 def verify(a):
     import psycopg2
+    samples_only = a.only == "samples"
     sv = json.loads(SURVEY.read_text(encoding="utf-8")) if SURVEY.exists() else None
-    found = load_found(with_log=True)
     pg = pg_connect()
     con = old(OLD_DB)
-    log("found documents on record: %s - reading which of them apply-found has written, and what their old cell was" % "{:,}".format(len(found)))
-    shift, pg = found_shift(pg, con, found)           # the connection may have been renewed on the way
     reg_total = {"empty": 0, "object": 0, "word": 0}
     ok = True
+    if samples_only:
+        shift = None
+        log("samples only: the path sample and the registry sample - no counts, no found map, no reconcile")
+    else:
+        found = load_found(with_log=True)
+        log("found documents on record: %s - reading which of them apply-found has written, and what their old cell was" % "{:,}".format(len(found)))
+        shift, pg = found_shift(pg, con, found)           # the connection may have been renewed on the way
     with pg.cursor() as cur:
         for s in ("acris", "richmond"):
-            cur.execute("""select count(*),
-                                  count(*) filter (where document is null),
-                                  count(*) filter (where document = 'pending'),
-                                  count(*) filter (where document = 'absent'),
-                                  count(*) filter (where left(document, %s) = %s),
-                                  count(*) filter (where registry is null),
-                                  count(*) filter (where jsonb_typeof(registry) = 'object'),
-                                  count(*) filter (where jsonb_typeof(registry) = 'string')
-                           from reproduction.%s""" % ("%s", "%s", s), (len(storage.CANON_ROOT), storage.CANON_ROOT))
-            got = cur.fetchone()
-            log("%-8s cloud: rows %s | document empty %s pending %s absent %s path %s | registry empty %s object %s word %s" % ((s,) + tuple("{:,}".format(x) for x in got)))
-            if sv:
+            cur.execute("select reltuples::bigint from pg_class where relname = %s and relnamespace = 'reproduction'::regnamespace", (s,))
+            est = max(cur.fetchone()[0], 1)
+            if samples_only:
+                got = None
+            else:
+                cur.execute("""select count(*),
+                                      count(*) filter (where document is null),
+                                      count(*) filter (where document = 'pending'),
+                                      count(*) filter (where document = 'absent'),
+                                      count(*) filter (where left(document, %s) = %s),
+                                      count(*) filter (where registry is null),
+                                      count(*) filter (where jsonb_typeof(registry) = 'object'),
+                                      count(*) filter (where jsonb_typeof(registry) = 'string')
+                               from reproduction.%s""" % ("%s", "%s", s), (len(storage.CANON_ROOT), storage.CANON_ROOT))
+                got = cur.fetchone()
+                log("%-8s cloud: rows %s | document empty %s pending %s absent %s path %s | registry empty %s object %s word %s" % ((s,) + tuple("{:,}".format(x) for x in got)))
+            if sv and got is not None:
                 p = sv["per_source"][s]
                 sh = shift[s]
                 moved = sh["empty"] + sh["pending"] + sh["absent"]
@@ -606,15 +617,39 @@ def verify(a):
             log("%-8s paths: %d of %d sampled cells open a file on the drive" % (s, exists, len(sample)))
             for did, p in sample[:2]:
                 log("  e.g. %s -> %s (%s)" % (did, p, "exists" if os.path.exists(p) else "MISSING"))
-            cur.execute("select * from reproduction.reconcile(%s)", (s,))
-            log("%-8s reconcile: %s" % (s, cur.fetchall()))
-            pg.commit()
-            cur.execute("select lane, landed, needed from reproduction.%s_update_lanes order by lane" % s)
-            for lane, landed, needed in cur.fetchall():
-                log("  board %-16s landed %s / needed %s (%.2f%%)" % (lane, "{:,}".format(landed), "{:,}".format(needed), 100.0 * landed / needed if needed else 0))
+            # the registry, value for value: a random sample of cells, each read back from the old row by id.  Equal means
+            # the same JSON value - jsonb keeps values, not key order or spacing - with the NUL escape set aside (map_registry).
+            # An id the old table never had is a row a lane landed after the load (richmond's sync of 2026-09-05): counted, not a defect.
+            pct = min(100.0, max(0.001, 200.0 * a.registry_sample / est))
+            cur.execute("select doc_id, registry from reproduction.%s tablesample system (%.4f) limit %%s" % (s, pct), (a.registry_sample,))
+            same = diff = new = 0
+            for did, reg in cur.fetchall():
+                r = con.execute("select recorded_details from navigation where id = ?", (did,)).fetchone()
+                if r is None:
+                    new += 1
+                    continue
+                mapped, _ = map_registry(r[0])
+                old_val = json.loads(mapped) if mapped is not None else None
+                if old_val == reg:
+                    same += 1
+                else:
+                    diff += 1
+                    if diff <= 5:
+                        log("  DIFFERENT registry: %s | old %s | cloud %s" % (did, str(old_val)[:80], str(reg)[:80]))
+            log("%-8s registry: %d of %d sampled cells equal the old table's recorded details value for value (%d different; %d landed after the load, not in the old table)" % (
+                s, same, same + diff, diff, new))
+            if diff:
+                ok = False
+            if not samples_only:
+                cur.execute("select * from reproduction.reconcile(%s)", (s,))
+                log("%-8s reconcile: %s" % (s, cur.fetchall()))
+                pg.commit()
+                cur.execute("select lane, landed, needed from reproduction.%s_update_lanes order by lane" % s)
+                for lane, landed, needed in cur.fetchall():
+                    log("  board %-16s landed %s / needed %s (%.2f%%)" % (lane, "{:,}".format(landed), "{:,}".format(needed), 100.0 * landed / needed if needed else 0))
     pg.close()
     con.close()
-    if sv:
+    if sv and not samples_only:
         rt = sv.get("registry_totals") or {}
         log("registry, both sources together: cloud %s | old %s" % (json.dumps(reg_total), json.dumps(rt)))
         if any(reg_total[k] != rt.get(k) for k in reg_total):
@@ -886,6 +921,8 @@ def main(argv=None):
     p.add_argument("--slice", type=int, default=50000, help="rows per COPY transaction (default: %(default)s)")
     v = sub.add_parser("verify")
     v.add_argument("--sample", type=int, default=200, help="recorded paths to open on the drive per source (default: %(default)s)")
+    v.add_argument("--registry-sample", type=int, default=2000, help="cells per source compared value for value with the old table's recorded details (default: %(default)s)")
+    v.add_argument("--only", choices=("all", "samples"), default="all", help="samples: the path sample and the registry sample only - no counts, no found map, no reconcile")
     sub.add_parser("sweep", help="every file in both trees by listing: empty files and small non-PDFs listed with their other copies; reads only")
     r = sub.add_parser("resolve", help="duplicates the move met at a destination, and the stubs sweep listed: decided by the files, copies staged, nothing deleted")
     r.add_argument("--dry", action="store_true", help="say what would be staged or moved; touch nothing")
