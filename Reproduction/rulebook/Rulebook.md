@@ -15,7 +15,7 @@ says what each module is for and how a program reaches it.
 | `storage.py` | WHERE A DOCUMENT LIVES: the drive found by its label on Windows or Mac, the One Touch tree `D:\NYC CRE Decoded\Reproduction\<Source>\By Document\<year>\<MM Mon>\<day>\<id>.pdf` (the day from the recorded date, else a digital id's date, else the id split - the old lane's rule kept), recorded in canonical `D:\` form whichever machine fetched the file | `../Acris/rulebook/test_acris_offline.py` (the drive lookup, the path rule and the acris rules) |
 | `rate_manager.py` | THE RATE MANAGER and the session cap: `next_width()` is pure arithmetic (the graduated hand around the docs band, the request ceiling as a projection at the exit's recent speed, the door curve), the `Governor` thread only calls it and the crew's resize | `test_managers.py` (fake exits at 10x speed: the band, the ceiling, the stall, the door curve, the ramp, the session knob) |
 | `requirements.txt` | the one install a workstation needs: `pip install -r requirements.txt` | |
-| `schema/` | THE TABLE's definition: the phase's schema `reproduction` as numbered SQL files, one per dictated decision, applied once and never edited after (a new decision is a new file) - 0001 the tables, the cell rule as constraints, the to-do indexes, the claims, the heartbeats, the counters and the four functions `claim` / `land` / `heartbeat` / `reconcile`; 0002 pendings first, and documentation claims only where a registry is; 0003 the `source` column first in both tables (a constant per table, for the cross-source tables of construction); 0004 the re-check clock out of the table (a landed pending keeps its claim as its cooldown); 0005 the lookup - an index for each field a person filters by, a GIN over the whole registry, an index on the document cell, and the `acris_fields` / `richmond_fields` views (written 2026-09-06, applied on login's word). Applied and recorded by the project's program, `python ../../supabase/supabase.py push` (`--dry` first; `../../supabase/Supabase.md`). The dictated concept is the section "The table" below | `test_schema.py` (claim / land / heartbeat / reconcile on the live project with throwaway TEST- rows; refuses a populated table) |
+| `schema/` | THE TABLE's definition: the phase's schema `reproduction` as numbered SQL files, one per dictated decision, applied once and never edited after (a new decision is a new file) - 0001 the tables, the cell rule as constraints, the to-do indexes, the claims, the heartbeats, the counters and the four functions `claim` / `land` / `heartbeat` / `reconcile`; 0002 pendings first, and documentation claims only where a registry is; 0003 the `source` column first in both tables (a constant per table, for the cross-source tables of construction); 0004 the re-check clock out of the table (a landed pending keeps its claim as its cooldown); 0005 the lookup - an index for each field a person filters by, a GIN over the whole registry, an index on the document cell, and the `acris_fields` / `richmond_fields` views (written 2026-09-06, applied on login's word); 0006 the profile - `<source>_profile` (documents by type, borough, year, parcels, parties, pages) and `<source>_keys` (which keys appear where, how often), materialized, refreshed on demand (written 2026-09-06 12:0x). Applied and recorded by the project's program, `python ../../supabase/supabase.py push` (`--dry` first; `../../supabase/Supabase.md`). The dictated concept is the section "The table" below | `test_schema.py` (claim / land / heartbeat / reconcile on the live project with throwaway TEST- rows; refuses a populated table) |
 
 ## How a program reaches it
 
@@ -113,6 +113,21 @@ table against writes for its build); afterwards a landing maintains them at a co
 in milliseconds. A filter on something not indexed still scans, and the dashboard's two-minute statement timeout cuts
 it off - so a stray query costs at most two minutes, never a runaway. The disk goes to 60 GB by hand before the build
 (22 GB used of 40 today; the indexes and the lanes' growth need the room).
+
+## The profile (0006, 2026-09-06)
+
+login: "the things we'd want to filter on ... are the things found in the registry realistically ... when training a
+rounded framework, we need to look at all types of registry scenarios." Two summary tables per source, materialized,
+built by scanning the rows once and refreshed on demand: `acris_profile` / `richmond_profile` count documents by type,
+borough and year (facet `type, borough, year`), and by each alone, by how many parcels and parties a document carries,
+and by its page count, with `with_document` and the fields 0005's functions could not read (`recorded_unparsed`,
+`amount_unparsed`, `pages_unparsed`) counted alongside; the `all` row is the whole table. `acris_keys` / `richmond_keys`
+count which keys appear at the registry's top level, inside a parcel and inside a party, so an unusual field shows with
+its frequency. A model reads the profile first (a few thousand rows) to see the whole variety, then pulls examples of any
+shape through 0005's indexes: `select * from reproduction.acris_fields where type = 'DEED' and borough = 'QUEENS' and
+recorded between '1995-01-01' and '1995-12-31' and jsonb_array_length(parcels) >= 3 limit 20`. Refresh after a lane has
+landed a lot: `refresh materialized view concurrently reproduction.acris_profile` (the unique index on each allows
+`concurrently`, so readers are never blocked); a refresh is one scan of the table.
 
 ## History
 
