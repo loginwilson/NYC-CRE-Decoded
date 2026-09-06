@@ -23,15 +23,17 @@
 - **Nothing is deleted by this program.** Duplicates are counted and left in place; what has no home is logged; the
   removal of empty old folders and of anything else on the drive is a person's step after `verify`.
 
-## The five commands
+## The seven commands
 
     python Population.py survey              read the old table once, in id order: rows per source, the words in each cell, the path shapes; writes population.survey.json only
     python Population.py organize [--dry]    the One Touch tree (below); every move to population.moves.jsonl; --dry counts and moves nothing
     python Population.py load [--limit N]    the rows into both cloud tables by COPY, --slice 50,000 per transaction, routed by the id, resuming after the last id in either table
     python Population.py apply-found         the paths organize found for documents the table had no file for, into cells that are empty / pending / absent (never over a path); then reconcile - runs any time after load and again as the placement goes on
     python Population.py verify              counts on both sides by cell state, a sample of recorded paths opened on the drive, reconcile() per source, the board rows
+    python Population.py sweep               every file in both trees by directory listing: an empty file, or a small file that is not a whole PDF, is a stub - listed in population.sweep.jsonl with the other copies the moves log knows for that id; reads only
+    python Population.py resolve [--dry]     the duplicates the file move met at a destination, and the stubs sweep listed, decided by the files: identical copies and other renderings staged, a stub replaced by its whole copy; the cell untouched; nothing deleted (below)
 
-Run in that order; `apply-found` and `verify` may be repeated. `load` refuses to start while the survey names a word without a
+Run in that order; `apply-found` and `verify` may be repeated; `sweep` then `resolve` run after the file move has ended, and `verify` once more after them. `load` refuses to start while the survey names a word without a
 mapping (fail closed), and warns when `organize` has not run for real, since the paths it writes assume the new tree. Launch
 `load` with its output on disk: `python -u Population.py load > population.load.log` (PowerShell: Start-Process with
 -RedirectStandardOutput) - a refused slice and its reason are otherwise invisible.
@@ -72,6 +74,22 @@ again. Nothing dropped, nothing invented.
 Preconditions: no old lane process runs (the old `acris_reproduction.py` and its supervisor write into the old tree -
 stopped 2026-09-05 17:0x, never to run again; the repo's lanes replace them), and nothing holds a file open inside the
 tree (the rename fails with "in use" otherwise - Explorer windows on the folder included).
+
+## What `sweep` and `resolve` do (2026-09-06)
+
+The file move met 65 files already at their destinations (09:40): the old lane had pulled some documents twice, and on
+2026-08-18 22:0x it saved stubs - error pages of 2-7 KB, one empty file - under ids it re-pulled whole a week later into
+the other tree. The cell names the destination, so the destination must be the document. `resolve` decides each pair by
+the files, never by the name: identical bytes - the second copy is staged; the destination not a whole PDF (no `%PDF-` at
+the start, or no `%%EOF` in the last 64 bytes) and the other copy whole - the stub is staged and the whole file moved into
+its place, the cell untouched and now right; both whole and different (two renderings from two pulls) - the cell's file
+stays, the other is staged; neither whole - reported, nothing moved, the cell needs its lane. `sweep` finds the stubs the
+move never met: it walks both trees by directory listing (the size comes with the listing; no file at or above 16 KB is
+opened - the old lanes wrote `.part` and renamed on completion, so a cut download never wore a `.pdf` name) and lists
+every empty file and every small file that is not a whole PDF, with the other copies the moves log knows for that id;
+`resolve` then treats each listed stub the same way, and names the stubs that have no whole copy anywhere (their cells
+need the documentation lane). Staged copies go under `D:\Ignore\Staged by population\<why>\<origin path>` - `duplicate`,
+`other rendering`, `stub` - for a person to delete with the rest of `D:\Ignore`. Nothing is deleted.
 
 ## The disk
 

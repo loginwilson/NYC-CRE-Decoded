@@ -19,6 +19,12 @@ moved.  This program does the move once, in four commands, each of which can be 
                                              rows per transaction, routed by the id, resuming after the last id landed
     python Population.py verify              counts on both sides by cell state, a sample of the recorded paths opened on the
                                              drive, reconcile() for both sources, the board rows
+    python Population.py sweep               every file in both trees by directory listing: an empty file, or a small file that is
+                                             not a whole PDF, is a stub - listed in population.sweep.jsonl with the other copies the
+                                             moves log knows for that id; reads only
+    python Population.py resolve [--dry]     the duplicates the file move met at a destination, and the stubs sweep listed, decided
+                                             by the files: identical copies and other renderings staged under D:\Ignore, a stub
+                                             replaced by its whole copy; the cell untouched; NOTHING IS DELETED
 
 THE CELL MAPPING (old -> new), the same for both sources
     id                      -> doc_id                 (text; byte order on both sides - SQLite BINARY = Postgres collate "C" - so a resume is exact)
@@ -674,6 +680,197 @@ def apply_found(a):
     return 0
 
 
+# ── sweep / resolve ──────────────────────────────────────────────────────────────────────────────────────────────────
+STAGE = r"D:\Ignore\Staged by population"         # copies the tree does not need, by their origin path: a person deletes them with D:\Ignore
+SWEEP = HERE / "population.sweep.jsonl"
+RESOLVE = HERE / "population.resolve.json"
+SMALL = 16 * 1024                                  # a file under this is opened and checked; a stub is 0-7 KB, a scanned page is bigger
+
+
+def whole(path):
+    """A whole PDF: `%PDF-` at the start and `%%EOF` within the last 64 bytes.  What the old lane saved on a refused pull -
+    an error page, an empty file - fails one or both."""
+    try:
+        n = os.path.getsize(path)
+        with open(path, "rb") as h:
+            head = h.read(5)
+            h.seek(max(0, n - 64))
+            tail = h.read()
+        return head == b"%PDF-" and b"%%EOF" in tail
+    except OSError:
+        return False
+
+
+def same_bytes(a, b):
+    import hashlib
+    if os.path.getsize(a) != os.path.getsize(b):
+        return False
+    digests = []
+    for p in (a, b):
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        digests.append(h.digest())
+    return digests[0] == digests[1]
+
+
+def doc_id_of(path):
+    m = FILE_ID.match(os.path.basename(path))
+    return m.group(1) if m else None
+
+
+def stage(path, why, moves, dry):
+    """A copy the tree does not need goes under STAGE\\<why>\\<its path without the drive letter> - moved, never deleted."""
+    dst = os.path.join(STAGE, why, os.path.splitdrive(path)[1].lstrip("\\"))
+    if not dry:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        os.rename(path, dst)
+    moves.write(json.dumps({"kind": "staged", "why": why, "src": path, "dst": dst}) + "\n")
+    return dst
+
+
+def sweep(a):
+    """Every file in both trees by directory listing (the size comes with the listing; no file at or above SMALL is opened -
+    the old lanes wrote `.part` and renamed on completion, so a cut download never wore a .pdf name).  An empty file, or a
+    small file that is not a whole PDF, is a stub: written to population.sweep.jsonl with the other copies the moves log
+    knows for that id (an old-store duplicate, a duplicate-at-destination source).  Reads only."""
+    alternates = {}
+    if MOVES.exists():
+        for line in io.open(MOVES, encoding="utf-8"):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("dry"):
+                continue
+            k = r.get("kind")
+            if k == "duplicate" and r.get("doc_id"):
+                alternates.setdefault(r["doc_id"], []).append(r["src"])
+            elif k == "duplicate-at-destination":
+                did = doc_id_of(r["dst"])
+                if did:
+                    alternates.setdefault(did, []).append(r["src"])
+    counts = {"folders": 0, "files": 0, "empty": 0, "small_opened": 0, "stubs": 0, "stubs_with_alternate": 0, "unreadable_folders": 0}
+    t0 = time.time()
+    with open(SWEEP, "w", encoding="utf-8") as out:
+        for s in ("acris", "richmond"):
+            stack = [os.path.join(source_root(s), "By Document")]
+            while stack:
+                d = stack.pop()
+                counts["folders"] += 1
+                try:
+                    with os.scandir(d) as it:
+                        for e in it:
+                            if e.is_dir(follow_symlinks=False):
+                                stack.append(e.path)
+                                continue
+                            counts["files"] += 1
+                            if counts["files"] % 500000 == 0:
+                                log("%s: %s files listed, %s stubs so far (%.0f files/s)" % (s, "{:,}".format(counts["files"]), counts["stubs"], counts["files"] / (time.time() - t0)))
+                            n = e.stat(follow_symlinks=False).st_size
+                            if n >= SMALL:
+                                continue
+                            if n == 0:
+                                counts["empty"] += 1
+                                reason = "empty"
+                            else:
+                                counts["small_opened"] += 1
+                                reason = None if whole(e.path) else "not a whole pdf"
+                            if not reason:
+                                continue
+                            counts["stubs"] += 1
+                            did = doc_id_of(e.name)
+                            alts = [p for p in alternates.get(did, []) if os.path.exists(p) and whole(p)] if did else []
+                            if alts:
+                                counts["stubs_with_alternate"] += 1
+                            out.write(json.dumps({"source": s, "doc_id": did, "path": e.path, "bytes": n, "reason": reason, "alternates": alts}) + "\n")
+                except OSError as err:
+                    counts["unreadable_folders"] += 1
+                    log("unreadable folder: %s (%s)" % (d, err))
+    counts["at"] = datetime.datetime.now().isoformat(timespec="seconds")
+    counts["seconds"] = round(time.time() - t0)
+    log("SWEEP done: %s - the stubs are in %s" % (json.dumps(counts), SWEEP.name))
+    return 0
+
+
+def resolve(a):
+    """The file the cell names must be the document.  Two lists are decided by the files, never by the name:
+    (1) the duplicates the file move met at a destination (a file already there under the same id), (2) the stubs sweep
+    listed with a whole copy elsewhere.  Identical bytes: the second copy is staged.  The destination not a whole PDF and
+    the other copy whole: the stub is staged and the whole file moved into its place - the cell was right about the place,
+    wrong about the file, and is now right.  Both whole and different (two renderings from two pulls): the cell's file
+    stays, the other is staged.  Neither whole: reported, nothing moved - that cell needs its lane.  Nothing is deleted."""
+    pairs = {}
+    if MOVES.exists():
+        for line in io.open(MOVES, encoding="utf-8"):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("kind") == "duplicate-at-destination" and not r.get("dry"):
+                pairs[r["dst"]] = r["src"]                  # the last note per destination
+    stubs = []
+    if SWEEP.exists():
+        for line in io.open(SWEEP, encoding="utf-8"):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("alternates"):
+                stubs.append((r["path"], r["alternates"][0]))
+            else:
+                stubs.append((r["path"], None))
+    counts = {"pairs": len(pairs), "swept_stubs": len(stubs), "identical_staged": 0, "stub_replaced": 0, "other_rendering_staged": 0,
+              "neither_whole": 0, "stub_without_copy": 0, "already": 0}
+    log("duplicates at a destination: %s; stubs from the sweep: %s%s" % ("{:,}".format(len(pairs)), "{:,}".format(len(stubs)), "  (DRY: nothing touched)" if a.dry else ""))
+    moves = io.StringIO() if a.dry else open(MOVES, "a", encoding="utf-8")
+    try:
+        for dst, src in sorted(pairs.items()) + [(p, alt) for p, alt in stubs]:
+            if src is None:
+                counts["stub_without_copy"] += 1
+                log("stub without a whole copy anywhere: %s - its cell needs its lane" % dst)
+                continue
+            if not os.path.exists(src):
+                counts["already"] += 1                       # resolved on an earlier run
+                continue
+            if not os.path.exists(dst):                      # the destination went missing since the note: the copy takes its place
+                if not a.dry:
+                    os.rename(src, dst)
+                moves.write(json.dumps({"kind": "resolved", "why": "destination missing", "src": src, "dst": dst}) + "\n")
+                counts["stub_replaced"] += 1
+                continue
+            d_ok, s_ok = whole(dst), whole(src)
+            if d_ok and same_bytes(src, dst):
+                stage(src, "duplicate", moves, a.dry)
+                counts["identical_staged"] += 1
+            elif s_ok and not d_ok:
+                ds, ss = os.path.getsize(dst), os.path.getsize(src)
+                stage(dst, "stub", moves, a.dry)
+                if not a.dry:
+                    os.rename(src, dst)
+                moves.write(json.dumps({"kind": "resolved", "why": "stub replaced", "src": src, "dst": dst, "stub_bytes": ds, "bytes": ss}) + "\n")
+                counts["stub_replaced"] += 1
+                log("stub replaced: %s (%s bytes staged; the document, %s bytes, in its place)" % (dst, "{:,}".format(ds), "{:,}".format(ss)))
+            elif s_ok and d_ok:
+                stage(src, "other rendering", moves, a.dry)
+                counts["other_rendering_staged"] += 1
+            else:
+                counts["neither_whole"] += 1
+                moves.write(json.dumps({"kind": "neither-whole", "src": src, "dst": dst}) + "\n")
+                log("NEITHER WHOLE: %s and %s - nothing moved; the cell needs its lane" % (dst, src))
+    finally:
+        if a.dry:
+            log("DRY: %d log lines would be written" % moves.getvalue().count("\n"))
+        moves.close()
+    counts["at"] = datetime.datetime.now().isoformat(timespec="seconds")
+    counts["dry"] = a.dry
+    if not a.dry:
+        RESOLVE.write_text(json.dumps(counts, indent=1), encoding="utf-8")
+    log("RESOLVE %s: %s" % ("(dry)" if a.dry else "done", json.dumps(counts)))
+    return 0 if not (counts["neither_whole"] or counts["stub_without_copy"]) else 1
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="the one-time move of Legal Instruments.db and the old document tree into their new homes")
     ap.add_argument("--db", default=OLD_DB, help="the old SQLite table (default: %(default)s)")
@@ -689,8 +886,12 @@ def main(argv=None):
     p.add_argument("--slice", type=int, default=50000, help="rows per COPY transaction (default: %(default)s)")
     v = sub.add_parser("verify")
     v.add_argument("--sample", type=int, default=200, help="recorded paths to open on the drive per source (default: %(default)s)")
+    sub.add_parser("sweep", help="every file in both trees by listing: empty files and small non-PDFs listed with their other copies; reads only")
+    r = sub.add_parser("resolve", help="duplicates the move met at a destination, and the stubs sweep listed: decided by the files, copies staged, nothing deleted")
+    r.add_argument("--dry", action="store_true", help="say what would be staged or moved; touch nothing")
     a = ap.parse_args(argv)
-    return {"survey": survey, "organize": organize, "load": load, "verify": verify, "apply-found": apply_found}[a.cmd](a)
+    return {"survey": survey, "organize": organize, "load": load, "verify": verify, "apply-found": apply_found,
+            "sweep": sweep, "resolve": resolve}[a.cmd](a)
 
 
 if __name__ == "__main__":
