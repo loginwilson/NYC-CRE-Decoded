@@ -3,7 +3,7 @@ No county request, no cloud.  A fake crew holds a queue; each role's rebatch mus
 flight, and leave the monitor able to ask again: synchronization puts windows on its re-ask list and lets a control be
 asked again; registration re-asks pages, releases a details item's window count, lets a control be asked again."""
 import datetime as dt, importlib.util, json, pathlib, queue, sys, threading, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))

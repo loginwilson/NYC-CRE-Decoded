@@ -90,6 +90,10 @@ Apply with the project's program: `python ../../supabase/supabase.py push --dry`
 `python test_managers.py` runs the managers' proof offline - fake exits, a fake cloud, nothing asked of any source; its
 last line is `THREE MANAGERS: ALL OK`. The simulations named above run the shared modules against fake lane programs
 or throwaway rows on the live cloud table (never a source); each one says in its first line what it touches.
+Each source's proofs live in its own `rulebook/` beside its module - `Acris/rulebook/test_*.py`, `Richmond/rulebook/test_*.py` -
+and a lane folder holds the lane and its md, nothing else (login 2026-09-06, on the richmond lanes: "test runs ... that
+shouldn't be there"; the thirteen proofs that sat beside the lanes moved that day, each offline one re-run from its new
+place, all OK; the live simulations were not run - their first read is a count over the populated table).
 
 ## Filtering the table (0005, 2026-09-06)
 

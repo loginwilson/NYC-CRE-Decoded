@@ -2,7 +2,7 @@
 arithmetic, the id namespace, the refusal shapes, the ledger, the comparison, the trailing-window verdicts and the
 census sweep - against a FAKE county and a FAKE cloud.  No request, no cloud."""
 import datetime as dt, importlib.util, json, pathlib, sys, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 import lane, richmond

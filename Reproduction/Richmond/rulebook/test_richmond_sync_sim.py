@@ -10,7 +10,7 @@ A fake county stands in for the listing:
           still open or holed - it moves to today only when that window answers); the hole recorded; the day probe cadence; the heartbeat; no county request.
 """
 import datetime as dt, importlib.util, json, pathlib, sys, threading, time, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 import psycopg2

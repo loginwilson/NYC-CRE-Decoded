@@ -10,7 +10,7 @@ A fake counter stands in for ACRIS:
           the level watch cadence with the wider look after 5 empty watches; no request to ACRIS.
 """
 import json, os, pathlib, sys, time, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 sys.path.insert(0, str(PHASE / "Acris" / "workflow" / "synchronization"))

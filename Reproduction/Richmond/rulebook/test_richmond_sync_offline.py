@@ -3,7 +3,7 @@ cloud - the control first, the catch-up windows from the edge, the day probe and
 the edge moving only after the rows are in, a hole after three failed asks, a broken control parking the lane.
 No request, no cloud."""
 import datetime as dt, importlib.util, json, pathlib, queue, sys, threading, time, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 import lane, richmond

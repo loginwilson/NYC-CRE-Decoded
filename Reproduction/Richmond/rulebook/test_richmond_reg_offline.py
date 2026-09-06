@@ -5,7 +5,7 @@ land against a fake crew and a fake cloud - the control first, the catch-up from
 details only for ids the table says need work, registries landed through the outbox, the edge moving only after a
 window's pages and details are all in, holes after three asks, a broken control parking the lane.  No request, no cloud."""
 import datetime as dt, importlib.util, json, pathlib, queue, sys, threading, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 import requests

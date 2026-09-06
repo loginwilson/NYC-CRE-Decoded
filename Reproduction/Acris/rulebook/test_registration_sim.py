@@ -8,7 +8,7 @@ The role answers from a synthetic page (parsed by the real parser) instead of th
          +1 (only SIM-0011 had its document cell filled); 0003's claim held; heartbeat; outbox 0; fails 1
 """
 import json, os, pathlib, sys, time, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 import psycopg2

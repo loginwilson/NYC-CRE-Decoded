@@ -3,7 +3,7 @@ rows with registries; one worker's fetch against a fake two-host session lands a
 reproduction.land as the documentation lane; the lane counter moves by the newly filled cells and the phase counter by the
 rows that are now complete (registry + document); cleanup + reconcile restore the counters."""
 import datetime as dt, importlib.util, pathlib, queue, shutil, sys, threading, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 import cloud, lane, richmond, storage

@@ -3,7 +3,7 @@ todo answers the empty and the DUE pendings only; the lane's own land drives rep
 moves the lane counter by the newly filled cells (a pending into an empty cell counts once, the dict over it counts
 nothing); a value the cell rule rejects stays in the outbox and the lane says so; cleanup + reconcile restore the counters."""
 import datetime as dt, importlib.util, json, pathlib, queue, sys, threading, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 import cloud, lane, richmond

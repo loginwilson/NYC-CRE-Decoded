@@ -13,7 +13,7 @@ heartbeat guard, the lock, the journal and the files are real.
              a refusal parks; a rerun refuses without --unpark; a hang-up stops with exit 3
 """
 import importlib.util, json, pathlib, sys, time, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 import psycopg2

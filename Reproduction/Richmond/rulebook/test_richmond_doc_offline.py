@@ -5,7 +5,7 @@ by one probe of a different document (restricted -> absent + evidence, or the la
 refusal shape on the mint; the session prepared once (its own pool for the courts host, the clerk's front door).
 No request, no cloud."""
 import datetime as dt, importlib.util, json, pathlib, queue, sys, threading, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 import requests

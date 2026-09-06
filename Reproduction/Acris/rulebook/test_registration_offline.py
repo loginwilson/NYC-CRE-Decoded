@@ -7,7 +7,7 @@
   4. the sibling loader: Acris Registration.py can host documentation, and the reverse
 """
 import json, pathlib, sqlite3, sys, types
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 import acris, lane

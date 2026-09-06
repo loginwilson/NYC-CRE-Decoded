@@ -2,7 +2,7 @@
 The index client is exercised against a fake Socrata (paging with $order=:id, the count control, Void);
 the gallop against a fake counter with holes; the classification, the shard plan and the identity math."""
 import collections, importlib.util, json, pathlib, sys, types, time
-PHASE = pathlib.Path(__file__).resolve().parents[3]          # this file's Reproduction folder
+PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 import acris, lane
