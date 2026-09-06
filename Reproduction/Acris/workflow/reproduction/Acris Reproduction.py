@@ -6,10 +6,13 @@ door at a time, and watches them: it relaunches what a relaunch can cure and nev
 person must decide.  The machinery is ../../../rulebook/fleet.py, shared with every source; this file is the
 acris site: its lanes in the cycle's order, their widths, its edge.
 
-    python "Acris Reproduction.py" --drive OneTouch                       the batch: synchronization x9 (+ its monitor = login's 10), registration x10,
-                                                                          documentation x10 - one process per lane, each on its own entry, each running the cycle
-    python "Acris Reproduction.py" --drive OneTouch --lanes registration:40,documentation:40
-    python "Acris Reproduction.py" --drive OneTouch --mega                the frankenstein run: the same crews in ONE process, one entry per crew, one ramp at a time
+    python "Acris Reproduction.py" --drive OneTouch                       ONE BATCH (login 2026-09-06): synchronization x5 + registration x5 + documentation x5 in
+                                                                          ONE process on ONE entry - one ramp from the first worker to the last (5 s apart), one
+                                                                          hang-up, one re-entry from the top, no rate manager ("stay low and be patient")
+    python "Acris Reproduction.py" --lanes synchronization:10,registration:20
+                                                                          the widths by login's word (Gate 3: sync + registration, 30 in one batch)
+    python "Acris Reproduction.py" --drive OneTouch --lanes documentation:40
+                                                                          ONE lane alone: its own managers (the rate manager finds the ceiling) - a lane alone is maximized
     python "Acris Reproduction.py" status                                 this machine's lanes, and every workstation's heartbeats in the cloud
     python "Acris Reproduction.py" stop [lane]                            `stop` into the control file(s); waits for the lanes to leave; then force
     python "Acris Reproduction.py" width documentation=60                 a width into a lane's control file (read within a minute)
@@ -34,9 +37,10 @@ import fleet                                                    # noqa: E402
 
 SOURCE = "Acris"
 LANES = ("synchronization", "registration", "documentation")    # the cycle's order
-# THE BATCH (login 2026-09-04): "1 batch of 10 sync (1 monitor, 9 walkers), 10 registers, 10 documenters".  The monitor is
-# synchronization's main-thread feed, not a connection, so its crew is 9 walkers; a lane run alone keeps its own default (40).
-WIDTHS = {"synchronization": 9, "registration": 10, "documentation": 10}
+# THE BATCH (login 2026-09-04): "1 batch of 10 sync (1 monitor, 9 walkers), 10 registers, 10 documenters"; 2026-09-06: ONE BATCH
+# with the worker types inside it, "a 5 would work ... I could just tell you, change the workers to 10, 10, 10" - the widths are
+# login's word, on the command line (--lanes) or here.  The monitor is synchronization's main-thread feed, not a connection.
+WIDTHS = {"synchronization": 5, "registration": 5, "documentation": 5}
 # THE THREE MANAGERS on the document lane (login 2026-09-04; live and proven 2026-09-04 19:37 -> 09-05 on the home workstation):
 # the batch manager is the cycle itself (one entry on a settled exit pool); the RATE manager enters with one worker, adds one every
 # --stagger s until the docs/s meets the band, then adjusts every 120 s - a full step down over 8, half down over 7, hold in 6-7,
@@ -54,7 +58,9 @@ FRESH_DAYS = 30
 
 def site():
     """Read at call time so a test may point WORKFLOW / HERE elsewhere."""
-    return fleet.Site(SOURCE, LANES, WIDTHS, WORKFLOW, HERE, edge_lanes=("synchronization",), manage=MANAGE)
+    # ONE BATCH (login 2026-09-06): "with Acris you can only have one batch that enters" - the crews in one process on one entry,
+    # the hosted crews with --one-batch and without manager knobs; a lane run alone keeps its managers (MANAGE) and is maximized.
+    return fleet.Site(SOURCE, LANES, WIDTHS, WORKFLOW, HERE, edge_lanes=("synchronization",), manage=MANAGE, one_batch=True, mega_default=True)
 
 
 def parse_lanes(spec):

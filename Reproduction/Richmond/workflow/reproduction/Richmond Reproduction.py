@@ -9,6 +9,10 @@ this file is the richmond site: its lanes in the cycle's order, their widths, it
     python "Richmond Reproduction.py" --drive OneTouch --edge 2026-08-25      the cycle at home: synchronization x4, registration x4,
                                                                               documentation x8 - one process per lane, launched --entry-gap apart
                                                                               (--edge only on the very first start: the last day walked)
+    python "Richmond Reproduction.py" --drive OneTouch --lanes synchronization:10,registration:20 --mega
+                                                                              any number of batches at any width (login 2026-09-06: "for Richmond
+                                                                              you could do max"): --mega hosts the crews in one process, each on its
+                                                                              own entry --entry-gap apart; without it one process per lane
     python "Richmond Reproduction.py" --drive <label> --lanes documentation:8
                                                                               workstation 2: documentation only - synchronization and
                                                                               registration WALK the county's listing, and two walkers of the

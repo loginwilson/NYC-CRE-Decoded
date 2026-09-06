@@ -9,7 +9,8 @@ file tells them to (per launch number), writing a parked file where a real lane 
   run 3   synchronization is REFUSED (2) -> the others get `stop`, the fleet exits 2; a parked lane is not relaunched
   run 4   documentation loses its drive (6) -> the fleet waits for the drive (find_drive fails twice) and relaunches with --unpark
   run 5   a lane already running by hand (its lock held) is refused (1) and left alone
-  run 6   --mega: one child with --also for the others; `stop` reaches it through the control file
+  run 6   --mega: one child with --also for the others; `stop` reaches it through the control file; on a ONE BATCH site
+          (acris) the child gets --one-batch and no manager knobs, and the mega lane is the default (--separate for runs 1-5)
   plus    stop / width / status commands against the fake lanes
 """
 import importlib.util, json, os, pathlib, subprocess, sys, textwrap, threading, time, types
@@ -33,6 +34,7 @@ FAKE = textwrap.dedent('''
     for a in ("--width", "--host", "--stagger", "--entry-gap", "--pending-age", "--redial-wait", "--tries", "--limit", "--drive", "--fresh-days", "--edge", "--claim", "--ttl", "--log"):
         ap.add_argument(a, default="")
     ap.add_argument("--also", action="append", default=[])
+    ap.add_argument("--one-batch", action="store_true")
     ap.add_argument("--unpark", action="store_true")
     args, _ = ap.parse_known_args()          # the site's manager knobs (--manage, --rps-ceiling, ...) pass through: a fake lane has no manager
     parked = HERE / (NAME + ".parked")
@@ -103,7 +105,7 @@ def launches(name):
 
 
 def args(**kw):
-    base = dict(command="run", target="", lanes="", mega=False, drive="SIMDRIVE", fresh_days=30, edge=0, entry_gap=1,
+    base = dict(command="run", target="", lanes="", mega=False, separate=R.site().mega_default, drive="SIMDRIVE", fresh_days=30, edge=0, entry_gap=1,
                 stagger=0.01, pending_age="1 hour", redial_wait=1, tries=3, limit=0, unpark=False, relaunch_wait=1,
                 relaunch_cap=2, stop_wait=5, within="10 minutes", host="SIM-HOST")
     base.update(kw)
@@ -194,7 +196,7 @@ check("registration refused to start (1) and was not relaunched", launches("regi
 print("=== run 6: --mega: one child hosting the crews; stop reaches it")
 fresh_workflow()
 plan("synchronization", {"default": {"rc": 0, "after": 30}})
-f = R.Fleet(args(mega=True, entry_gap=1))
+f = R.Fleet(args(mega=True, entry_gap=1, separate=False))
 def stop_soon():
     time.sleep(4)
     f.stopping = True
@@ -206,6 +208,14 @@ l6 = launches("synchronization")
 check("one child with --also for the other two, and --drive for documentation", len(l6) == 1 and l6[0]["argv"].count("--also") == 2
       and ("registration:%d" % R.WIDTHS["registration"]) in l6[0]["argv"] and ("documentation:%d" % R.WIDTHS["documentation"]) in l6[0]["argv"] and "--drive" in l6[0]["argv"], l6)
 check("the other lanes were never launched on their own", not launches("registration") and not launches("documentation"))
+if R.site().one_batch:
+    check("ONE BATCH site: the child got --one-batch and no manager knob", "--one-batch" in l6[0]["argv"] and "--manage" not in l6[0]["argv"], l6[0]["argv"])
+    f7 = R.Fleet(args(entry_gap=1, separate=False))
+    check("ONE BATCH site: the mega lane without asking", f7.mega)
+    check("ONE BATCH site: a lane alone keeps its managers", "--manage" in f7.argv("documentation", 40) and "--one-batch" not in f7.argv("documentation", 40))
+else:
+    check("a plain site: no --one-batch on the child", "--one-batch" not in l6[0]["argv"])
+    check("a plain site: one process per lane unless --mega", not R.Fleet(args(entry_gap=1)).mega)
 check("stopped through the control file", "stopped by control" in (WF / "synchronization" / "synchronization.log").read_text())
 
 print("=== commands: width, stop, status against a running fake lane")

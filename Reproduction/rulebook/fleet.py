@@ -40,6 +40,11 @@ Lanes together - the rules:
                          run); one child to watch.  Inside it every crew keeps its own session, enters one ramp at a
                          time --entry-gap apart, and cycles on its own.  The GIL rule above is why one process per
                          lane is the default
+  ONE BATCH              a site that says one_batch (acris) runs its crews as ONE BATCH (login 2026-09-06: "with Acris
+                         you can only have one batch that enters"): the mega lane is its default and the hosted crews
+                         get --one-batch - one ramp across the crews, one hang-up, one re-entry, no manager knobs; a
+                         lane run ALONE (--lanes documentation) keeps its own managers (a lane alone is maximized).
+                         --separate launches one process per lane on such a site (the tests)
   one fleet per machine  reproduction.lock; the lanes keep their own locks, so a lane already running by hand is
                          refused (exit 1) and left alone - never doubled
   logs                   each lane's output is appended to <lane>/<lane>.log beside its file (never truncated:
@@ -74,9 +79,11 @@ class Site:
     """One source's fleet: its name, its lanes in the cycle's order, their widths, where the lane programs
     live, and which lanes take --edge on a first start."""
 
-    def __init__(self, source, lanes, widths, workflow, here, edge_lanes=("synchronization",), manage=None):
+    def __init__(self, source, lanes, widths, workflow, here, edge_lanes=("synchronization",), manage=None, one_batch=False, mega_default=False):
         self.source = source
         self.manage = dict(manage or {})      # lane -> {knob: value}: the three managers' knobs, passed on that lane's command line (see lane.add_common_args)
+        self.one_batch = bool(one_batch)      # ONE BATCH (acris): hosted crews ride the host's entry (--one-batch), no manager knobs on the batch
+        self.mega_default = bool(mega_default)    # the mega lane without asking (acris: the batch is the only shape)
         self.lanes = tuple(lanes)
         self.widths = dict(widths)
         self.workflow = pathlib.Path(workflow)
@@ -121,6 +128,7 @@ class Fleet:
         self.args = args
         self.host = args.host or socket.gethostname()
         self.lanes = site.parse_lanes(args.lanes)
+        self.mega = (bool(getattr(args, "mega", False)) or site.mega_default) and not getattr(args, "separate", False)
         self.log_path = site.here / "reproduction.log"
         self.children = {}            # name -> dict(proc, width, started, log, launches [times], also)
         self.waiting = {}             # name -> (relaunch_at, why, unpark)
@@ -155,14 +163,18 @@ class Fleet:
             argv += ["--edge", str(a.edge)]
         for n, w in also:
             argv += ["--also", "%s:%d" % (n, w)]
+        batch = bool(also) and self.site.one_batch
+        if batch:
+            argv.append("--one-batch")                    # ONE BATCH: the hosted crews ride this crew's entry
         if a.limit:
             argv += ["--limit", str(a.limit)]
         if unpark or a.unpark:
             argv.append("--unpark")
         if getattr(a, "no_pool_check", False):
             argv.append("--no-pool-check")
-        for knob, val in sorted(self.site.manage.get(name, {}).items()):      # the managers' knobs: the site's word for this lane
-            argv += ["--" + knob.replace("_", "-"), str(val)]
+        if not batch:                                     # ONE BATCH runs fixed widths, no manager (login 2026-09-06); a lane alone keeps its managers
+            for knob, val in sorted(self.site.manage.get(name, {}).items()):      # the managers' knobs: the site's word for this lane
+                argv += ["--" + knob.replace("_", "-"), str(val)]
         return argv
 
     def launch(self, name, width, unpark=False, also=()):
@@ -189,7 +201,8 @@ class Fleet:
         lane.take_lock(lock)
         a = self.args
         self.log("fleet up on %s - %s - %s" % (self.host, ", ".join("%s x%d" % (n, w) for n, w in self.lanes),
-                                                 "one process (mega lane)" if a.mega else "one process per lane, launched %ds apart" % a.entry_gap))
+                                                 ("ONE BATCH of %d in one process" % sum(w for _, w in self.lanes)) if self.mega and self.site.one_batch and len(self.lanes) > 1
+                                                 else "one process (mega lane)" if self.mega else "one process per lane, launched %ds apart" % a.entry_gap))
 
         def _signalled(signum, _frame):
             self.log("signal %d - stopping the lanes" % signum)
@@ -201,7 +214,7 @@ class Fleet:
                 except Exception:
                     pass
         try:
-            if a.mega:
+            if self.mega:
                 first, width = self.lanes[0]
                 self.launch(first, width, also=tuple(self.lanes[1:]))
             else:
@@ -468,7 +481,8 @@ def build_parser(site, description, edge_type, edge_help, fresh_days_default):
     ap.add_argument("command", nargs="?", default="run", choices=["run", "status", "stop", "width"])
     ap.add_argument("target", nargs="?", default="", help="stop: a lane name; width: LANE=N")
     ap.add_argument("--lanes", default="", help="LANE:WIDTH,... in launch order (default: %s)" % ",".join("%s:%d" % (n, site.widths[n]) for n in site.lanes))
-    ap.add_argument("--mega", action="store_true", help="every crew in one process through the first lane's --also")
+    ap.add_argument("--mega", action="store_true", help="every crew in one process through the first lane's --also%s" % (" (this site's default: ONE BATCH)" if site.mega_default else ""))
+    ap.add_argument("--separate", action="store_true", help="one process per lane even on a ONE BATCH site (tests only)")
     ap.add_argument("--drive", default="", help="documentation's drive label (the volume label: OneTouch at home, workstation 2's own)")
     ap.add_argument("--fresh-days", type=int, default=fresh_days_default, help="documentation: a document recorded within this many days with no image is pending, not absent")
     ap.add_argument("--edge", type=edge_type, default=edge_type(), help=edge_help)

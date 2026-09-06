@@ -23,6 +23,8 @@ fleet launches them in the cycle's order, one door at a time, and watches them. 
 relaunch can cure and never relaunches what a person must decide.
 
     python "Richmond Reproduction.py" --drive OneTouch --edge 2026-08-25     home: synchronization x4, registration x4, documentation x8 - one process per lane, 20 s apart; --edge on the FIRST start only
+    python "Richmond Reproduction.py" --drive OneTouch --lanes synchronization:10,registration:20 --mega
+                                                                           any number of batches at any width (login 2026-09-06: "for Richmond you could do max ... it could be a ton of batches"): --mega hosts the crews in one process, each on its own entry --entry-gap apart; without it one process per lane. ONE BATCH is the acris rule, not this county's
     python "Richmond Reproduction.py" --drive <label> --lanes documentation:8
                                                                            workstation 2: documentation only (see "one station" below)
     python "Richmond Reproduction.py" status                                 this machine's lanes, and every workstation's heartbeats in the cloud

@@ -165,6 +165,11 @@ def add_common_args(ap):
     ap.add_argument("--no-pool-check", action="store_true", help="skip the exit-pool check at entry (tests only)")
     ap.add_argument("--entry-gap", type=float, default=20.0, help="seconds between one crew's entry and the next (--also)")
     ap.add_argument("--also", action="append", default=[], metavar="LANE:WIDTH", help="host another lane's crew too, e.g. registration:40")
+    ap.add_argument("--one-batch", action="store_true",
+                    help="ONE BATCH (login 2026-09-06, the acris rule): every --also crew rides this crew's entry - one ramp across the crews (each crew's births"
+                         " start when the previous crew's ramp ends, --stagger apart, no --entry-gap), one exit-pool check, one hang-up for the whole batch and one"
+                         " re-entry from the top (this crew first), no rate manager; each crew keeps its own pooled session (08-28 run 3: mixed floors on one"
+                         " session served empty viewer pages)")
     ap.add_argument("--limit", type=int, default=0, help="stop after this many documents (a test run)")
     ap.add_argument("--log", default="", help="also append the printed lines to this file")
     ap.add_argument("--unpark", action="store_true", help="start although the lane parked itself (a person has decided)")
@@ -621,6 +626,36 @@ def _rebatch(ctx, c):
     return n
 
 
+def _hangup_batch(ctx, crews, c, why, planned=False):
+    """ONE BATCH: what closes one crew closes the batch - the host takes the incident (its tries, its wait, the
+    park), every other crew with a line open leaves too, lands what it holds, drops its cut batch and waits for
+    the same re-entry (the host first, then each crew after the previous ramp).  Outside ONE BATCH the crew
+    hangs up on its own, as before."""
+    if not _one_batch(ctx, crews):
+        return _hangup(ctx, c, why, planned)
+    host = crews[0]
+    if c is not host:
+        why = "%s - seen on %s" % (why, c.role.lane)
+    if host.reentry_at is None:
+        _hangup(ctx, host, why, planned)
+    if ctx.stopping.is_set():
+        return
+    due = host.reentry_at if host.reentry_at is not None else time.time() + (host.wait_s or ctx.args.redial_wait)
+    for o in crews:
+        if o is host or o.reentry_at is not None:
+            continue
+        o.leave()
+        _land(ctx, o)
+        dropped = _rebatch(ctx, o)
+        o.reentry_at = due
+        _log(ctx, "%s: the batch hung up - leaving too, %d of the cut batch dropped, back with the batch at %s"
+             % (o.role.lane, dropped, time.strftime("%H:%M:%S", time.localtime(due))))
+        try:
+            o.cloud.heartbeat(0, "the batch hung up: back at %s" % time.strftime("%H:%M", time.localtime(due)))
+        except Exception:
+            pass
+
+
 def _hangup(ctx, c, why, planned=False):
     """The session closed (or the wire died): hang up at once, land what the crew holds, drop the cut batch
     and set the wait; the main loop re-enters the crew when it is due (_await_entry).  Nothing blocks:
@@ -660,11 +695,43 @@ def _pool_check(ctx, c):
     c.pool_ok = not ctx.stopping.is_set()
 
 
+def _one_batch(ctx, crews):
+    """ONE BATCH (login 2026-09-06): the hosted crews ride the host's entry.  True only with a crew to host."""
+    return bool(getattr(ctx.args, "one_batch", False)) and len(crews) > 1
+
+
+def _join_batch(ctx, crews, c):
+    """A hosted crew of ONE BATCH enters right after the previous crew's ramp: the host entered (its pool check
+    and its try are the batch's), the crews before it are in, nobody is ramping, the last ramp ended --stagger
+    ago - the same beat as the births, so the batch is one ramp from the first worker to the last."""
+    now = time.time()
+    host = crews[0]
+    if host.reentry_at is not None or not host.entries or now < c.reentry_at or ctx.stopping.is_set():
+        return
+    i = crews.index(c)
+    if crews[i - 1].reentry_at is not None or any(o.ramping() for o in crews if o is not c):
+        return
+    if now - max(o.ramp_end for o in crews) < ctx.args.stagger:
+        return
+    if not net_up():
+        c.reentry_at = now + 60
+        _log(ctx, "%s: network is DOWN - waiting a minute, no try spent" % c.role.lane)
+        return
+    _feed(ctx, c)
+    c.enter(ctx.args.stagger)
+    c.reentry_at = None
+    _log(ctx, "%s: joined the batch right after %s's ramp - %d workers, births %.0fs apart, no entry of its own"
+         % (c.role.lane, crews[i - 1].role.lane, c.width, ctx.args.stagger))
+
+
 def _await_entry(ctx, crews, c):
     """A crew waiting to enter (the first entry, or a re-entry after a hang-up) enters when its wait is over,
     no other crew is ramping, the last ramp ended --entry-gap ago, the wire is up and the exit pool is
     settled.  The fresh batch is claimed right before the ramp so the first-born workers have work; the
-    try is spent here, at the re-entry itself - never while the wire is down."""
+    try is spent here, at the re-entry itself - never while the wire is down.  In ONE BATCH the hosted
+    crews do not enter on their own: they join (_join_batch)."""
+    if _one_batch(ctx, crews) and c is not crews[0]:
+        return _join_batch(ctx, crews, c)
     now = time.time()
     if now < c.reentry_at or ctx.stopping.is_set():
         return
@@ -697,7 +764,9 @@ def _await_entry(ctx, crews, c):
     c.enter(ctx.args.stagger)
     c.reentry_at = None
     a = ctx.args
-    if getattr(a, "manage", 0):
+    if getattr(a, "manage", 0) and _one_batch(ctx, crews):
+        _log(ctx, "%s: --manage ignored in ONE BATCH (login 2026-09-06: no rate manager on the batch; stay low and be patient)" % c.role.lane)
+    if getattr(a, "manage", 0) and not _one_batch(ctx, crews):
         c.governor = RM.Governor(lambda: c.stats["ok"], c.alive,
                                  lambda n: c.resize(min(a.width_max, c.alive() + n), a.stagger),      # the manager's n is relative to the live count it read
                                  lambda n: c.resize(max(1, c.alive() - n), a.stagger),
@@ -753,8 +822,13 @@ def run(roles, args, here):
                 pass
 
     crews = [Crew(role, width, ctx) for role, width in roles]
-    _log(ctx, "%s up on %s - %s - one pooled session per crew, staggered births, keep-alive after, no pacer"
-         % (args.lane, host, ", ".join("%s x%d" % (c.role.lane, c.width) for c in crews)))
+    if _one_batch(ctx, crews):
+        _log(ctx, "%s up on %s - %s - ONE BATCH of %d: the crews ride one entry (%s first, each crew's births right after the previous"
+                  " crew's ramp, %.0f s apart), one hang-up and one re-entry for all, no rate manager; a pooled session per crew, keep-alive after"
+             % (args.lane, host, ", ".join("%s x%d" % (c.role.lane, c.width) for c in crews), sum(c.width for c in crews), crews[0].role.lane, args.stagger))
+    else:
+        _log(ctx, "%s up on %s - %s - one pooled session per crew, staggered births, keep-alive after, no pacer"
+             % (args.lane, host, ", ".join("%s x%d" % (c.role.lane, c.width) for c in crews)))
     for c in crews:
         try:
             c.cloud.connect()
@@ -785,11 +859,11 @@ def run(roles, args, here):
                     ctx.park("wall: %d consecutive 503/429 on %s at %s - not retrying, not rotating"
                              % (c.wall_streak, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=4)
                 if c.hung_up():                               # at once on a close: no re-handshake storm, the wait, ONE entry on a fresh batch
-                    _hangup(ctx, c, "the session closed (every worker hit the wire inside %ds, nothing landed for %ds)"
-                            % (HANGUP_WINDOW_S, int(time.time() - c.last_success)))
+                    _hangup_batch(ctx, crews, c, "the session closed (every worker hit the wire inside %ds, nothing landed for %ds)"
+                                  % (HANGUP_WINDOW_S, int(time.time() - c.last_success)))
                 elif c.transport_streak >= 3 * c.width and time.time() - c.last_success > 60:
-                    _hangup(ctx, c, "dead transport (%d transport errors in a row, nothing landed for %ds)"
-                            % (c.transport_streak, int(time.time() - c.last_success)))
+                    _hangup_batch(ctx, crews, c, "dead transport (%d transport errors in a row, nothing landed for %ds)"
+                                  % (c.transport_streak, int(time.time() - c.last_success)))
                 if args.limit and c.stats["ok"] >= args.limit and c.q.empty():
                     ctx.exit_code, ctx.exit_reason = 0, "limit %d reached" % args.limit
                     ctx.stopping.set()
@@ -802,11 +876,13 @@ def run(roles, args, here):
                     _land(ctx, c)
                     s = _progress(ctx, c, t0, last[c.role.lane])
                     cap = getattr(args, "session_max_requests", 0) if getattr(args, "manage", 0) else 0
-                    if cap and c.reentry_at is None and s["reqs"] - c.reqs_at_entry >= cap:
+                    one = _one_batch(ctx, crews)
+                    reqs_now = sum(o.stats["reqs"] - o.reqs_at_entry for o in crews if o.reentry_at is None) if one else s["reqs"] - c.reqs_at_entry
+                    if cap and c.reentry_at is None and (not one or c is crews[0]) and reqs_now >= cap:
                         # THE SESSION MANAGER (login 2026-09-04: "the session manager will track requests in a session and end it when the request
                         # limit is reached and tell the batch manager to repeat"): a planned close, lines alive; the cycle re-enters on a fresh batch
-                        _hangup(ctx, c, "SESSION RESET: %s requests this session, the knob is %s - ending on purpose, a fresh batch after the wait"
-                                % ("{:,}".format(s["reqs"] - c.reqs_at_entry), "{:,}".format(cap)), planned=True)
+                        _hangup_batch(ctx, crews, c, "SESSION RESET: %s requests this session, the knob is %s - ending on purpose, a fresh batch after the wait"
+                                      % ("{:,}".format(reqs_now), "{:,}".format(cap)), planned=True)
                         last[c.role.lane] = s
                         continue
                     asked = s["reqs"] - last[c.role.lane]["reqs"]
@@ -814,7 +890,7 @@ def run(roles, args, here):
                     quiet[c.role.lane] = quiet[c.role.lane] + 1 if (asked > 0 and moved == 0) else 0
                     if quiet[c.role.lane] >= 5 and c.reentry_at is None:      # five minutes asking, nothing landing = our wire
                         quiet[c.role.lane] = 0
-                        _hangup(ctx, c, "five minutes asking, nothing landing (our wire)")
+                        _hangup_batch(ctx, crews, c, "five minutes asking, nothing landing (our wire)")
                     last[c.role.lane] = s
                     try:
                         c.cloud.heartbeat(c.alive(), None)
