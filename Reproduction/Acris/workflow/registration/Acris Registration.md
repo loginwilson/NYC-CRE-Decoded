@@ -61,3 +61,5 @@ The lane's claims now bring such registries back (ids younger than 400 days) onc
 leveling batch - has run out, and the re-read lands the whole registry again; a recorded date releases it, N/A cools it again.
 Nothing in this file changes: the rule lives in claim() and land(). 8,876 such registries (the old lane's, 2025-10-29 ..
 2026-08-19) are the first work of the gate-3 batch.
+
+2026-09-06 21:02 — the 8,876 provisional registries were the gate-3 batch's first work: all re-read through claim()'s due rule, every one landed with its recorded date, 0 left at 21:02; the counters did not move for them (a registry over a registry), 8,082 new registrations landed beside them, registration level 21,631,885 / 21,631,885 at 21:21.

@@ -23,6 +23,11 @@ The rules are kept from the lane that ran before this one (rc_lane.py, rc_pdf_pu
   one breath    the token expires in ~10 minutes: mint and pull by the same worker, back to back
   a pdf is %PDF a body that does not start with %PDF is never written or recorded
   whole file    written to a .part and renamed; the store never holds a truncated pdf
+  challenged    a 403 carrying `cf-mitigated: challenge` is CLOUDFLARE'S BOT CHECK on the address we come from (the
+                "Just a moment..." page), not the courts host's answer: park AT ONCE, no hold, no probe (a probe answers
+                the same challenge - two nights, 20 minutes, nothing learned), the message says what it is (measured
+                2026-09-06: the old lane's exact request, three user-agents, a bound socket, curl.exe and a fetcher on
+                another network - all challenged; the courts host's posture, not our code; richmond.is_challenge)
   restricted    a 401/403 from the courts host is AMBIGUOUS: sealed records 403 at any rate (a fact
                 about ONE document), a refusal is about us.  Hold every worker --cooldown seconds,
                 then ONE probe of a DIFFERENT document decides: probe pdf -> the document is
@@ -151,6 +156,11 @@ class Documentation:
         r = self._get(crew, token_url, richmond.PULL_HEADERS, (10, 90), allow_redirects=True, stream=True)
         try:
             if r.status_code in (401, 403):
+                if richmond.is_challenge(r.status_code, r.headers, r.content):
+                    raise richmond.Refused("CLOUDFLARE CHALLENGE on the courts host for %s (403, cf-mitigated: challenge) - Cloudflare's bot check"
+                                           " in front of the courts host, not the document, not this request (2026-09-06: the old lane's exact"
+                                           " request, curl.exe and a fetcher on another network were all challenged); STOP - the courts host's"
+                                           " posture, not our code: a person decides when to ask again (one pull tells), never a browser disguise" % doc_id)
                 return self.verdict(crew, doc_id, r.status_code)
             if r.status_code == 429:
                 raise lane.HTTPStatus(429, token_url)
@@ -189,6 +199,10 @@ class Documentation:
                 lane._log(crew.ctx, "documentation: VERDICT - %s is RESTRICTED (probe %s returned a pdf): recorded absent, never asked again;"
                           " the lane resumes" % (doc_id, probe_id))
                 return "restricted"
+            if answer == "challenged":
+                raise richmond.Refused("CLOUDFLARE CHALLENGE on the probe %s after HTTP %d on %s - Cloudflare's bot check in front of the courts"
+                                       " host; STOP - the courts host's posture, not our code: a person decides when to ask again, never a browser"
+                                       " disguise" % (probe_id, code, doc_id))
             if answer == "refused":
                 raise richmond.Refused("the courts host refused %s (%d) AND the probe %s - the lane is refused; STOP, no retry, no rotation"
                                        % (doc_id, code, probe_id))
@@ -227,6 +241,8 @@ class Documentation:
                 try:
                     if r.status_code == 200 and richmond.is_pdf(r.content):
                         answer = "served"
+                    elif richmond.is_challenge(r.status_code, r.headers, r.content):
+                        answer = "challenged"
                     elif r.status_code in (401, 403):
                         answer = "refused"
                     else:

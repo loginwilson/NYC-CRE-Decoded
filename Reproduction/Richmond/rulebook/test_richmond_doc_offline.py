@@ -4,7 +4,7 @@ fetch against a fake crew and a fake two-host session - a pdf minted and pulled 
 by one probe of a different document (restricted -> absent + evidence, or the lane refused); the wall, the wire, a
 refusal shape on the mint; the session prepared once (its own pool for the courts host, the clerk's front door).
 No request, no cloud."""
-import datetime as dt, importlib.util, json, pathlib, queue, sys, threading, types
+import datetime as dt, importlib.util, json, pathlib, queue, sys, threading, time, types
 PHASE = pathlib.Path(__file__).resolve().parents[2]          # this file's Reproduction folder
 sys.path.insert(0, str(PHASE / "rulebook"))
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
@@ -84,7 +84,10 @@ class FakeSession:
             spec = self.pull.get(iid, (200, PDF))
             if isinstance(spec, Exception):
                 raise spec
-            return FakeResp(spec[0], spec[1])
+            resp = FakeResp(spec[0], spec[1])
+            if len(spec) > 2:
+                resp.headers.update(spec[2])           # e.g. Cloudflare's cf-mitigated: challenge
+            return resp
         raise AssertionError("unexpected url " + url)
 
 class FakeCrew:
@@ -218,6 +221,37 @@ except lane.Retry as e:
     check("a second 403 while a verdict is in progress is asked again later", "in progress" in str(e))
 finally:
     role.arbiter.release()
+
+print("=== Cloudflare's challenge on the courts host: parks AT ONCE, no hold, no probe (2026-09-06)")
+CHALLENGE_PAGE = b"<html><head><title>Just a moment...</title></head><body>Enable JavaScript and cookies to continue</body></html>"
+check("is_challenge: a 403 with cf-mitigated: challenge", richmond.is_challenge(403, {"Cf-Mitigated": "challenge", "Server": "cloudflare"}, b""))
+check("is_challenge: a 403 whose body is the Just-a-moment page", richmond.is_challenge(403, {}, CHALLENGE_PAGE))
+check("is_challenge: a bare 403 (a sealed record) is NOT a challenge", not richmond.is_challenge(403, {"Server": "nginx"}, b"forbidden"))
+check("is_challenge: a 200 pdf is not a challenge", not richmond.is_challenge(200, {"Cf-Mitigated": "challenge"}, PDF))
+role3 = D.Documentation(HERE, str(ROOT), richmond.IMAGE_LAG_DAYS, cooldown=600)
+crew.session.mint["990000071"] = (302, TOKEN % "990000071")
+crew.session.pull["990000071"] = (403, CHALLENGE_PAGE, {"Cf-Mitigated": "challenge", "Server": "cloudflare"})
+crew.session.mint["990000072"] = (302, TOKEN % "990000072")
+crew.q.put(("RC_990000072", REG_OLD, 0))
+n = crew.stats["reqs"]; t0 = time.time()
+try:
+    role3.fetch(crew, "RC_990000071", REG_OLD); check("a challenged pull raises Refused", False)
+except richmond.Refused as e:
+    check("a challenged pull raises Refused AT ONCE naming Cloudflare and what decides (a person, one pull), no 600 s hold",
+          "CLOUDFLARE CHALLENGE" in str(e) and "not our code" in str(e) and time.time() - t0 < 5, str(e)[:120])
+check("no probe was spent: two requests (mint + pull), the queue untouched, the hold clear",
+      crew.stats["reqs"] - n == 2 and crew.q.qsize() == 1 and crew.q.get()[0] == "RC_990000072" and not role3.hold.is_set(), crew.stats["reqs"] - n)
+role4 = D.Documentation(HERE, str(ROOT), richmond.IMAGE_LAG_DAYS, cooldown=0)
+crew.session.mint["990000073"] = (302, TOKEN % "990000073")
+crew.session.pull["990000073"] = (403, b"")                                     # the courts host's own 403 (a sealed record?) ...
+crew.session.mint["990000074"] = (302, TOKEN % "990000074")
+crew.session.pull["990000074"] = (403, CHALLENGE_PAGE, {"Cf-Mitigated": "challenge"})   # ... and the probe is challenged
+crew.q.put(("RC_990000074", REG_OLD, 0))
+try:
+    role4.fetch(crew, "RC_990000073", REG_OLD); check("a challenged probe raises Refused", False)
+except richmond.Refused as e:
+    check("a challenged probe parks the lane naming Cloudflare (not 'the courts host refused')", "CLOUDFLARE CHALLENGE on the probe RC_990000074" in str(e), str(e)[:120])
+crew.q.get()
 
 print("=== the lane's arguments and role hook")
 r = D.role(str(ROOT), types.SimpleNamespace(fresh_days=7, cooldown=600))

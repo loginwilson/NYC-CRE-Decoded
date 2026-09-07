@@ -193,7 +193,8 @@ def windows(start=START, end=None, days=WINDOW_DAYS):
 #     python-requests/2.34.2 (library default)  -> ReadTimeout at 45 s, 2/2   (a HANG, not a refusal)
 #     this project's honest UA                  -> 200 + the full pdf in 1.5 s, 2/2
 # so the pull carries the same honest UA (a browser string was measured to buy nothing and would make the
-# client dishonest).  A pdf is a pdf only when the body starts with %PDF.
+# client dishonest).  A pdf is a pdf only when the body starts with %PDF.  A 403 that carries `cf-mitigated: challenge`
+# is Cloudflare's bot check on the ADDRESS we come from, not the courts host's answer about a document (is_challenge below).
 IAPPS = "https://iapps.courts.state.ny.us"
 PULL_HEADERS = {"Referer": BASE + "/", "Accept": "application/pdf,*/*"}
 _DATE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
@@ -221,6 +222,30 @@ def classify_mint(status, location):
 
 def is_pdf(data):
     return len(data) >= 5 and data[:4] == b"%PDF"
+
+
+def is_challenge(status, headers, body=b""):
+    """CLOUDFLARE'S MANAGED CHALLENGE in front of the courts host: HTTP 403 carrying `cf-mitigated: challenge` (the body is
+    the "Just a moment... Enable JavaScript and cookies to continue" page).  Cloudflare answers before the courts application
+    sees the request: it is never about the document.  MEASURED 2026-09-06 21:1x-21:4x, one variable at a time, the clerk
+    minting every token: the pull this lane sends is the old lane's byte for byte (the 302's own token url, the same three
+    headers - the old lane's exact user-agent string was tried too - no cookies, one keep-alive connection per worker), and the
+    challenge came back for it, for a socket bound to the Wi-Fi adapter, for Windows' own curl.exe with the same headers from
+    the VPN's exit, and for a fetcher on a datacenter network with no VPN and none of our code.  Three networks, three clients,
+    one answer: not our code, not one exit.  The courts host's own posture has flipped before - before 2026-08-22 the record
+    shows this same challenge to honest clients, 2026-08-22..28 it served them at 12.77 pdf/s.  The lane parks at once and
+    a person decides when to ask again (one pull tells); never a browser disguise: a challenge is a bot check, and a client
+    that solves it lies."""
+    if status != 403:
+        return False
+    cf = ""
+    for k, v in (headers or {}).items():
+        if str(k).lower() == "cf-mitigated":
+            cf = str(v).strip().lower()
+    if cf == "challenge":
+        return True
+    head = (body or b"")[:6000]
+    return b"Just a moment" in head and b"Enable JavaScript and cookies" in head
 
 
 def recorded_date(registry):

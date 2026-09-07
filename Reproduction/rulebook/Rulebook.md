@@ -270,7 +270,7 @@ registry adds nothing" means nobody goes back. THE RULE TO ADD (gate 3 or the fi
 date older than N days is claimed again by the registration lane and re-read; the counters do not move; the re-read that still
 finds no recorded date waits again. The same shape as a pending document. Not tonight's change; written here so it is not lost.
 
-2026-09-06 21:0x — 0009 THE PROVISIONAL REGISTRATION, APPLIED AND PROVEN (login: "if something is filed and has a CRFN and it
+2026-09-06 20:3x — 0009 THE PROVISIONAL REGISTRATION, APPLIED AND PROVEN (applied 20:35–20:40, before the batch) (login: "if something is filed and has a CRFN and it
 doesn't have a recording yet, we catch it ... fix those before we even go into gate 3"). claim() for registration now offers,
 before the empties, every registry that is an object without a readable recorded date on an id younger than 400 days (the id's
 first eight digits are its date; older and still undated stays as filed - the registration's `absent`); land() keeps a
@@ -280,3 +280,5 @@ document, and releases it when a recorded date lands; the counters move only for
 `test_provisional.py` on throwaway rows in a rolled-back transaction, before the push and again after: ALL OK (8 checks); the due
 query reads the recorded index and lists 500 in 425 ms. 8,876 real registries are due tonight - gate 3's registration crew
 takes them first, then the new documents the sync finds. `--pending-age "1 day"` on the batch.
+
+2026-09-06 21:21 — GATE 3 LEVEL ON BOTH SOURCES (synchronization + registration). ACRIS: one batch of 30 (sync 10 + registration 20) entered 20:44:28, level 20:54:03 (edge 2026000254029, 8,323 new documents), the 8,876 provisional registries re-read by 21:02 (0 left), one session close 20:57 → the batch-wide hang-up and a re-entry served 20:58:36, registration 21,631,885 / 21,631,885 at 21:21 (Acris Reproduction.md §18). Richmond: level in two minutes (0 new, 0 to register). Richmond documentation (499 pages) parked on CLOUDFLARE'S CHALLENGE in front of the courts host - proven not the code's (the request is the old lane's byte for byte; three UA strings, a bound socket, curl.exe, and a fetcher on a datacenter network with no VPN were all challenged on tokens the clerk had just minted) and not one exit's (login: the VPN was on for the whole 2.5M-page week): the courts host's own posture, on record flipping before (Richmond Documentation.md 21:2x); `richmond.is_challenge()` now parks the lane at once, named. Gate 4 (ACRIS documentation on two workstations) may start on login's word; the 499 richmond pages wait on the courts host - one `--unpark` pull tells when.
