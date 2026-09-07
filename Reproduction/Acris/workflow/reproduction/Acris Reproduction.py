@@ -49,9 +49,14 @@ WIDTHS = {"synchronization": 5, "registration": 5, "documentation": 5}
 # door curve) is undone and held; the SESSION manager ends the session at 1,000,000 requests and the cycle re-enters on a fresh batch.
 # Knobs, not code: change a number here (or on the lane's command line), never the manager.  Only documentation is managed: the
 # band and the ceiling were measured on the document floor; registration and synchronization keep their fixed widths.
-MANAGE = {"documentation": {"manage": 1, "ramp_to_rate": 1, "rate_floor": 5, "rate_ideal_lo": 6, "rate_ideal_hi": 7, "dps_ceiling": 8,
-                            "rps_ceiling": 60, "width_min": 20, "width_max": 120, "adjust_every": 120, "adjust_step": 10,
-                            "session_max_requests": 1000000}}
+# login 2026-09-06 22:1x (gate 4, the document lane alone): "1x40, stagger the 40 ... instead of having a rate manager ... the
+# batch manager's still there ... a session manager that is keeping track of whether all the lanes close, resetting it, re-entry
+# on a new batch" - the width is fixed at what --lanes says (births --stagger apart), the batch manager and the session recycle
+# ARE the cycle (one entry; every worker closed = the session ended = hang up, wait, re-enter on a fresh batch); the rate
+# manager is OFF: the workstations scale, not the width.  The 09-04 knobs, kept for the record (manage 1 turns them back on):
+#   {"manage": 1, "ramp_to_rate": 1, "rate_floor": 5, "rate_ideal_lo": 6, "rate_ideal_hi": 7, "dps_ceiling": 8, "rps_ceiling": 60,
+#    "width_min": 20, "width_max": 120, "adjust_every": 120, "adjust_step": 10, "session_max_requests": 1000000}
+MANAGE = {"documentation": {"manage": 0}}
 EDGE_HELP = "synchronization's first start: the last CRFN whose document the table holds"
 FRESH_DAYS = 30
 
