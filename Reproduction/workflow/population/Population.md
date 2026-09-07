@@ -43,7 +43,7 @@ mapping (fail closed), and warns when `organize` has not run for real, since the
 
 | old `navigation` | new cell | note |
 |---|---|---|
-| `id` | `doc_id` | text; byte order on both sides (SQLite BINARY = Postgres `collate "C"`), so a resume after the last id is exact. `RC_` ids go to `richmond`, every other id to `acris` |
+| `id` | `identifier` | text; byte order on both sides (SQLite BINARY = Postgres `collate "C"`), so a resume after the last id is exact. `RC_` ids go to `richmond`, every other id to `acris` |
 | `recorded_details` = `''` | `registry` NULL | registration's to-do |
 | `recorded_details` = `{…}` | `registry` (jsonb) | the recorded details as the old lane landed them |
 | `pdf` = `''` | `document` NULL | documentation's to-do - unless `organize` found the document in an old store and placed it: then `apply-found` writes the new full path |

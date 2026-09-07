@@ -372,7 +372,7 @@ class Crew:
                 value = self.role.fetch(self, doc_id, registry)
                 classify = getattr(self.role, "classify", None)
                 with self.lock:
-                    self.results.append({"doc_id": doc_id, "value": value})
+                    self.results.append({"identifier": doc_id, "value": value})
                     self.stats["ok"] += 1
                     self.stats[classify(value) if classify else ("filled" if value not in ("pending", "absent") else value)] += 1
                     self.transport_streak = 0
@@ -579,7 +579,7 @@ def _land(ctx, c):
     if rows:
         c.outbox.append(rows)
         for r in rows:
-            c.held.discard(r["doc_id"])
+            c.held.discard(r["identifier"])
     if c.outbox.path.exists() and c.outbox.path.stat().st_size > 0:
         landed, left = c.outbox.drain(lambda rows: c.cloud.land(rows, ctx.args.pending_age))
         if left:

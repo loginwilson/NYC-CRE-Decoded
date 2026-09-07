@@ -37,7 +37,7 @@ def q(sql, params=None, fetch=True):
         con.close()
 
 
-q("delete from reproduction.richmond where doc_id like 'RC_9900000%%'", fetch=False)
+q("delete from reproduction.richmond where identifier like 'RC_9900000%%'", fetch=False)
 q("delete from reproduction.richmond_heartbeats where host = 'SIM-HOST'", fetch=False)
 before = q("select (select needed from reproduction.richmond_update), (select landed from reproduction.richmond_update_lanes where lane='synchronization'), (select needed from reproduction.richmond_update_lanes where lane='documentation')")[0]
 print("counters before (phase needed, sync landed, documentation needed):", before)
@@ -91,7 +91,7 @@ code = lane.run([(role, 2)], args, HERE)
 print("exit code", code, "after %.0fs" % (time.time() - T0))
 
 print("--- what landed ---")
-got = sorted(int(r[0][3:]) for r in q("select doc_id from reproduction.richmond where doc_id like 'RC_9900000%%'"))
+got = sorted(int(r[0][3:]) for r in q("select identifier from reproduction.richmond where identifier like 'RC_9900000%%'"))
 want = [990000001, 990000002, 990000003, 990000010, 990000011, 990000012, 990000020, 990000021]
 print("   rows inserted:", got)
 print("   expected     :", want, "->", "OK" if got == want else "MISMATCH")
@@ -104,7 +104,7 @@ after = q("select (select needed from reproduction.richmond_update), (select lan
 print("   counters moved by:", tuple(a - b for a, b in zip(after, before)), "(expect %d each)" % len(want))
 print("   heartbeat:", q("select width, last_event from reproduction.richmond_heartbeats where host = 'SIM-HOST'"))
 print("--- cleanup ---")
-q("delete from reproduction.richmond where doc_id like 'RC_9900000%%'", fetch=False)
+q("delete from reproduction.richmond where identifier like 'RC_9900000%%'", fetch=False)
 q("delete from reproduction.richmond_heartbeats where host = 'SIM-HOST'", fetch=False)
 print("reconcile after cleanup:", q("select * from reproduction.reconcile('richmond')"))
 print("RICHMOND SYNC SIMULATION DONE - no county request was made")

@@ -40,8 +40,8 @@ def counters():
     return lanes, tuple(phase)
 
 def cleanup():
-    DOC._run("delete from reproduction.richmond where doc_id = any(%s)", (IDS,), False)
-    DOC._run("delete from reproduction.richmond_claims where doc_id = any(%s)", (IDS,), False)
+    DOC._run("delete from reproduction.richmond where identifier = any(%s)", (IDS,), False)
+    DOC._run("delete from reproduction.richmond_claims where identifier = any(%s)", (IDS,), False)
 
 class FakeResp:
     def __init__(self, status, content=b"", location=None):
@@ -79,7 +79,7 @@ try:
     before_lanes, before_phase = counters()
     print("=== four throwaway rows: three with registries, one without")
     n = DOC.insert_ids(IDS)
-    REG.land([{"doc_id": i, "value": REGS[i]} for i in IDS if REGS[i]])
+    REG.land([{"identifier": i, "value": REGS[i]} for i in IDS if REGS[i]])
     regs = DOC.registries(IDS)
     check("rows inserted and three registries landed", n == 4 and all(isinstance(regs[i], dict) for i in IDS[:3]) and regs[IDS[3]] is None)
     lanes, phase = counters()
@@ -98,18 +98,18 @@ try:
     check("a path, a pending, an absent, and a retry for the row without a registry",
           values[IDS[0]] == canon and values[IDS[1]] == "pending" and values[IDS[2]] == "absent" and values[IDS[3]][0] == "retry", values)
     check("the pdf is on the fake drive under the One Touch layout", storage.local(str(ROOT), canon).read_bytes() == PDF and "\\richmond\\2026\\08 Aug\\" in canon)
-    landed = DOC.land([{"doc_id": i, "value": values[i]} for i in IDS[:3]])
-    cells = {r[0]: r[1] for r in DOC._run("select doc_id, document from reproduction.richmond where doc_id = any(%s)", (IDS,), True)}
+    landed = DOC.land([{"identifier": i, "value": values[i]} for i in IDS[:3]])
+    cells = {r[0]: r[1] for r in DOC._run("select identifier, document from reproduction.richmond where identifier = any(%s)", (IDS,), True)}
     check("the cloud took the three cells: the path, the word pending, the word absent; the fourth stays empty",
           landed == 3 and cells[IDS[0]] == canon and cells[IDS[1]] == "pending" and cells[IDS[2]] == "absent" and cells[IDS[3]] is None, cells)
     lanes, phase = counters()
     check("documentation's counter moved by three newly filled cells; the phase by three completes (registry + document)",
           lanes["documentation"][0] == before_lanes["documentation"][0] + 3 and phase[0] == before_phase[0] + 3, (lanes, phase, before_lanes, before_phase))
-    landed = DOC.land([{"doc_id": IDS[1], "value": canon.replace(IDS[0], IDS[1])}])
+    landed = DOC.land([{"identifier": IDS[1], "value": canon.replace(IDS[0], IDS[1])}])
     lanes, phase = counters()
     check("a pending upgraded to a path counts nothing more (the cell was already landed)", landed == 1 and lanes["documentation"][0] == before_lanes["documentation"][0] + 3 and phase[0] == before_phase[0] + 3)
     try:
-        DOC.land([{"doc_id": IDS[3], "value": "garbage"}]); check("the cell rule rejects a bad word", False)
+        DOC.land([{"identifier": IDS[3], "value": "garbage"}]); check("the cell rule rejects a bad word", False)
     except Exception as e:
         check("the cell rule rejects a value that is not a path or a verdict word", "violates" in str(e) or "check" in str(e).lower(), str(e)[:120])
 finally:

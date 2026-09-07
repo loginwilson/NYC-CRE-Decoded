@@ -54,7 +54,7 @@ def claim(host, got, n=3):
 
 
 def test_claims():
-    return q("select doc_id, workstation, until > now() from machinery.claims where source = 'acris' and doc_id like 'TEST-%' order by doc_id")
+    return q("select identifier, workstation, until > now() from machinery.claims where source = 'acris' and identifier like 'TEST-%' order by identifier")
 
 
 def landed(lane, workstation=""):
@@ -62,16 +62,16 @@ def landed(lane, workstation=""):
     return r[0][0] if r else 0
 
 
-real_pending = q("select count(*) from reproduction.acris where document = 'pending' and doc_id not like 'TEST-%'")[0][0]
+real_pending = q("select count(*) from reproduction.acris where document = 'pending' and identifier not like 'TEST-%'")[0][0]
 if real_pending:
     raise SystemExit("reproduction.acris holds %s real pending documents - this test's claims would take them first; run it when none is pending" % "{:,}".format(real_pending))
 
 print("1. insert", len(PENDING), "pending test rows and", len(EMPTY), "empty ones, each with a registry object")
-q("delete from machinery.claims where source = 'acris' and doc_id like 'TEST-%'", fetch=False)
-q("delete from reproduction.acris where doc_id like 'TEST-%'", fetch=False)
+q("delete from machinery.claims where source = 'acris' and identifier like 'TEST-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'TEST-%'", fetch=False)
 q("delete from reproduction.updates where workstation like 'HOST-%'", fetch=False)
-q("insert into reproduction.acris (doc_id, registry, document) select unnest(%s::text[]), %s::jsonb, 'pending'", (PENDING, REGISTRY), fetch=False)
-q("insert into reproduction.acris (doc_id, registry) select unnest(%s::text[]), %s::jsonb", (EMPTY, REGISTRY), fetch=False)
+q("insert into reproduction.acris (identifier, registry, document) select unnest(%s::text[]), %s::jsonb, 'pending'", (PENDING, REGISTRY), fetch=False)
+q("insert into reproduction.acris (identifier, registry) select unnest(%s::text[]), %s::jsonb", (EMPTY, REGISTRY), fetch=False)
 
 print("2. two hosts claim at once")
 got = {}
@@ -82,37 +82,37 @@ print("   A:", sorted(a)); print("   B:", sorted(b))
 assert not (a & b), "OVERLAP: %s" % (a & b)
 assert a | b == set(PENDING), "not exactly the six pendings: %s" % sorted(a | b)
 print("   disjoint and complete, nothing real taken: OK")
-print("   claims:", q("select workstation, count(*) from machinery.claims where source = 'acris' and doc_id like 'TEST-%' group by 1 order by 1"))
+print("   claims:", q("select workstation, count(*) from machinery.claims where source = 'acris' and identifier like 'TEST-%' group by 1 order by 1"))
 
 print("3. land: A fills a path and an absent (released); B lands a pending (kept as a cooldown)")
 before = landed("documentation")
 phase_before = landed("reproduction")
 la = sorted(a)[:2]; b_hi = sorted(b)[-1]
-n1 = land("HOST-A", [{"doc_id": la[0], "value": PATH}, {"doc_id": la[1], "value": "absent"}])
-n2 = land("HOST-B", [{"doc_id": b_hi, "value": "pending"}])
+n1 = land("HOST-A", [{"identifier": la[0], "value": PATH}, {"identifier": la[1], "value": "absent"}])
+n2 = land("HOST-B", [{"identifier": b_hi, "value": "pending"}])
 print("   cells written:", n1, "+", n2)
-for r in q("select doc_id, document from reproduction.acris where doc_id like 'TEST-%' order by doc_id"):
+for r in q("select identifier, document from reproduction.acris where identifier like 'TEST-%' order by identifier"):
     print("   ", r[0], "->", r[1])
 claims = test_claims()
 assert len(claims) == 4, "expected 4 claims left (6 - 2 released; the pending kept), got %d: %s" % (len(claims), claims)
-cool = q("select workstation, until > now() + interval '50 minutes', until < now() + interval '70 minutes' from machinery.claims where source = 'acris' and doc_id = %s", (b_hi,))
+cool = q("select workstation, until > now() + interval '50 minutes', until < now() + interval '70 minutes' from machinery.claims where source = 'acris' and identifier = %s", (b_hi,))
 assert cool == [("HOST-B", True, True)], "the pending's claim should be B's cooldown of about an hour, got %s" % cool
 print("   claims left: 4, the pending's held as B's cooldown until about now() + 1 hour: OK")
 after = landed("documentation")
 phase_after = landed("reproduction")
 assert after == before and phase_after == phase_before, "landing over pendings must not move the counters (rose %d / %d)" % (after - before, phase_after - phase_before)
 print("   a pending -> path / absent / pending adds nothing to the counters: OK")
-land("HOST-B", [{"doc_id": b_hi, "value": PATH}])
+land("HOST-B", [{"identifier": b_hi, "value": PATH}])
 assert len(test_claims()) == 3, "a pending landed as a path must release its cooldown claim"
 print("   the cooling pending landed as a path releases its claim: OK")
 
 print("4. the cooldown ends the way a claim expires")
 b_left = sorted(b - {b_hi})
 cooler = b_left[-1]
-land("HOST-B", [{"doc_id": cooler, "value": "pending"}])
+land("HOST-B", [{"identifier": cooler, "value": "pending"}])
 held = test_claims()
 assert [c[0] for c in held] == sorted(set(PENDING) - set(la) - {b_hi}), "three rows should be held now: %s" % held
-q("update machinery.claims set until = now() - interval '1 second' where source = 'acris' and doc_id = %s", (cooler,), fetch=False)
+q("update machinery.claims set until = now() - interval '1 second' where source = 'acris' and identifier = %s", (cooler,), fetch=False)
 c = {}
 claim("HOST-C", c, 1)
 assert c["HOST-C"] == [cooler], "C should get exactly the pending whose cooldown ran out (skipping %s, still held), got %s" % (
@@ -121,7 +121,7 @@ print("   C's claim of 1 handed out", cooler, "- the expired cooldown - and skip
 
 print("5. the two empty rows landed directly: counters move by what was new, on the lane row and on A's own row")
 host_before = landed("documentation", "HOST-A")
-land("HOST-A", [{"doc_id": EMPTY[0], "value": PATH}, {"doc_id": EMPTY[1], "value": "absent"}])
+land("HOST-A", [{"identifier": EMPTY[0], "value": PATH}, {"identifier": EMPTY[1], "value": "absent"}])
 after = landed("documentation")
 phase_after = landed("reproduction")
 assert after - before == 2, "lane landed should rise by 2, rose by %d" % (after - before)
@@ -131,12 +131,12 @@ print("   documentation landed +2, phase landed +2, HOST-A's row +2: OK")
 
 print("6. the cell rule rejects a wrong word; a registry over a registry adds nothing")
 try:
-    q("update reproduction.acris set document = 'unservable' where doc_id = %s", (PENDING[0],), fetch=False)
+    q("update reproduction.acris set document = 'unservable' where identifier = %s", (PENDING[0],), fetch=False)
     print("   NOT rejected - FAIL"); sys.exit(1)
 except psycopg2.errors.CheckViolation as e:
     print("   rejected:", str(e).splitlines()[0][:90])
 reg_before = landed("registration")
-land("HOST-A", [{"doc_id": la[0], "value": {"doc type": "DEED", "again": True}}], lane="registration")
+land("HOST-A", [{"identifier": la[0], "value": {"doc type": "DEED", "again": True}}], lane="registration")
 reg_after = landed("registration")
 assert reg_after == reg_before, "a registry over a registry must not add to landed"
 print("   registry over registry adds nothing: OK")
@@ -151,11 +151,11 @@ assert all(r[2] == 40 and r[5] for r in rows if r[1] in ("HOST-A", "HOST-B") and
 assert [r[3] for r in rows if r[1] == "HOST-A" and r[0] == "documentation"] == [2], "HOST-A's row keeps its landed count through the heartbeat"
 
 print("8. remove the test rows, their claims and the test workstation rows; the counters measured again")
-q("delete from machinery.claims where source = 'acris' and doc_id like 'TEST-%'", fetch=False)
-q("delete from reproduction.acris where doc_id like 'TEST-%'", fetch=False)
+q("delete from machinery.claims where source = 'acris' and identifier like 'TEST-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'TEST-%'", fetch=False)
 q("delete from reproduction.updates where workstation like 'HOST-%'", fetch=False)
 print("   reconcile after cleanup:", q("select * from reproduction.reconcile('acris')"))
-print("   rows left:", q("select count(*) from reproduction.acris where doc_id like 'TEST-%'")[0][0],
+print("   rows left:", q("select count(*) from reproduction.acris where identifier like 'TEST-%'")[0][0],
       "| test claims left:", q("select count(*) from machinery.claims where workstation like 'HOST-%'")[0][0],
       "| test workstation rows left:", q("select count(*) from reproduction.updates where workstation like 'HOST-%'")[0][0])
 print("ALL OK")

@@ -75,19 +75,19 @@ check("nothing re-queued while everything is in flight", drain(crew) == [])
 
 print("=== landing: the control answers rows; a day window lands ids once; the edge moves")
 rows = lambda ids: [{"recorded": "9/3/2026", "type": "DEED", "internal_id": str(i), "instrument": "1"} for i in ids]
-crew.results = [{"doc_id": ("control",) + richmond.CONTROL[:2], "value": ("control", rows([1, 2]))},
-                {"doc_id": ("day", today.isoformat(), today.isoformat()), "value": ("day", rows([990000001, 990000002]))}]
+crew.results = [{"identifier": ("control",) + richmond.CONTROL[:2], "value": ("control", rows([1, 2]))},
+                {"identifier": ("day", today.isoformat(), today.isoformat()), "value": ("day", rows([990000001, 990000002]))}]
 role.land(crew, ctx)
 check("the edge has not moved while the catch-up and heal windows are still out (it never jumps an open window)", role.edge == today - dt.timedelta(days=45))
-crew.results = [{"doc_id": k, "value": (k[0], [])} for k in list(role.inflight) if k[0] in ("catch-up", "heal")]   # they answer, empty
+crew.results = [{"identifier": k, "value": (k[0], [])} for k in list(role.inflight) if k[0] in ("catch-up", "heal")]   # they answer, empty
 role.land(crew, ctx)
 check("two ids inserted as RC_ rows, counted", crew.cloud.calls == [["RC_990000001", "RC_990000002"]] and role.inserted == 2 and role.day_rows == 2, crew.cloud.calls)
 check("the edge moved to today after the rows were in", role.edge == today and json.loads((HERE / "synchronization.edge.json").read_text())["edge"] == today.isoformat())
 check("the control is no longer pending", not role.control_pending)
-crew.results = [{"doc_id": ("day", today.isoformat(), today.isoformat()), "value": ("day", rows([990000001, 990000002, 990000003]))}]
+crew.results = [{"identifier": ("day", today.isoformat(), today.isoformat()), "value": ("day", rows([990000001, 990000002, 990000003]))}]
 role.land(crew, ctx)
 check("the next probe inserts only the new id", crew.cloud.calls[-1] == ["RC_990000003"] and role.inserted == 3, crew.cloud.calls)
-crew.results = [{"doc_id": ("day", today.isoformat(), today.isoformat()), "value": ("day", rows([990000001, 990000002, 990000003]))}]
+crew.results = [{"identifier": ("day", today.isoformat(), today.isoformat()), "value": ("day", rows([990000001, 990000002, 990000003]))}]
 role.land(crew, ctx)
 check("no insert when nothing is new", len(crew.cloud.calls) == 2)
 
@@ -126,12 +126,12 @@ for k in [k for k in role.inflight if k[0] in ("heal",)]:
 role.feed(crew, ctx)
 items = drain(crew)
 check("a catch-up hole is asked again at the next heal (outside the heal's own span)", ckey2 in items and ckey2 in role.reask, items)
-crew.results = [{"doc_id": ckey2, "value": ("catch-up", rows([990000050]))}]
+crew.results = [{"identifier": ckey2, "value": ("catch-up", rows([990000050]))}]
 role.land(crew, ctx)
 check("once it answers it leaves the re-ask list", ckey2 not in role.reask and "RC_990000050" in crew.cloud.rows)
 
 print("=== a broken control parks the lane (code 3)")
-crew.results = [{"doc_id": ckey, "value": ("control", [])}]
+crew.results = [{"identifier": ckey, "value": ("control", [])}]
 role.land(crew, ctx)
 check("the control parsing no rows parks with PROBE BROKEN, code 3", ctx.parked and ctx.parked[0] == 3 and "PROBE BROKEN" in ctx.parked[1], ctx.parked)
 

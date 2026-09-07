@@ -72,6 +72,7 @@ small, and a lane that waits two minutes on the table has something else wrong.
 | 2026-09-05 17:59 - 21:10 | THE DATA MOVE (`Reproduction/workflow/population/Population.py load`): 24,126,063 rows by COPY from `Legal Instruments.db` - acris 21,623,562, richmond 2,502,501 - zero rejects; 19,095 registries noted for a stripped NUL escape (jsonb cannot hold `\u0000`); database about 23 GB on the 40 GB disk |
 | 2026-09-05 21:16 - 23:32 | `apply-found` twice (233,381 then 119,633 more acris cells filled with placed documents' paths - 353,014, every document the old stores gave the tree) and `verify` twice: MATCH on both sources each time, every cell state equal to the old table's shifted by the placements; acris path sample 200 of 200 on the drive; richmond 9 then 35 of 200 while its file move runs (the cells lead the disk until it ends) |
 | 2026-09-05 22:04 | 0004 applied with `push` after the load and `verify` (the column drop takes the table's lock; the two acris pending indexes were rebuilt over 21.6M rows, about seven minutes each): `updated_at` and its trigger gone, a row is `source | doc_id | registry | document`, a pending's wait between checks is its claim; test_schema.py ALL OK on the populated table (22:13, its connections without the statement timeout; the first run's recount was cut at two minutes) |
+| 2026-09-07 04:56 | 0015 applied with `push` (GATE 5, login's rule after the seventeenth notice at 04:41; the lane parked, the boards left running - they name only `reproduction.updates`): `doc_id` -> `identifier` in `acris`, `richmond`, `machinery.claims` (keys and the eleven indexes followed by themselves), the four field/parcel views re-created, `claim()` / `land()` re-stated with `identifier`. The first `push` ROLLED BACK in 8 s - `cannot remove parameter defaults from existing function` - because the re-statement omitted the live defaults (claim 500 / 20 minutes, land 1 hour); with them kept it applied in 9 s. Proof: eight offline tests ALL OK on the patched code; test_schema.py ALL OK on the populated table 04:57-05:06 (reconcile: phase 3,726,582 of 21,631,885; sync and registration 100%); cloud.py's reads against the renamed table; `acris_update` ticking at 05:07 |
 
 ## History
 
@@ -192,7 +193,7 @@ party's name and in the parcels view with borough / block / lot, then deleted. T
 name reads the trigram index but a common name is slow on this instance - '%deutsche bank%' 36 s, a rare name 45 s cold - the
 1.9 GB index is read from the burstable disk for every common trigram; the exact full name through the registry GIN stays at
 about 300 ms; a word-level index (full-text on the names) is the better tool for names and is the candidate 0009, not tonight.
-(2) the parcels views are for READING a document's parcels with borough, block and lot spelled out and for joins by doc_id;
+(2) the parcels views are for READING a document's parcels with borough, block and lot spelled out and for joins by identifier;
 a filter by bbl on the view is a full scan (it unnests every row) - finding goes through containment or block_keys, which
 read an index. GATE 2 CLOSED: 0005, 0006, 0007, 0008 applied, recorded and proven.
 

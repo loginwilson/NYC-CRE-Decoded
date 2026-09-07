@@ -31,8 +31,8 @@ def counters():
     return lanes, tuple(phase)
 
 def cleanup():
-    C._run("delete from reproduction.richmond where doc_id = any(%s)", (IDS,), False)
-    C._run("delete from reproduction.richmond_claims where doc_id = any(%s)", (IDS,), False)
+    C._run("delete from reproduction.richmond where identifier = any(%s)", (IDS,), False)
+    C._run("delete from reproduction.richmond_claims where identifier = any(%s)", (IDS,), False)
 
 class FakeCrew:
     def __init__(self):
@@ -68,7 +68,7 @@ try:
 
     print("=== the lane lands a dict and a pending through the outbox")
     role.windows[(a, b)]["details"] = 1
-    crew.results = [{"doc_id": ("details", a, b, 1, (IDS[0], IDS[1])), "value": ("details", [(IDS[0], detail("1008999")), (IDS[1], "pending")])}]
+    crew.results = [{"identifier": ("details", a, b, 1, (IDS[0], IDS[1])), "value": ("details", [(IDS[0], detail("1008999")), (IDS[1], "pending")])}]
     role.land(crew, ctx)
     regs = C.registries(IDS)
     check("the dict is in the cell, the pending is the word, the rest empty", isinstance(regs[IDS[0]], dict) and regs[IDS[0]]["instrument"] == "1008999"
@@ -83,7 +83,7 @@ try:
 
     print("=== the pending matures: the dict lands over it, the counter does not move again")
     role.windows[(a, b)] = {"pages": 1, "answered": {1}, "details": 1}
-    crew.results = [{"doc_id": ("details", a, b, 1, (IDS[1],)), "value": ("details", [(IDS[1], detail("1009000"))])}]
+    crew.results = [{"identifier": ("details", a, b, 1, (IDS[1],)), "value": ("details", [(IDS[1], detail("1009000"))])}]
     role.land(crew, ctx)
     regs = C.registries(IDS)
     check("the matured detail replaced the pending", isinstance(regs[IDS[1]], dict) and regs[IDS[1]]["instrument"] == "1009000")
@@ -92,7 +92,7 @@ try:
 
     print("=== a value the cell rule rejects: the whole batch stays in the outbox and the lane says so")
     role.windows[(a, b)] = {"pages": 1, "answered": {1}, "details": 1}
-    crew.results = [{"doc_id": ("details", a, b, 1, (IDS[2], IDS[3])), "value": ("details", [(IDS[2], detail("1009001")), (IDS[3], "garbage")])}]
+    crew.results = [{"identifier": ("details", a, b, 1, (IDS[2], IDS[3])), "value": ("details", [(IDS[2], detail("1009001")), (IDS[3], "garbage")])}]
     role.land(crew, ctx)
     regs = C.registries(IDS)
     check("nothing half-landed: both cells still empty", regs[IDS[2]] is None and regs[IDS[3]] is None, regs)

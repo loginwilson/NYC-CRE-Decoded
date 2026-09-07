@@ -37,16 +37,16 @@ def q(sql, params=None, fetch=True):
 
 IDS = ["SIM-%04d" % i for i in range(1, 13)]
 REG = {"recorded": "8/21/2004 7:56:37 PM", "type": "DEED", "parcels": [{"bbl": "300450012"}]}
-_real = q("select count(*) from reproduction.acris where doc_id not like 'SIM-%'")[0][0]
+_real = q("select count(*) from reproduction.acris where identifier not like 'SIM-%'")[0][0]
 if _real:
     raise SystemExit("reproduction.acris holds %s real rows - this simulation claims through claim(), which hands out the first"
                      " empties of the WHOLE table, so it would take real documents; it runs on an empty table only (it did so"
                      " once on the populated table, 2026-09-05 19:2x: 28 real rows claimed for a moment, released, nothing landed)"
                      % "{:,}".format(_real))
-q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
-q("insert into reproduction.acris (doc_id, registry) select unnest(%s::text[]), %s::jsonb", (IDS, json.dumps(REG)), fetch=False)
-q("insert into reproduction.acris (doc_id, registry) values ('SIM-0013', '\"pending\"'::jsonb)", fetch=False)
+q("insert into reproduction.acris (identifier, registry) select unnest(%s::text[]), %s::jsonb", (IDS, json.dumps(REG)), fetch=False)
+q("insert into reproduction.acris (identifier, registry) values ('SIM-0013', '\"pending\"'::jsonb)", fetch=False)
 before_lane = q("select landed from reproduction.acris_update_lanes where lane = 'documentation'")[0][0]
 before_phase = q("select landed from reproduction.acris_update")[0][0]
 print("inserted 13 SIM rows; documentation landed before:", before_lane, "| phase landed before:", before_phase)
@@ -113,18 +113,18 @@ print("lock removed after the run:", not (HERE / "documentation.lock").exists())
 print("run returned exit code", code, "after %.0fs" % (time.time() - t0))
 
 print("--- cells in the cloud ---")
-for did, doc in q("select doc_id, document from reproduction.acris where doc_id like 'SIM-%' order by doc_id"):
+for did, doc in q("select identifier, document from reproduction.acris where identifier like 'SIM-%' order by identifier"):
     print("  ", did, "->", doc)
 after_lane = q("select landed from reproduction.acris_update_lanes where lane = 'documentation'")[0][0]
 after_phase = q("select landed from reproduction.acris_update")[0][0]
 print("documentation landed +%d (expect +11: 9 paths incl. 0007 on its second try + absent + pending; 0006 short and 0013 unplaceable stay empty)" % (after_lane - before_lane))
 print("phase landed +%d (expect +11: those rows had a registry object)" % (after_phase - before_phase))
-print("claims left on SIM rows:", q("select count(*) from reproduction.acris_claims where doc_id like 'SIM-%'")[0][0], "(expect 2: 0006 and 0013 - held until they expire, then a later pass)")
+print("claims left on SIM rows:", q("select count(*) from reproduction.acris_claims where identifier like 'SIM-%'")[0][0], "(expect 2: 0006 and 0013 - held until they expire, then a later pass)")
 print("heartbeat:", q("select lane, host, width, last_event from reproduction.acris_heartbeats where host = 'SIM-HOST'"))
 print("outbox left:", cloud.Outbox(HERE / "documentation.outbox.jsonl").count(), "| fails file lines:",
       len((HERE / "documentation.fails.jsonl").read_text().splitlines()) if (HERE / "documentation.fails.jsonl").exists() else 0)
 print("--- cleanup ---")
-q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 print("reconcile after cleanup:", q("select * from reproduction.reconcile('acris')"))
 print("SIMULATION DONE - no ACRIS request was made")

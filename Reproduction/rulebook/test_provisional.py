@@ -32,22 +32,22 @@ try:
     for stmt in _program.statements(SQL):
         cur.execute(stmt)
     print("0009's two functions applied inside the transaction")
-    cur.execute("select count(*) from reproduction.acris where doc_id in (%s, %s, %s)", (A, B, C))
+    cur.execute("select count(*) from reproduction.acris where identifier in (%s, %s, %s)", (A, B, C))
     assert cur.fetchone()[0] == 0, "the test ids exist"
-    cur.execute("insert into reproduction.acris (doc_id, registry) values (%s, %s::jsonb), (%s, %s::jsonb), (%s, null)",
+    cur.execute("insert into reproduction.acris (identifier, registry) values (%s, %s::jsonb), (%s, %s::jsonb), (%s, null)",
                 (A, json.dumps(NO_DATE), B, json.dumps(DATED), C))
     cur.execute("select landed from reproduction.updates where source = 'acris' and lane = 'registration' and workstation = ''")
     before = cur.fetchone()[0]
     cur.execute("select reproduction.claim('acris', 'registration', 'HOST-P', 1)")
     got = [r[0] for r in cur.fetchall()]
     check("registration's first claim is the provisional A (due before every empty)", got == [A], got)
-    cur.execute("""select count(*) from reproduction.acris w where w.doc_id = %s and (w.registry = '"pending"'::jsonb
+    cur.execute("""select count(*) from reproduction.acris w where w.identifier = %s and (w.registry = '"pending"'::jsonb
                    or (jsonb_typeof(w.registry) = 'object' and reproduction.us_date(w.registry->>'recorded') is null))""", (B,))
     check("B (registered, dated) is not due", cur.fetchone()[0] == 0)
     # C, an empty, would be offered only after the 8,876 real provisional rows: it is landed directly (land needs no claim)
     cur.execute("select reproduction.land('acris', 'registration', 'HOST-P', %s::jsonb, interval '1 day')",
-                (json.dumps([{"doc_id": A, "value": NO_DATE}, {"doc_id": C, "value": DATED}]),))
-    cur.execute("select doc_id, until > now() + interval '23 hours', until < now() + interval '25 hours' from machinery.claims where source = 'acris' and lane = 'registration' and doc_id in (%s, %s, %s) order by doc_id", (A, B, C))
+                (json.dumps([{"identifier": A, "value": NO_DATE}, {"identifier": C, "value": DATED}]),))
+    cur.execute("select identifier, until > now() + interval '23 hours', until < now() + interval '25 hours' from machinery.claims where source = 'acris' and lane = 'registration' and identifier in (%s, %s, %s) order by identifier", (A, B, C))
     claims = cur.fetchall()
     check("A landed without a date keeps its claim as a one-day cooldown; C landed dated is released", claims == [(A, True, True)], claims)
     cur.execute("select landed from reproduction.updates where source = 'acris' and lane = 'registration' and workstation = ''")
@@ -55,16 +55,16 @@ try:
     check("the registration counter moved by 1 (C was new), not for A's re-read", after - before == 1, after - before)
     cur.execute("select reproduction.claim('acris', 'registration', 'HOST-P', 1)")
     check("while A cools, the claim does not offer it", A not in [r[0] for r in cur.fetchall()])
-    cur.execute("update machinery.claims set until = now() - interval '1 second' where source = 'acris' and lane = 'registration' and doc_id = %s", (A,))
+    cur.execute("update machinery.claims set until = now() - interval '1 second' where source = 'acris' and lane = 'registration' and identifier = %s", (A,))
     cur.execute("select reproduction.claim('acris', 'registration', 'HOST-Q', 1)")
     got = [r[0] for r in cur.fetchall()]
     check("A's cooldown over: the next claim offers A again", got == [A], got)
-    cur.execute("select reproduction.land('acris', 'registration', 'HOST-Q', %s::jsonb, interval '1 day')", (json.dumps([{"doc_id": A, "value": DATED}]),))
-    cur.execute("select count(*) from machinery.claims where source = 'acris' and lane = 'registration' and doc_id = %s", (A,))
+    cur.execute("select reproduction.land('acris', 'registration', 'HOST-Q', %s::jsonb, interval '1 day')", (json.dumps([{"identifier": A, "value": DATED}]),))
+    cur.execute("select count(*) from machinery.claims where source = 'acris' and lane = 'registration' and identifier = %s", (A,))
     check("A landed WITH a recorded date: released", cur.fetchone()[0] == 0)
     cur.execute("select reproduction.claim('acris', 'registration', 'HOST-Q', 1)")
     check("A is offered no more", A not in [r[0] for r in cur.fetchall()])
-    cur.execute("select count(*) from reproduction.acris where doc_id >= to_char(now() - interval '400 days', 'YYYYMMDD') and doc_id < '3' and jsonb_typeof(registry) = 'object' and reproduction.us_date(registry->>'recorded') is null and doc_id not in (%s, %s, %s)", (A, B, C))
+    cur.execute("select count(*) from reproduction.acris where identifier >= to_char(now() - interval '400 days', 'YYYYMMDD') and identifier < '3' and jsonb_typeof(registry) = 'object' and reproduction.us_date(registry->>'recorded') is null and identifier not in (%s, %s, %s)", (A, B, C))
     print("   real provisional registries the rule will offer in gate 3:", "{:,}".format(cur.fetchone()[0]))
 finally:
     con.rollback()

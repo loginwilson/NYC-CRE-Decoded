@@ -293,7 +293,7 @@ class Registration:
             self._hole(ctx, key, why)
         to_land = []
         for r in results:
-            key, (kind, payload) = r["doc_id"], r["value"]
+            key, (kind, payload) = r["identifier"], r["value"]
             self.inflight.pop(key, None)
             self.attempts.pop(key, None)
             self.reask.discard(key)
@@ -340,7 +340,7 @@ class Registration:
                         self._hole(ctx, ("details", a, b, n, (doc_id,)), "no detail after three asks")
                     continue
                 self.attempts.pop(doc_id, None)
-                to_land.append({"doc_id": doc_id, "value": value})
+                to_land.append({"identifier": doc_id, "value": value})
                 if value == "pending":
                     self.pending += 1
                 else:

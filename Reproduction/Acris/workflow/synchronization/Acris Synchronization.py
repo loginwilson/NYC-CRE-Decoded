@@ -154,7 +154,7 @@ class Synchronization:
             results, crew.results = crew.results, []
             failed, crew.failed = crew.failed, []
         for r in results:
-            crfn, (state, doc_id) = r["doc_id"], r["value"]
+            crfn, (state, doc_id) = r["identifier"], r["value"]
             self.inflight.discard(crfn)
             self.answers[crfn] = doc_id if state == "live" else None
         for crfn, why in failed:

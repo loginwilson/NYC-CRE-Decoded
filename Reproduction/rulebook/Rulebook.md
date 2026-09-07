@@ -66,7 +66,7 @@ these files - is `../../supabase/Supabase.md`.
 |---|---|---|---|
 | phase | schema `reproduction` | `Reproduction/` (its tables defined in `rulebook/schema/`, explained here) | |
 | source | table-name prefix `acris_`, `richmond_` | `Reproduction/Acris/`, `Reproduction/Richmond/` (each with its reproduction doc) | `acris\…`, `richmond\…` under the store root |
-| workflow database | `reproduction.acris` (source, doc_id, registry, document) | `Reproduction/Acris/workflow/{reproduction,enumeration,synchronization,registration,documentation}/` (reproduction/ is the fleet program and the source's authority) | documents land here |
+| workflow database | `reproduction.acris` (source, identifier, registry, document) | `Reproduction/Acris/workflow/{reproduction,enumeration,synchronization,registration,documentation}/` (reproduction/ is the fleet program and the source's authority) | documents land here |
 | update database | `reproduction.acris_update` (tab 1), `reproduction.acris_update_lanes` (tab 2) | `Reproduction/Acris/update/` | |
 | enumeration | no table | `…/workflow/enumeration/` | |
 
@@ -128,18 +128,18 @@ escape ''`, the day folder). Measured on the pooled connection, a Small instance
 
 | filter | query | ms |
 |---|---|---|
-| deeds in Queens, newest first | `select doc_id, recorded, pages, document from reproduction.acris_fields where type = 'DEED' and borough = 'QUEENS' order by doc_id desc limit 20` | 207 |
+| deeds in Queens, newest first | `select identifier, recorded, pages, document from reproduction.acris_fields where type = 'DEED' and borough = 'QUEENS' order by identifier desc limit 20` | 207 |
 | a year of deeds by recorded date | `select count(*) from reproduction.acris_fields where type = 'DEED' and recorded between '1995-01-01' and '1995-12-31'` (54,581 rows) | 13,282 beside a running profile build; two indexes ANDed |
-| long documents | `select doc_id, type, pages from reproduction.acris_fields where pages >= 50 order by pages desc limit 20` | 199 |
-| amount above ten million | `select doc_id, type, amount from reproduction.acris_fields where amount >= 10000000 order by amount desc limit 20` | 200 |
-| one crfn | `select doc_id from reproduction.acris_fields where crfn = '2003000003997'` | 181 |
-| a parcel by bbl | `select doc_id, registry->>'type' from reproduction.acris where registry @> '{"parcels":[{"bbl":"1015131008"}]}' limit 20` | 191 |
-| a party by name | `select doc_id, registry->>'type' from reproduction.acris where registry @> '{"parties":[{"name":"CITY OF NEW YORK"}]}' limit 20` | 311 |
-| one day folder | `select doc_id, document from reproduction.acris where document like 'D:\NYC CRE Decoded\Reproduction\Acris\By Document\2003\01 Jan\23\%' escape '' limit 20` | 180 |
-| richmond book and page | `select doc_id, doc_type, recorded, document from reproduction.richmond_fields where book = '8770' and page = '221'` | 180 |
-| one instrument | `select doc_id, doc_type from reproduction.richmond_fields where instrument = '48402'` | 182 |
+| long documents | `select identifier, type, pages from reproduction.acris_fields where pages >= 50 order by pages desc limit 20` | 199 |
+| amount above ten million | `select identifier, type, amount from reproduction.acris_fields where amount >= 10000000 order by amount desc limit 20` | 200 |
+| one crfn | `select identifier from reproduction.acris_fields where crfn = '2003000003997'` | 181 |
+| a parcel by bbl | `select identifier, registry->>'type' from reproduction.acris where registry @> '{"parcels":[{"bbl":"1015131008"}]}' limit 20` | 191 |
+| a party by name | `select identifier, registry->>'type' from reproduction.acris where registry @> '{"parties":[{"name":"CITY OF NEW YORK"}]}' limit 20` | 311 |
+| one day folder | `select identifier, document from reproduction.acris where document like 'D:\NYC CRE Decoded\Reproduction\Acris\By Document\2003\01 Jan\23\%' escape '' limit 20` | 180 |
+| richmond book and page | `select identifier, doc_type, recorded, document from reproduction.richmond_fields where book = '8770' and page = '221'` | 180 |
+| one instrument | `select identifier, doc_type from reproduction.richmond_fields where instrument = '48402'` | 182 |
 | richmond deeds in 2020 | `select count(*) from reproduction.richmond_fields where doc_type = 'Deed' and recorded between '2020-01-01' and '2020-12-31'` (7,118 rows) | 553 |
-| a richmond parcel | `select doc_id from reproduction.richmond where registry @> '{"parcels":[{"bbl":"5001570097"}]}' limit 20` | 184 |
+| a richmond parcel | `select identifier from reproduction.richmond where registry @> '{"parcels":[{"bbl":"5001570097"}]}' limit 20` | 184 |
 
 The dynamic proof, the same run: one throwaway row landed with a registry and a document path was found by five of these
 shapes within 2.0 s of landing, each by an index scan, then deleted. The indexes are maintained on every insert and update
@@ -170,7 +170,7 @@ scenes so you don't see it." The schema `reproduction` holds three tables: `acri
 `updates` - source first, then lane, then workstation: a row per source for the phase (`lane = reproduction`, rows with
 every cell filled), a row per lane (its cells filled), and a row per workstation running a lane, that machine's own
 landed count, rate, workers, `last_seen` (its heartbeat, every minute while it runs) and `last_word`. The heartbeats
-tables are gone into those rows. What the code needs and a person never reads - which doc_ids each workstation holds
+tables are gone into those rows. What the code needs and a person never reads - which identifiers each workstation holds
 for which lane, until when - lives out of sight in the schema `machinery`, table `claims`: two machines can only avoid
 taking the same document through a list both can see, so the list stays in the cloud, and a landed pending's wait lives
 there as before (0004). The functions `claim`, `land`, `heartbeat`, `reconcile` keep their signatures: `land()` moves the

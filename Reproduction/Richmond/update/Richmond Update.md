@@ -15,7 +15,7 @@ One board per source, on one machine; its `as_of` stamp is its pulse, and a stal
 
 | tab | table | landed | needed |
 |---|---|---|---|
-| 1 the phase | `richmond_update` | rows with all three cells filled (doc_id, registry, document) | rows in the table |
+| 1 the phase | `richmond_update` | rows with all three cells filled (identifier, registry, document) | rows in the table |
 | 2 the lanes | `richmond_update_lanes` | that lane's cells that are not empty (a fill, `pending` or `absent` - a determination counts) | rows in the table |
 
 Both tabs carry the same metrics: `pct` (landed over needed), the minute kit (`rate_60s`, `increase_60s`, `pct_60s`, `eta_60s`), the window kit (`rate_5m`, `increase_5m`, `pct_5m`, `eta_5m`), `status`, `as_of`. Tab 2 adds the folded heartbeats: `hosts` ("HOST:width" of the workstations alive on the lane), `width` across them, `heartbeat_at` (the freshest), `last_event` (the freshest heartbeat's last word). Synchronization's landed equals needed by construction (its cell is the row itself), so its row reads complete while it runs; its hosts and heartbeat say it is alive.

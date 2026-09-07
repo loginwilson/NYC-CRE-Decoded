@@ -101,17 +101,17 @@ def run_diff(index, months=3):
     return code, rep.lines
 
 
-_real = q("select count(*) from reproduction.acris where doc_id not like '2099%'")[0][0]
+_real = q("select count(*) from reproduction.acris where identifier not like '2099%'")[0][0]
 if _real:
     raise SystemExit("reproduction.acris holds %s real rows - this simulation writes into the live table (it inserts throwaway ids and reads the table as the audit), so on the"
                      " populated table it would touch real documents; it runs on an empty table only (rule of 2026-09-05 19:2x)"
                      % "{:,}".format(_real))
-q("delete from reproduction.acris where doc_id like '2099%%'", fetch=False)
+q("delete from reproduction.acris where identifier like '2099%%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 time.sleep(0.5)
 
 print("=== the diff, run 1: index 12, table 10 -> the difference is 2")
-q("insert into reproduction.acris (doc_id) select unnest(%s::text[]) on conflict do nothing", ([sid(1, s) for s in range(1, 11)],), fetch=False)
+q("insert into reproduction.acris (identifier) select unnest(%s::text[]) on conflict do nothing", ([sid(1, s) for s in range(1, 11)],), fetch=False)
 idx = FakeIndex([sid(1, s) for s in range(1, 13)])
 code, lines = run_diff(idx)
 missing = (HERE / "enumeration.missing.txt").read_text().split()
@@ -120,7 +120,7 @@ check("run 1 lists exactly the 2 missing ids", missing == [sid(1, 11), sid(1, 12
 check("run 1 says THE DIFFERENCE IS 2", any("THE DIFFERENCE IS 2" in l for l in lines))
 
 print("=== the diff, run 2: every index id held; omitted + seam + tail beyond -> PASS")
-q("insert into reproduction.acris (doc_id) select unnest(%s::text[]) on conflict do nothing",
+q("insert into reproduction.acris (identifier) select unnest(%s::text[]) on conflict do nothing",
   ([sid(1, 11), "2099062000001001", "2099071500001001", "2099060100001001"],), fetch=False)
 idx = FakeIndex([sid(1, s) for s in range(1, 11)] + ["2099060100001001"])
 code, lines = run_diff(idx)
@@ -150,7 +150,7 @@ check("run 4 says so", any("answered empty where the table holds rows" in l for 
 # ── the probe with a fake counter ──
 BASE = 2099 * 10 ** 9
 DOC = {9: sid(1, 9), 17: sid(1, 17), 31: sid(1, 31), 32: sid(1, 32)}          # 9 and 31 are in the table (9 is), 17/32 are not
-q("insert into reproduction.acris (doc_id) select unnest(%s::text[]) on conflict do nothing", ([sid(1, 31)],), fetch=False)
+q("insert into reproduction.acris (identifier) select unnest(%s::text[]) on conflict do nothing", ([sid(1, 31)],), fetch=False)
 
 
 class FakeCounter:
@@ -247,8 +247,8 @@ check("the re-entries were made and logged", any("re-entry 1/2" in l for l in p.
 check("no number read as void on a hang-up", all(v["v"] != "void" for v in json.loads((HERE / "enumeration.probe.json").read_text())["numbers"].values()))
 
 print("=== cleanup")
-q("delete from reproduction.acris where doc_id like '2099%%'", fetch=False)
+q("delete from reproduction.acris where identifier like '2099%%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
-print("rows left:", q("select count(*) from reproduction.acris where doc_id like '2099%%'"))
+print("rows left:", q("select count(*) from reproduction.acris where identifier like '2099%%'"))
 print("\nSIMULATION:", "ALL OK" if not fails else "FAILURES: %s" % fails, "- no ACRIS request, no index request")
 sys.exit(1 if fails else 0)

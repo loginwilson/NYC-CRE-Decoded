@@ -102,22 +102,22 @@ class Cloud:
                     time.sleep(2)
 
     def claim(self, n=500, ttl="20 minutes"):
-        """The doc_ids now held by this host: pendings whose cooldown has run out first, then empties, both in
+        """The identifiers now held by this host: pendings whose cooldown has run out first, then empties, both in
         id order (migration 0004: the wait between two checks of a pending is its claim, written by land())."""
         rows = self._run("select reproduction.claim(%s, %s, %s, %s, %s::interval)",
                          (self.source, self.lane, self.host, n, ttl), True)
         return [r[0] for r in rows]
 
     def registries(self, ids):
-        """{doc_id: registry} for the claimed ids (registry is a dict, or 'pending'/'absent', or None)."""
+        """{identifier: registry} for the claimed ids (registry is a dict, or 'pending'/'absent', or None)."""
         if not ids:
             return {}
-        rows = self._run("select doc_id, registry from reproduction.%s where doc_id = any(%%s)" % self.source,
+        rows = self._run("select identifier, registry from reproduction.%s where identifier = any(%%s)" % self.source,
                          (list(ids),), True)
         return {r[0]: r[1] for r in rows}
 
     def land(self, rows, pending_age="1 hour"):
-        """rows = [{"doc_id": ..., "value": ...}] -> cells written.  The cell rule in the table rejects
+        """rows = [{"identifier": ..., "value": ...}] -> cells written.  The cell rule in the table rejects
         any value that is not a fill, 'pending' or 'absent' (the whole batch, so nothing half-lands).  A landed
         pending keeps its claim as a cooldown for pending_age; claim() offers it again after that (migration 0004)."""
         if not rows:
@@ -145,7 +145,7 @@ class Cloud:
                 self.con.autocommit = False
                 try:
                     with self.con.cursor() as cur:
-                        cur.execute("insert into reproduction.%s (doc_id) select unnest(%%s::text[]) on conflict (doc_id) do nothing"
+                        cur.execute("insert into reproduction.%s (identifier) select unnest(%%s::text[]) on conflict (identifier) do nothing"
                                     % self.source, (list(ids),))
                         n = cur.rowcount
                         if n:
@@ -173,13 +173,13 @@ class Cloud:
     def _range(self, lo, hi, after=None):
         parts, params = [], []
         if after is not None:
-            parts.append("doc_id > %s")
+            parts.append("identifier > %s")
             params.append(after)
         elif lo is not None:
-            parts.append("doc_id >= %s")
+            parts.append("identifier >= %s")
             params.append(lo)
         if hi is not None:
-            parts.append("doc_id < %s")
+            parts.append("identifier < %s")
             params.append(hi)
         return (" where " + " and ".join(parts)) if parts else "", tuple(params)
 
@@ -189,11 +189,11 @@ class Cloud:
         return self._run("select count(*) from reproduction.%s%s" % (self.source, where), params, True)[0][0]
 
     def ids(self, lo, hi=None, page=50_000):
-        """Every doc_id in [lo, hi), keyset-paged on the primary key - a range, never a scan."""
+        """Every identifier in [lo, hi), keyset-paged on the primary key - a range, never a scan."""
         out, after = set(), None
         while True:
             where, params = self._range(lo, hi, after)
-            rows = self._run("select doc_id from reproduction.%s%s order by doc_id limit %%s" % (self.source, where),
+            rows = self._run("select identifier from reproduction.%s%s order by identifier limit %%s" % (self.source, where),
                              params + (page,), True)
             out.update(r[0] for r in rows)
             if len(rows) < page:
@@ -203,7 +203,7 @@ class Cloud:
     def prefixes(self, lo, hi, n):
         """{prefix: rows} for the n-character id prefixes the table holds in [lo, hi)."""
         where, params = self._range(lo, hi)
-        rows = self._run("select left(doc_id, %%s) p, count(*) from reproduction.%s%s group by 1 order by 1"
+        rows = self._run("select left(identifier, %%s) p, count(*) from reproduction.%s%s group by 1 order by 1"
                          % (self.source, where), (n,) + params, True)
         return {r[0]: r[1] for r in rows}
 
@@ -214,9 +214,9 @@ class Cloud:
         walks the listing and asks the table which of the ids it passes are its work."""
         if not ids:
             return set()
-        rows = self._run("select w.doc_id from reproduction.%s w where w.doc_id = any(%%s) and (w.registry is null or"
+        rows = self._run("select w.identifier from reproduction.%s w where w.identifier = any(%%s) and (w.registry is null or"
                          " (w.registry = '\"pending\"'::jsonb and not exists (select 1 from machinery.claims c"
-                         " where c.source = %%s and c.doc_id = w.doc_id and c.lane = 'registration' and c.until > now())))" % self.source,
+                         " where c.source = %%s and c.identifier = w.identifier and c.lane = 'registration' and c.until > now())))" % self.source,
                          (list(ids), self.source), True)
         return {r[0] for r in rows}
 
@@ -224,12 +224,12 @@ class Cloud:
         """The subset of ids the table holds."""
         if not ids:
             return set()
-        rows = self._run("select doc_id from reproduction.%s where doc_id = any(%%s)" % self.source, (list(ids),), True)
+        rows = self._run("select identifier from reproduction.%s where identifier = any(%%s)" % self.source, (list(ids),), True)
         return {r[0] for r in rows}
 
     def max_id(self, lo, hi=None):
         where, params = self._range(lo, hi)
-        return self._run("select max(doc_id) from reproduction.%s%s" % (self.source, where), params, True)[0][0]
+        return self._run("select max(identifier) from reproduction.%s%s" % (self.source, where), params, True)[0][0]
 
     def alive(self, within="3 minutes"):
         """[(lane, workstation, workers, age_seconds, last_word)] for every lane heard from within the interval - the
@@ -260,9 +260,11 @@ class Outbox:
             if not line:
                 continue
             r = json.loads(line)
-            if r["doc_id"] in seen:          # a later line for the same id wins
-                rows = [x for x in rows if x["doc_id"] != r["doc_id"]]
-            seen.add(r["doc_id"])
+            if "identifier" not in r and "doc_id" in r:      # a line written before 0015 (2026-09-07): the old key
+                r["identifier"] = r.pop("doc_id")
+            if r["identifier"] in seen:      # a later line for the same id wins
+                rows = [x for x in rows if x["identifier"] != r["identifier"]]
+            seen.add(r["identifier"])
             rows.append(r)
         return rows
 

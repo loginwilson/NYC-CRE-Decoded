@@ -39,15 +39,15 @@ PAGE = """<html><body><table><tr><td>DOCUMENT ID: %s</td><td>CRFN: 2024000123456
 <tr><td>BROOKLYN</td><td>00123</td><td>0045</td><td>N/A</td></tr></table></table></table></body></html>"""
 
 IDS = ["SIM-%04d" % i for i in range(1, 12)]
-_real = q("select count(*) from reproduction.acris where doc_id not like 'SIM-%'")[0][0]
+_real = q("select count(*) from reproduction.acris where identifier not like 'SIM-%'")[0][0]
 if _real:
     raise SystemExit("reproduction.acris holds %s real rows - this simulation writes into the live table (the lane claims through claim(), which hands out the first empties of the WHOLE table), so on the"
                      " populated table it would touch real documents; it runs on an empty table only (rule of 2026-09-05 19:2x)"
                      % "{:,}".format(_real))
-q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
-q("insert into reproduction.acris (doc_id) select unnest(%s::text[])", (IDS,), fetch=False)
-q("update reproduction.acris set document = %s where doc_id = 'SIM-0011'", (r"D:\NYC CRE Decoded\Reproduction\Acris\By Document\2004\08 Aug\21\SIM-0011.pdf",), fetch=False)
+q("insert into reproduction.acris (identifier) select unnest(%s::text[])", (IDS,), fetch=False)
+q("update reproduction.acris set document = %s where identifier = 'SIM-0011'", (r"D:\NYC CRE Decoded\Reproduction\Acris\By Document\2004\08 Aug\21\SIM-0011.pdf",), fetch=False)
 before_lane = q("select landed from reproduction.acris_update_lanes where lane = 'registration'")[0][0]
 before_phase = q("select landed from reproduction.acris_update")[0][0]
 print("inserted 11 SIM rows (registry empty); registration landed before:", before_lane, "| phase before:", before_phase)
@@ -84,18 +84,18 @@ code = lane.run([(SimReg(), 3)], args, HERE)
 print("run returned exit code", code, "after %.0fs" % (time.time() - t0))
 
 print("--- registry cells in the cloud ---")
-for did, reg in q("select doc_id, registry from reproduction.acris where doc_id like 'SIM-%' order by doc_id"):
+for did, reg in q("select identifier, registry from reproduction.acris where identifier like 'SIM-%' order by identifier"):
     print("  ", did, "->", (sorted(reg.keys()) if isinstance(reg, dict) else reg))
 after_lane = q("select landed from reproduction.acris_update_lanes where lane = 'registration'")[0][0]
 after_phase = q("select landed from reproduction.acris_update")[0][0]
 print("registration landed +%d (expect +10: all but 0003)" % (after_lane - before_lane))
 print("phase landed +%d (expect +1: only SIM-0011 had its document cell filled)" % (after_phase - before_phase))
-print("claims left on SIM rows:", q("select count(*) from reproduction.acris_claims where doc_id like 'SIM-%'")[0][0], "(expect 1: SIM-0003)")
+print("claims left on SIM rows:", q("select count(*) from reproduction.acris_claims where identifier like 'SIM-%'")[0][0], "(expect 1: SIM-0003)")
 print("heartbeat:", q("select lane, host, width, last_event from reproduction.acris_heartbeats where host = 'SIM-HOST'"))
 print("outbox left:", cloud.Outbox(HERE / "registration.outbox.jsonl").count(), "| fails file lines:",
       len((HERE / "registration.fails.jsonl").read_text().splitlines()) if (HERE / "registration.fails.jsonl").exists() else 0)
 print("--- cleanup ---")
-q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 print("reconcile after cleanup:", q("select * from reproduction.reconcile('acris')"))
 print("REGISTRATION SIMULATION DONE - no ACRIS request was made")

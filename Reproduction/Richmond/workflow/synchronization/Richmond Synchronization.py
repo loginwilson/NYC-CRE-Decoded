@@ -209,12 +209,12 @@ class Synchronization:
         new_ids = {}
         moved = None
         # the edge never jumps a window still out or holed: only windows before the earliest open one may move it
-        answered = {r["doc_id"] for r in results}
+        answered = {r["identifier"] for r in results}
         open_starts = ([k[1] for k in self.inflight if k not in answered and k[0] != CONTROL]
                        + [k[1] for k in self.reask if k[0] != CONTROL])
         earliest_open = min(open_starts) if open_starts else None
         for r in results:
-            key, (kind, rows) = r["doc_id"], r["value"]
+            key, (kind, rows) = r["identifier"], r["value"]
             self.inflight.pop(key, None)
             self.attempts.pop(key, None)
             self.reask.discard(key)

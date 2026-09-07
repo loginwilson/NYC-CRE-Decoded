@@ -54,14 +54,14 @@ the rulebook's is `Reproduction/rulebook/Rulebook.md`; the database's is `supaba
 ## The phase: reproduction
 
 Two sources, `acris` and `richmond`. Per source one workflow table, one row per document: a `source` column in
-front (a constant per table, for the cross-source tables of construction) and three cells: `doc_id` · `registry` ·
+front (a constant per table, for the cross-source tables of construction) and three cells: `identifier` · `registry` ·
 `document`. No URL or key columns: every URL is minted from the id. Each source has four lanes, each its
 own code in its own folder, toggled independently and configurable in width; three of them fill the cells.
 
 | lane | job | fills |
 |---|---|---|
 | enumeration | the audit, not a cycle lane: counts the source (acris: Socrata + CRFN; richmond: census + date/range), compares with the table, difference must be 0 | nothing (no table) |
-| synchronization | keeps the table live: the CRFN edge monitor and walkers for acris, the date walk for richmond | `doc_id` |
+| synchronization | keeps the table live: the CRFN edge monitor and walkers for acris, the date walk for richmond | `identifier` |
 | registration | the recorded details, by a URL minted from the id stem; no navigation step | `registry` |
 | documentation | the document, by minted access; saved to the drive, its full One Touch path recorded | `document` |
 

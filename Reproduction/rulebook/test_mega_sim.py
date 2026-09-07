@@ -35,15 +35,15 @@ def q(sql, params=None, fetch=True):
 
 IDS = ["SIM-%04d" % i for i in range(1, 41)]
 REG = {"recorded": "8/21/2004 7:56:37 PM", "parcels": [{"bbl": "100450012"}]}
-_real = q("select count(*) from reproduction.acris where doc_id not like 'SIM-%'")[0][0]
+_real = q("select count(*) from reproduction.acris where identifier not like 'SIM-%'")[0][0]
 if _real:
     raise SystemExit("reproduction.acris holds %s real rows - this simulation claims through claim(), which hands out the first"
                      " empties of the WHOLE table, so it would take real documents; it runs on an empty table only (it did so"
                      " once on the populated table, 2026-09-05 19:2x: 28 real rows claimed for a moment, released, nothing landed)"
                      % "{:,}".format(_real))
-q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
-q("insert into reproduction.acris (doc_id, registry) select unnest(%s::text[]), %s::jsonb", (IDS, json.dumps(REG)), fetch=False)
+q("insert into reproduction.acris (identifier, registry) select unnest(%s::text[]), %s::jsonb", (IDS, json.dumps(REG)), fetch=False)
 
 LINES = []                                   # (time, line) of everything the lane logs
 _log0 = lane._log
@@ -145,9 +145,9 @@ during = [t for t in b.landed if a_hang and a_re and a_hang[0] <= t <= a_re[0]]
 check("B kept landing THROUGHOUT A's wait (nothing blocks): %d landings between A's hang-up and re-entry" % len(during), len(during) >= 40, len(during))
 check("B was never hung up", not b_hang, b_hang)
 check("a PROGRESS line showed A waiting (re-entry in N s)", any("documentation" in l and "re-entry in" in l for _, l in LINES))
-check("landed before the hang-up: 3", q("select count(*) from reproduction.acris where doc_id like 'SIM-%' and document is not null")[0][0] == 3)
+check("landed before the hang-up: 3", q("select count(*) from reproduction.acris where identifier like 'SIM-%' and document is not null")[0][0] == 3)
 
-q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 print("reconcile:", q("select * from reproduction.reconcile('acris')"))
 for f in list(HERE.glob("documentation.*")) + list(HERE.glob("synchronization.*")):

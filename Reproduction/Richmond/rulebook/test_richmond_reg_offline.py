@@ -212,8 +212,8 @@ check("nothing re-queued while everything is in flight", drain(crew) == [])
 a, b = trail[0][1], trail[0][2]
 
 print("=== landing: page 1 fans out the pages; the details only for what the table needs; registries through the outbox")
-crew.results = [{"doc_id": ("control",) + richmond.CONTROL[:2] + (1,), "value": ("control", {"rows": richmond.parse_listing(listing_html([1, 2], 1, 18)), "pages": 18})},
-                {"doc_id": ("page", a, b, 1), "value": ("page", {"rows": richmond.parse_listing(listing_html([990000001, 990000002, 990000003], 1, 3)), "pages": 3})}]
+crew.results = [{"identifier": ("control",) + richmond.CONTROL[:2] + (1,), "value": ("control", {"rows": richmond.parse_listing(listing_html([1, 2], 1, 18)), "pages": 18})},
+                {"identifier": ("page", a, b, 1), "value": ("page", {"rows": richmond.parse_listing(listing_html([990000001, 990000002, 990000003], 1, 3)), "pages": 3})}]
 crew.cloud.need = {"RC_990000001", "RC_990000002"}
 role.land(crew, ctx)
 items = drain(crew)
@@ -222,36 +222,36 @@ check("the table was asked about the page's ids", crew.cloud.todo_calls == [["RC
 check("a details item carries only the ids that need work", ("details", a, b, 1, ("RC_990000001", "RC_990000002")) in items, items)
 check("the control is no longer pending; the window knows its pages", not role.control_pending and role.windows[(a, b)]["pages"] == 3 and role.windows[(a, b)]["details"] == 1)
 full = richmond.parse_detail(detail_html()); full["at"] = "t"; full["listing"] = {}
-crew.results = [{"doc_id": ("details", a, b, 1, ("RC_990000001", "RC_990000002")), "value": ("details", [("RC_990000001", full), ("RC_990000002", "pending")])}]
+crew.results = [{"identifier": ("details", a, b, 1, ("RC_990000001", "RC_990000002")), "value": ("details", [("RC_990000001", full), ("RC_990000002", "pending")])}]
 role.land(crew, ctx)
-check("both registries landed through the outbox: the dict and the pending", [(r["doc_id"], r["value"] if r["value"] == "pending" else "dict") for r in crew.cloud.landed] == [("RC_990000001", "dict"), ("RC_990000002", "pending")]
+check("both registries landed through the outbox: the dict and the pending", [(r["identifier"], r["value"] if r["value"] == "pending" else "dict") for r in crew.cloud.landed] == [("RC_990000001", "dict"), ("RC_990000002", "pending")]
       and role.filled == 1 and role.pending == 1 and crew.outbox.count() == 0, crew.cloud.landed)
 check("the edge has not moved: pages 2 and 3 are still out", role.edge == today - dt.timedelta(days=45))
-crew.results = [{"doc_id": ("page", a, b, 2), "value": ("page", {"rows": richmond.parse_listing(listing_html([990000004], 2, 3)), "pages": 3})},
-                {"doc_id": ("page", a, b, 3), "value": ("page", {"rows": [], "pages": 3})}]
+crew.results = [{"identifier": ("page", a, b, 2), "value": ("page", {"rows": richmond.parse_listing(listing_html([990000004], 2, 3)), "pages": 3})},
+                {"identifier": ("page", a, b, 3), "value": ("page", {"rows": [], "pages": 3})}]
 crew.cloud.need = set()
 role.land(crew, ctx)
 check("the edge has still not moved: the catch-up windows are open (the edge never jumps an open window)", role.edge == today - dt.timedelta(days=45))
-crew.results = [{"doc_id": k, "value": ("page", {"rows": [], "pages": 1})} for k in catch]     # the catch-up answers: empty windows
+crew.results = [{"identifier": k, "value": ("page", {"rows": [], "pages": 1})} for k in catch]     # the catch-up answers: empty windows
 role.land(crew, ctx)
 check("no details item when the table needs nothing", not any(k[0] == "details" for k in drain(crew)))
 check("the trailing window is complete: the edge moved to today and was saved", role.edge == today and json.loads((HERE / "registration.edge.json").read_text())["edge"] == today.isoformat() and (a, b) not in role.windows)
 
 print("=== a cloud hiccup: the landing waits in the outbox; a table read failure re-asks the page at the next walk")
 crew.cloud.fail_land = True
-crew.results = [{"doc_id": ("page", "2026-07-06", "2026-08-04", 1), "value": ("page", {"rows": richmond.parse_listing(listing_html([990000010], 1, 1)), "pages": 1})}]
+crew.results = [{"identifier": ("page", "2026-07-06", "2026-08-04", 1), "value": ("page", {"rows": richmond.parse_listing(listing_html([990000010], 1, 1)), "pages": 1})}]
 crew.cloud.need = {"RC_990000010"}
 role.land(crew, ctx)
 drain(crew)
-crew.results = [{"doc_id": ("details", "2026-07-06", "2026-08-04", 1, ("RC_990000010",)), "value": ("details", [("RC_990000010", full)])}]
+crew.results = [{"identifier": ("details", "2026-07-06", "2026-08-04", 1, ("RC_990000010",)), "value": ("details", [("RC_990000010", full)])}]
 role.land(crew, ctx)
 check("the registry is kept in the outbox when the cloud is down", crew.outbox.count() == 1 and any("kept in the outbox" in l for l in ctx.lines))
 crew.cloud.fail_land = False
 crew.results = []
 role.land(crew, ctx)
-check("it lands at the next minute", crew.outbox.count() == 0 and crew.cloud.landed[-1]["doc_id"] == "RC_990000010")
+check("it lands at the next minute", crew.outbox.count() == 0 and crew.cloud.landed[-1]["identifier"] == "RC_990000010")
 crew.cloud.todo = lambda ids, age: (_ for _ in ()).throw(RuntimeError("connection lost (simulated)"))
-crew.results = [{"doc_id": ("page", "2026-06-06", "2026-07-05", 1), "value": ("page", {"rows": richmond.parse_listing(listing_html([990000020], 1, 1)), "pages": 1})}]
+crew.results = [{"identifier": ("page", "2026-06-06", "2026-07-05", 1), "value": ("page", {"rows": richmond.parse_listing(listing_html([990000020], 1, 1)), "pages": 1})}]
 role.land(crew, ctx)
 check("a page whose ids could not be checked is re-asked at the next walk", ("page", "2026-06-06", "2026-07-05", 1) in role.reask)
 crew.cloud.todo = FakeCloud.todo.__get__(crew.cloud)
@@ -265,7 +265,7 @@ holes = [json.loads(l) for l in (HERE / "registration.holes.jsonl").read_text().
 check("the page is asked twice more, then a hole, then on the re-ask list", drain(crew) == [key, key] and role.holes == 1 and holes[0]["item"] == list(key) and key in role.reask, holes)
 role.windows[(a, b)] = {"pages": 1, "answered": {1}, "details": 1}
 for i in range(3):
-    crew.results = [{"doc_id": ("details", a, b, 1, ("RC_990000030",)), "value": ("details", [("RC_990000030", None)])}]
+    crew.results = [{"identifier": ("details", a, b, 1, ("RC_990000030",)), "value": ("details", [("RC_990000030", None)])}]
     role.land(crew, ctx)
     items = drain(crew)
     if i < 2:
@@ -286,7 +286,7 @@ items = drain(crew)
 check("a due walk: control first, the trailing window's page 1, the holes asked again", items[0] == ckey and ("page", a, b, 1) in items and key in items and ("page", "2026-06-06", "2026-07-05", 1) in items, items)
 
 print("=== a broken control parks the lane (code 3)")
-crew.results = [{"doc_id": ckey, "value": ("control", {"rows": [], "pages": None})}]
+crew.results = [{"identifier": ckey, "value": ("control", {"rows": [], "pages": None})}]
 role.land(crew, ctx)
 check("the control parsing no rows parks with PROBE BROKEN, code 3", ctx.parked and ctx.parked[0] == 3 and "PROBE BROKEN" in ctx.parked[1], ctx.parked)
 

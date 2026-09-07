@@ -42,12 +42,12 @@ def q(sql, params=None, fetch=True):
 EDGE = 9000000000000
 BLANKS = {3, 4, 11, 12, 13, 31, 32}
 HOLE = 17
-_real = q("select count(*) from reproduction.acris where doc_id not like 'SIM-%'")[0][0]
+_real = q("select count(*) from reproduction.acris where identifier not like 'SIM-%'")[0][0]
 if _real:
     raise SystemExit("reproduction.acris holds %s real rows - this simulation writes into the live table (the lane inserts its throwaway ids and moves the counters), so on the"
                      " populated table it would touch real documents; it runs on an empty table only (rule of 2026-09-05 19:2x)"
                      % "{:,}".format(_real))
-q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 before = q("select (select needed from reproduction.acris_update), (select landed from reproduction.acris_update_lanes where lane='synchronization'), (select needed from reproduction.acris_update_lanes where lane='documentation')")[0]
 print("counters before (phase needed, sync landed, documentation needed):", before)
@@ -92,7 +92,7 @@ code = lane.run([(role, 4)], args, HERE)
 print("exit code", code, "after %.0fs" % (time.time() - T0))
 
 print("--- what landed ---")
-rows = q("select doc_id from reproduction.acris where doc_id like 'SIM-%' order by doc_id")
+rows = q("select identifier from reproduction.acris where identifier like 'SIM-%' order by identifier")
 got = sorted(int(r[0][4:]) for r in rows)
 want = sorted(k for k in range(1, 34) if k not in BLANKS and k != HOLE)
 print("   rows inserted:", got)
@@ -105,7 +105,7 @@ after = q("select (select needed from reproduction.acris_update), (select landed
 print("   counters moved by:", tuple(a - b for a, b in zip(after, before)), "(expect %d each)" % len(want))
 print("   heartbeat:", q("select width, last_event from reproduction.acris_heartbeats where host = 'SIM-HOST'"))
 print("--- cleanup ---")
-q("delete from reproduction.acris where doc_id like 'SIM-%'", fetch=False)
+q("delete from reproduction.acris where identifier like 'SIM-%'", fetch=False)
 q("delete from reproduction.acris_heartbeats where host = 'SIM-HOST'", fetch=False)
 print("reconcile after cleanup:", q("select * from reproduction.reconcile('acris')"))
 print("SYNC SIMULATION DONE - no ACRIS request was made")

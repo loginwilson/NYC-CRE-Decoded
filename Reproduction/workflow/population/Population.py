@@ -31,7 +31,7 @@ moved.  This program does the move once, in four commands, each of which can be 
                                              cell what the mapping says; classes counted, the first differences named; reads only
 
 THE CELL MAPPING (old -> new), the same for both sources
-    id                      -> doc_id                 (text; byte order on both sides - SQLite BINARY = Postgres collate "C" - so a resume is exact)
+    id                      -> identifier             (text; byte order on both sides - SQLite BINARY = Postgres collate "C" - so a resume is exact)
     recorded_details ''     -> registry NULL           (registration's to-do)
     recorded_details {json} -> registry (jsonb)        (the recorded details as the old lane landed them)
     pdf ''                  -> document NULL           (documentation's to-do) - unless organize found the file in By Parcel / By Party
@@ -404,7 +404,7 @@ def copy_rows(cur, source, rows):
     for r in rows:
         w.writerow(["" if v is None else v for v in r])   # an unquoted empty field is NULL in COPY csv; no cell is ever the empty string
     buf.seek(0)
-    cur.copy_expert("copy reproduction.%s (source, doc_id, registry, document) from stdin with (format csv)" % source, buf)
+    cur.copy_expert("copy reproduction.%s (source, identifier, registry, document) from stdin with (format csv)" % source, buf)
 
 
 def land_one(pg, s, r, rejects):
@@ -442,7 +442,7 @@ def land_one(pg, s, r, rejects):
 def land_split(pg, s, rows, rejects):
     """A refused set of rows lands by halving: a bad row is found in log2(n) round trips (a row-by-row retry of a
     50,000-row slice ran at 1.2 rows/s on 2026-09-05), a transient refusal costs two.  In id order, so a resume after
-    max(doc_id) stays exact."""
+    max(identifier) stays exact."""
     import psycopg2
     if not rows:
         return
@@ -475,9 +475,9 @@ def load(a):
     pg = pg_connect()
     pg.autocommit = False
     with pg.cursor() as cur:
-        cur.execute("select coalesce(max(doc_id), '') from reproduction.acris")
+        cur.execute("select coalesce(max(identifier), '') from reproduction.acris")
         a_max = cur.fetchone()[0]
-        cur.execute("select coalesce(max(doc_id), '') from reproduction.richmond")
+        cur.execute("select coalesce(max(identifier), '') from reproduction.richmond")
         r_max = cur.fetchone()[0]
         cur.execute("select (select reltuples::bigint from pg_class where oid = 'reproduction.acris'::regclass),"
                     " (select reltuples::bigint from pg_class where oid = 'reproduction.richmond'::regclass)")
@@ -536,7 +536,7 @@ def found_shift(pg, con, found):
             for attempt in (1, 2, 3):
                 try:
                     with pg.cursor() as cur:
-                        cur.execute("select doc_id, document from reproduction.%s where doc_id = any(%%s)" % s, (part,))
+                        cur.execute("select identifier, document from reproduction.%s where identifier = any(%%s)" % s, (part,))
                         cloud_cells = cur.fetchall()
                     pg.commit()
                     break
@@ -624,7 +624,7 @@ def verify(a):
                 for k, v in zip(("empty", "object", "word"), got[5:]):
                     reg_total[k] += v
                 rows_added += max(0, g[0] - exp[0])
-            cur.execute("select doc_id, document from reproduction.%s tablesample system (0.02) where left(document, %%s) = %%s limit %%s" % s,
+            cur.execute("select identifier, document from reproduction.%s tablesample system (0.02) where left(document, %%s) = %%s limit %%s" % s,
                         (len(storage.CANON_ROOT), storage.CANON_ROOT, a.sample))
             sample = cur.fetchall()
             exists = sum(1 for _, p in sample if os.path.exists(p))
@@ -635,7 +635,7 @@ def verify(a):
             # the same JSON value - jsonb keeps values, not key order or spacing - with the NUL escape set aside (map_registry).
             # An id the old table never had is a row a lane landed after the load (richmond's sync of 2026-09-05): counted, not a defect.
             pct = min(100.0, max(0.001, 200.0 * a.registry_sample / est))
-            cur.execute("select doc_id, registry from reproduction.%s tablesample system (%.4f) limit %%s" % (s, pct), (a.registry_sample,))
+            cur.execute("select identifier, registry from reproduction.%s tablesample system (%.4f) limit %%s" % (s, pct), (a.registry_sample,))
             same = diff = new = 0
             for did, reg in cur.fetchall():
                 r = con.execute("select recorded_details from navigation where id = ?", (did,)).fetchone()
@@ -714,13 +714,13 @@ def apply_found(a):
                 ids = [d for d, _ in chunk]
                 paths = [q for _, q in chunk]
                 cur.execute("""select count(*) from reproduction.%s w
-                               join unnest(%%s::text[], %%s::text[]) as v(doc_id, document) on v.doc_id = w.doc_id
+                               join unnest(%%s::text[], %%s::text[]) as v(identifier, document) on v.identifier = w.identifier
                                where left(w.document, %%s) = %%s and w.document <> v.document""" % s,
                             (ids, paths, len(storage.CANON_ROOT), storage.CANON_ROOT))
                 other += cur.fetchone()[0]
                 cur.execute("""update reproduction.%s w set document = v.document
-                               from unnest(%%s::text[], %%s::text[]) as v(doc_id, document)
-                               where w.doc_id = v.doc_id and (w.document is null or w.document in ('pending', 'absent'))""" % s,
+                               from unnest(%%s::text[], %%s::text[]) as v(identifier, document)
+                               where w.identifier = v.identifier and (w.document is null or w.document in ('pending', 'absent'))""" % s,
                             (ids, paths))
                 filled += cur.rowcount
                 pg.commit()
@@ -933,7 +933,7 @@ AUDIT = HERE / "population.audit.json"
 
 
 def cloud_rows(pg, source):
-    """Every row of one cloud table in doc_id order, streamed (a named cursor, ten thousand at a time).  A connection
+    """Every row of one cloud table in identifier order, streamed (a named cursor, ten thousand at a time).  A connection
     the pooler drops mid-stream (2026-09-06 16:51: both the audit's and the push's sessions closed at once, the server
     itself up) is reopened and the stream resumes after the last id seen - the walk never restarts from the top."""
     import psycopg2
@@ -943,7 +943,7 @@ def cloud_rows(pg, source):
         try:
             cur = pg[0].cursor(name="audit_" + source)
             cur.itersize = 10000
-            cur.execute("select doc_id, registry, document from reproduction.%s where doc_id > %%s order by doc_id" % source, (last,))
+            cur.execute("select identifier, registry, document from reproduction.%s where identifier > %%s order by identifier" % source, (last,))
             for row in cur:
                 last = row[0]
                 yield row
