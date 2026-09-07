@@ -1207,3 +1207,20 @@ The only scaling axis is **(number of high-allowance exits) x (~5–10 docs/s ea
 
 ### Richmond
 Documentation is complete (2,502,936 / 2,502,936). Its rule is settled and needs no fix: run on the office line WITHOUT the VPN (the courts host sits behind Cloudflare, which challenges VPN exits and serves the residential line). Same rule if it ever needs a re-run.
+
+### The remaining work, measured (02:0x, index-only count over `document is null`) — and the calendar, honestly
+
+| band | remaining | ~requests/doc | ~requests |
+|---|---|---|---|
+| numeric 2005-2013 | 4,305,506 | ~10.5 | ~45M |
+| numeric 2014-2026 | 5,152,449 | ~10.5 | ~54M |
+| FT_ (microfilm) | 7,488,322 | ~5.4-8 | ~49M |
+| BK_ | 959,025 | ~8 | ~8M |
+| **total** | **17,905,302** | | **~156M requests** |
+
+**The calendar is total requests / (57 req/s x exits)**, because ACRIS caps each exit near 57 requests/s and every page is one request. Two good exits = 114 req/s -> ~16 days of perfect uptime, **~3 weeks with notices and rest**; three exits -> ~11 days perfect, ~2 weeks. This week is not physically possible.
+
+**Correction to what I wrote earlier tonight:** fetching the cheap FT_ band first does NOT shorten the calendar — total requests are the same in any order; it only front-loads the document count (the percent rises faster early, then slows). The levers that move the finish date are exactly two: **more good exits** (parallel request rate) and **fewer requests per document** (the skip-viewer experiment: -1 request/doc = -17.9M of ~156M = ~11%, about two days on a two-exit run).
+
+**Two stations need no shard plan:** the cloud `claim()` hands out empty cells in id order, atomic and skip-locked, so both stations draw from one list with no overlap; the order is numeric years first, then BK_, then FT_. (The old lane's `--hi 2014` was that lane's own shard; the GitHub lane claims without bounds.)
+
