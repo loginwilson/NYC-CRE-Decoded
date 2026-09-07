@@ -231,11 +231,13 @@ def is_challenge(status, headers, body=b""):
     minting every token: the pull this lane sends is the old lane's byte for byte (the 302's own token url, the same three
     headers - the old lane's exact user-agent string was tried too - no cookies, one keep-alive connection per worker), and the
     challenge came back for it, for a socket bound to the Wi-Fi adapter, for Windows' own curl.exe with the same headers from
-    the VPN's exit, and for a fetcher on a datacenter network with no VPN and none of our code.  Three networks, three clients,
-    one answer: not our code, not one exit.  The courts host's own posture has flipped before - before 2026-08-22 the record
-    shows this same challenge to honest clients, 2026-08-22..28 it served them at 12.77 pdf/s.  The lane parks at once and
-    a person decides when to ask again (one pull tells); never a browser disguise: a challenge is a bot check, and a client
-    that solves it lies."""
+    the VPN's exit, and for a fetcher on a datacenter network with no VPN and none of our code.  PROVEN 21:57 the same night
+    (login's theory): with the VPN off, this same code entered on the home line (69.204.251) and pulled 536 pdfs in two
+    minutes, 0 fails - so it was never our code, and "not one exit" was wrong: Cloudflare challenges the VPN's exits (two
+    blocks on two nights) and datacenter addresses, and serves the residential line.  THE RULE: the courts pull runs on a
+    line WITHOUT the VPN; ACRIS runs ON it; one machine's tunnel is system-wide, so workstation 2 (the office IP) takes
+    richmond documentation.  The lane parks at once on a challenge; never a browser disguise: a challenge is a bot check,
+    and a client that solves it lies."""
     if status != 403:
         return False
     cf = ""

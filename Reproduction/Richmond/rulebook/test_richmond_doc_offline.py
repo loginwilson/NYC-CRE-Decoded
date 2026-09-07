@@ -237,8 +237,8 @@ n = crew.stats["reqs"]; t0 = time.time()
 try:
     role3.fetch(crew, "RC_990000071", REG_OLD); check("a challenged pull raises Refused", False)
 except richmond.Refused as e:
-    check("a challenged pull raises Refused AT ONCE naming Cloudflare and what decides (a person, one pull), no 600 s hold",
-          "CLOUDFLARE CHALLENGE" in str(e) and "not our code" in str(e) and time.time() - t0 < 5, str(e)[:120])
+    check("a challenged pull raises Refused AT ONCE naming Cloudflare and the cure (a line without the VPN), no 600 s hold",
+          "CLOUDFLARE CHALLENGE" in str(e) and "WITHOUT the VPN" in str(e) and time.time() - t0 < 5, str(e)[:120])
 check("no probe was spent: two requests (mint + pull), the queue untouched, the hold clear",
       crew.stats["reqs"] - n == 2 and crew.q.qsize() == 1 and crew.q.get()[0] == "RC_990000072" and not role3.hold.is_set(), crew.stats["reqs"] - n)
 role4 = D.Documentation(HERE, str(ROOT), richmond.IMAGE_LAG_DAYS, cooldown=0)

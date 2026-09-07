@@ -25,9 +25,11 @@ The rules are kept from the lane that ran before this one (rc_lane.py, rc_pdf_pu
   whole file    written to a .part and renamed; the store never holds a truncated pdf
   challenged    a 403 carrying `cf-mitigated: challenge` is CLOUDFLARE'S BOT CHECK on the address we come from (the
                 "Just a moment..." page), not the courts host's answer: park AT ONCE, no hold, no probe (a probe answers
-                the same challenge - two nights, 20 minutes, nothing learned), the message says what it is (measured
-                2026-09-06: the old lane's exact request, three user-agents, a bound socket, curl.exe and a fetcher on
-                another network - all challenged; the courts host's posture, not our code; richmond.is_challenge)
+                the same challenge - two nights, 20 minutes, nothing learned), the message names the cure: a line
+                WITHOUT the VPN (2026-09-06: the old lane's exact request, three user-agents, a bound socket, curl.exe -
+                all challenged from the VPN's exits; 21:57 the VPN off → the same code served 536 pdfs in two minutes on
+                the home line; richmond.is_challenge).  ACRIS runs on the VPN: this lane belongs to the workstation
+                without it (the office IP).
   restricted    a 401/403 from the courts host is AMBIGUOUS: sealed records 403 at any rate (a fact
                 about ONE document), a refusal is about us.  Hold every worker --cooldown seconds,
                 then ONE probe of a DIFFERENT document decides: probe pdf -> the document is
@@ -159,8 +161,8 @@ class Documentation:
                 if richmond.is_challenge(r.status_code, r.headers, r.content):
                     raise richmond.Refused("CLOUDFLARE CHALLENGE on the courts host for %s (403, cf-mitigated: challenge) - Cloudflare's bot check"
                                            " in front of the courts host, not the document, not this request (2026-09-06: the old lane's exact"
-                                           " request, curl.exe and a fetcher on another network were all challenged); STOP - the courts host's"
-                                           " posture, not our code: a person decides when to ask again (one pull tells), never a browser disguise" % doc_id)
+                                           " request and curl.exe were challenged from the VPN's exits; 21:57 the VPN off served at once); STOP -"
+                                           " the cure is a line WITHOUT the VPN (the office workstation; one pull tells), never a browser disguise" % doc_id)
                 return self.verdict(crew, doc_id, r.status_code)
             if r.status_code == 429:
                 raise lane.HTTPStatus(429, token_url)
@@ -201,7 +203,7 @@ class Documentation:
                 return "restricted"
             if answer == "challenged":
                 raise richmond.Refused("CLOUDFLARE CHALLENGE on the probe %s after HTTP %d on %s - Cloudflare's bot check in front of the courts"
-                                       " host; STOP - the courts host's posture, not our code: a person decides when to ask again, never a browser"
+                                       " host; STOP - the cure is a line WITHOUT the VPN (the office workstation; one pull tells), never a browser"
                                        " disguise" % (probe_id, code, doc_id))
             if answer == "refused":
                 raise richmond.Refused("the courts host refused %s (%d) AND the probe %s - the lane is refused; STOP, no retry, no rotation"

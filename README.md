@@ -83,7 +83,7 @@ pooler) and `SUPABASE_DB_PASSWORD`, typed in by hand, never committed. 3. `pytho
 ledger: every migration applied. 4. A drive for the documents, named by its label; a lane is launched from its own folder
 with that label and this machine's name - `python "Acris Documentation.py" --drive <label> --host <name> --width 20` - the
 files land under that drive in the same tree, every cell carries the One Touch path (`Reproduction/rulebook/storage.py`),
-and the claims (out of sight, `machinery.claims`) hand each machine its own slice; `reproduction.updates` shows every workstation's row - lane, workers, landed, last seen - beside the phase and lane rows (migration 0007, 2026-09-06). 5. Synchronization stays on one machine. Nothing else is
+and the claims (out of sight, `machinery.claims`) hand each machine its own slice; `reproduction.updates` shows every workstation's row - lane, workers, landed, last seen - beside the phase and lane rows (migration 0007, 2026-09-06). 5. Synchronization stays on one machine, and RICHMOND DOCUMENTATION RUNS ON A LINE WITHOUT THE VPN while the ACRIS lanes run on it: Cloudflare in front of the courts host challenges the VPN's exits and serves the residential line (measured 2026-09-06 21:57), and one machine's tunnel is system-wide, so workstation 2 on the office IP takes richmond documentation. Nothing else is
 configured: the code, the rules and the to-do list are the same everywhere.
 
 **The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells
