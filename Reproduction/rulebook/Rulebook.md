@@ -391,18 +391,15 @@ VPN OFF served 536 pdfs in 2 minutes. Richmond documentation runs on a line with
 6. The calendar is doors x allowance: 17.9M documents remaining, ~147M requests; one exit's day at 415k is ~39k documents. More doors and
    larger-standing ranges are the levers; the client is not.
 
-## UPDATE — the phase board
+## UPDATE — the boards
 
-Nothing runs here yet. Each source has its own board today - `<Source>/update/<Source> Update.py`, one program that
-always runs and only reads, writing two tabs in Supabase: the phase row of that source (rows with all three cells
-filled against rows) and its lane rows (each cell filled against rows), with the 60-second and 5-minute rate,
-increase, percent and eta, landed, needed, percent of total, the computed status and the as-of stamp.
-
-The phase board is the same two tabs across every source: one row per source on tab 1, the sources' lane rows on tab 2,
-the phase's own total on top. It reads the sources' update tables through a master view - a later migration in
-`../supabase/`, after the data move - and `Update.py` beside this file will read that view the way every
-board does (`../rulebook/board.py`: one subtraction, every percentage over needed, the four statuses, never a clamp,
-never a scan on a tick). Until then this folder holds this file, so the phase has the same three folders a source has.
+There is no phase-level board (login 2026-09-07: "we're not doing a master reproduction file"; "I don't even think we
+need an update yet" for the phase). Each source has its own - `<Source>/update/<Source> Update.py`, one program that
+always runs and only reads, writing rate, increase, eta, percentage, status and the as-of stamp into `machinery.updates`
+every minute (the board part of `rulebook.py`: one subtraction, every percentage over needed, the four statuses, never a
+clamp, never a scan on a tick). What a person opens is `reproduction.acris_update` / `richmond_update`: three blocks of
+four rows - the totals, workstation 1, workstation 2 - a blank spacer before each workstation block, source before lane
+(0017-0019). The words are in `<Source>/update/<Source> Update.md`.
 
 ## History
 
