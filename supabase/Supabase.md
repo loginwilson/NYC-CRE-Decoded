@@ -195,3 +195,14 @@ about 300 ms; a word-level index (full-text on the names) is the better tool for
 (2) the parcels views are for READING a document's parcels with borough, block and lot spelled out and for joins by doc_id;
 a filter by bbl on the view is a full scan (it unnests every row) - finding goes through containment or block_keys, which
 read an index. GATE 2 CLOSED: 0005, 0006, 0007, 0008 applied, recorded and proven.
+
+2026-09-06 20:08 — THE CRFN CLEANUP (login: "clean the messed up registries before gate 3" / "make sure the cleanup doesn't
+mangle and make up a false crfn"). 7,817 acris registries - the old lane's registrations of November 2025 to August 2026, none
+with our stamp - carried the crfn as '<13 digits> &nbsp;' (one shape, the HTML entity the old parser never unescaped; the new
+parser does). The guard: a value is cleaned only if it is exactly thirteen digits wrapped in nothing but whitespace, '&nbsp;'
+or non-breaking spaces - the digits never touched, reordered or filled in; every other shape left alone and listed (0 such).
+Written in four batches, 7,817 cleaned, in 909 s (the listing scan 892 s of it); the registration counters unchanged (a registry
+stays a registry). PROVEN 20:12: every cleaned value is a 2003-2026 year + nine digits; a 10,000-row sample of the old lane's
+16,502 registrations in that id range against the city's own index (the open-data master datasets, by document id - never the
+ACRIS site): 2,946 agree, 0 disagree, 7,054 not in the index yet (the index updates monthly; the newest recordings are not
+there, which proves nothing either way). An exact crfn filter now finds every one of them.
