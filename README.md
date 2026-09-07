@@ -76,15 +76,40 @@ pendings due for a re-check come first. It fills them with `land()` once a minut
 claims go back on the list. Each running lane writes `heartbeat()` once a minute. Synchronization runs at home;
 registration and documentation on any machine.
 
-**Joining a second workstation (the steps, 2026-09-05; on login's word).** 1. `git clone https://github.com/loginwilson/NYC-CRE-Decoded`
-and `pip install -r Reproduction/rulebook/requirements.txt` (Python 3.12). 2. The env file - `C:\dev\nyc-cre-decoded.env` on
-Windows, `~/nyc-cre-decoded.env` on a Mac, or wherever `NYC_CRE_DECODED_ENV` points - with `SUPABASE_DB_URL` (the session
-pooler) and `SUPABASE_DB_PASSWORD`, typed in by hand, never committed. 3. `python supabase/supabase.py check` prints the
-ledger: every migration applied. 4. A drive for the documents, named by its label; a lane is launched from its own folder
-with that label and this machine's name - `python "Acris Documentation.py" --drive <label> --host <name> --width 20` - the
-files land under that drive in the same tree, every cell carries the One Touch path (`Reproduction/rulebook/storage.py`),
-and the claims (out of sight, `machinery.claims`) hand each machine its own slice; `reproduction.updates` shows every workstation's row - lane, workers, landed, last seen - beside the phase and lane rows (migration 0007, 2026-09-06). 5. Synchronization stays on one machine, and RICHMOND DOCUMENTATION RUNS ON A LINE WITHOUT THE VPN while the ACRIS lanes run on it: Cloudflare in front of the courts host challenges the VPN's exits and serves the residential line (measured 2026-09-06 21:57), and one machine's tunnel is system-wide, so workstation 2 on the office IP takes richmond documentation. Nothing else is
-configured: the code, the rules and the to-do list are the same everywhere.
+**Joining a second workstation (the steps, refreshed 2026-09-07 after gate 4's first night; on login's word).** Nothing
+on the second machine needs Claude Code: the batch, rate and session managers are plain Python in `Reproduction/rulebook/`
+(`lane.py`, `rate_manager.py`) and run wherever the lane runs. There is no allocation to hand out: the table is the only
+to-do list, `claim()` is atomic and skip-locked with the host's name on every claim, so two machines never receive the same
+document, and a claim that expires (20 minutes) goes back on the list. The steps:
+
+1. Python 3.12. `git clone https://github.com/loginwilson/NYC-CRE-Decoded` (or unzip main) into `C:\dev\nyc-cre-decoded`, then
+   `pip install -r Reproduction/rulebook/requirements.txt` (requests, psycopg2-binary, img2pdf, Pillow).
+2. The env file `C:\dev\nyc-cre-decoded.env` holding `SUPABASE_DB_URL` (Connect > Session pooler > URI) and
+   `SUPABASE_DB_PASSWORD` - typed in by hand, copied from the home machine, never committed, never printed.
+   `python supabase/supabase.py check` must print the ledger with every migration applied.
+3. The documents drive, named by its **volume label** (case-insensitive): label the second drive `NYCCRED2`. The lane finds
+   it by label, creates `NYCCRED2:\NYC CRE Decoded\Reproduction\Acris\By Document\<year>\<MM Mon>\<day>\<id>.pdf` itself,
+   and every cell it lands carries that same tree path - so the files can later be moved into the One Touch with no change
+   to the database.
+4. **ACRIS from the office line, VPN OFF** (2026-09-07: the VPN provider's exits are throttled per block; the office IP is the
+   resident address). Richmond documentation also runs without the VPN. The lane's own gate draws the exit five times and
+   enters only when all five are one block.
+5. Launch the lane through the fleet program so the three managers' knobs (`MANAGE` in `Acris Reproduction.py`: the band and
+   the width ceiling) apply - a lane launched alone runs with the managers off - from its folder, with the drive label and
+   this machine's name:
+   `cd Reproduction\Acris\workflow\reproduction`
+   `python "Acris Reproduction.py" --drive NYCCRED2 --host Office2 --lanes documentation:40 --stagger 5`
+   It enters once, one worker in and one more every 5 s until the band (floor 4 / goal 5 / ceiling 6 docs/s under 60
+   requests/s; when BOTH workstations run ACRIS, the goal per station is 4-5), holds, hangs up when every line is cut, waits
+   60 s, claims a fresh batch and re-enters once; a notice page parks it (`documentation.parked` in the lane folder) and a
+   person clears it (`--unpark`). Stop with `python "Acris Reproduction.py" stop`.
+6. **The board runs on ONE machine per source** - at home (`python "Acris Update.py"` in `Reproduction/Acris/update`), never on
+   both at once. Station 2's lane feeds it through its heartbeat: `reproduction.acris_workstations` shows the station's own row
+   (landed by this station, rate, workers, last seen) and `reproduction.acris_update` the totals. If the home board is down,
+   start it on station 2 instead.
+
+Synchronization stays on one machine; registration and documentation run on any. The code, the rules and the to-do list are
+the same everywhere.
 
 **The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells
 filled against rows), tab 2 is the lanes (each cell filled against rows), both with 60-second and 5-minute rate,
