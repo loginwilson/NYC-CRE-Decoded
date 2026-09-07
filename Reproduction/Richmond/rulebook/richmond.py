@@ -4,6 +4,8 @@ parser, the control window, the refusal shapes, and the id namespace.
 Richmond County Clerk (Staten Island's recorded instruments, the pre-ACRIS and parallel corpus).
 Everything here was measured on the lanes that ran before this repo (Richmond Reproduction.md is the
 authority); the dates in the comments say when.
+
+The words are in Richmond.md beside this file.
 """
 import datetime as dt
 import re

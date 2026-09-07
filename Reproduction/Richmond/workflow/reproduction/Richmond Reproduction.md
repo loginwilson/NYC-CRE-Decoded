@@ -5,14 +5,14 @@
 > complete, current within minutes, and PROVEN so by the update board.
 > Closed COMPLETE and week-audited 2026-08-28. This file is the authority
 > for what runs richmond and what "right" looks like; change the lane's
-> shape in `fleet.py`, change the rules HERE.
+> shape in `rulebook.py`, change the rules HERE.
 >
 > Three named parts (login 2026-08-28): **THE CYCLE** (the pipeline that
 > reproduces), **RICHMOND UPDATE** (the board that tracks it), and
 > **RICHMOND AUDIT** (the enumeration safety check — NOT part of the
 > cycle; run it whenever you want a proof).
 
-> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `rulebook/Rulebook.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `rulebook/Rulebook.md`, the lane md and `rulebook/Rulebook.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `fleet.py` roster is `Reproduction/rulebook/rulebook.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_lane.py`) are the lane programs under `workflow/`.
+> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `rulebook/Rulebook.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `rulebook/Rulebook.md`, the lane md and `rulebook/Rulebook.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `rulebook.py` roster is `Reproduction/rulebook/rulebook.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_`rulebook.py`) are the lane programs under `workflow/`.
 
 ## 0 · THE FLEET PROGRAM — `Richmond Reproduction.py` (2026-09-03)
 
@@ -41,7 +41,7 @@ relaunch can cure and never relaunches what a person must decide.
 | the edge is a date | `--edge YYYY-MM-DD` goes to identification and registration on a first start (each keeps its own `*.edge.json` afterwards); a later `--edge` that disagrees with the file is refused | the two walkers' edge files |
 | widths | 4 / 4 / 8: the county has no metronome, latency is its backpressure; 8 pullers measured 28.23 docs/s against 18.76 at 16 (rc_bench 2026-08-25, one variable) | §3 calibrations |
 | pending window | documentation's `--fresh-days` defaults to the measured 7-day scan lag | rc_source IMAGE_LAG_DAYS |
-| what each exit means | 0 done · 1 refused to start: left alone · 2 REFUSED: every lane told to stop, exit 2, a person decides · 3 four re-entries in a row refused, or the probe broken: the lane parked itself, never relaunched, a person decides · 4 wall: parked by the lane, left · 5 crash: relaunch after 60 s · 6 drive gone: wait for the drive, relaunch with `--unpark` | fleet.py |
+| what each exit means | 0 done · 1 refused to start: left alone · 2 REFUSED: every lane told to stop, exit 2, a person decides · 3 four re-entries in a row refused, or the probe broken: the lane parked itself, never relaunched, a person decides · 4 wall: parked by the lane, left · 5 crash: relaunch after 60 s · 6 drive gone: wait for the drive, relaunch with `--unpark` | `rulebook.py` |
 | the relaunch cap | more than `--relaunch-cap` (3) launches of one lane in an hour parks it with the reason | every start is a stampede of handshakes |
 | a parked lane is never relaunched | the drive's return is the one exception, because the fleet can verify it | the park is the lane's word, or a person's |
 | logs appended, never truncated | `<lane>/<lane>.log` with a fleet banner at every launch | 2026-09-03 |

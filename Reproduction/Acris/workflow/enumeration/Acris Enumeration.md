@@ -18,6 +18,8 @@ For acris the baseline is ACRIS's own published index on NYC Open Data (two Socr
 
 Any workstation can run the diff and the census (they read the index and the table). The probe asks ACRIS itself and runs on login's word only: `--acris` is that word, and the program refuses to start while any lane's heartbeat is fresh, because an enumeration sweep of the web endpoint never runs beside the cycle. Exit codes: 0 the difference is 0 · 1 a difference · 7 unproven · 2 refused · 3 hang-up · 5 crash.
 
+Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+
 ## The three checks
 
 | check | what it proves | what it cannot see |

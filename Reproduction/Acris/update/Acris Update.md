@@ -8,6 +8,8 @@ The board of the acris reproduction, as one program: `Acris Update.py`. It alway
     python "Acris Update.py" --once          one tick, written
     python "Acris Update.py" show            read and print every row, nothing written
     python "Acris Update.py" reconcile       recount the counters from the table's indexes and overwrite them
+    python "Acris Update.py" --every 30      a tick every 30 s instead of 60
+    python "Acris Update.py" --host Office2  this workstation's name in the cloud (default: the machine name); --fresh 180 = a heartbeat older than this is not alive
 
 One board per source, on one machine; its `as_of` stamp is its pulse, and a stale stamp is the signal the board died. `update.lock` refuses a second board on the same machine.
 

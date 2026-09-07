@@ -13,6 +13,8 @@ ACRIS sells no date window: the id and CRFN searches have no date field, the typ
 
 Home only: the edge lives on one workstation. `--width` defaults to 20 walkers. `--every 60 --watch 8 --bite 1000` are the cadence knobs. `identification.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
 
+Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+
 ## The rules
 
 | rule | what the lane does | origin |
@@ -26,7 +28,7 @@ Home only: the edge lives on one workstation. `--width` defaults to 20 walkers. 
 | a live page is a full page | a page that prints an id from fewer than 20 KB is suspect truncation and is asked again, never reported live; a page with no id at all is a blank - an answer - whatever its size | acris_edge, `_MIN_DETAIL` |
 | the cell | the `identifier` only. The page fetched is the registry page, and registration will fetch it again for the recorded details: one more request per new document. The cell rule is worth it | login 2026-09-03: each lane fills its own cell and nothing else |
 | the counters | a new row moves `needed` for the phase and every lane, and identification's `landed`, in the same transaction as the insert | the counting rule |
-| one entry, one door, refusal, hang-up, wall, width | shared with every lane; see Acris Documentation.md. The cycle for a walker crew: every walker a transport error inside 60 s with nothing answered for 10 s is the session closed - hang up at once, drop the cut window from the queue and forget it as in flight (`rebatch`), 60 s of silence with the backoff, one re-entry with births 5 s apart, and the monitor asks the same numbers again from the edge, which never moved past an unanswered number | lane.py; login 2026-09-04, the cycle |
+| one entry, one door, refusal, hang-up, wall, width | shared with every lane; see Acris Documentation.md. The cycle for a walker crew: every walker a transport error inside 60 s with nothing answered for 10 s is the session closed - hang up at once, drop the cut window from the queue and forget it as in flight (`rebatch`), 60 s of silence with the backoff, one re-entry with births 5 s apart, and the monitor asks the same numbers again from the edge, which never moved past an unanswered number | `rulebook.py`; login 2026-09-04, the cycle |
 | one machine | the edge is local state; the lane runs at home | rulebook/Rulebook.md |
 
 ## Calibrations

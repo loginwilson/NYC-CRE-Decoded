@@ -3,6 +3,8 @@ detector, the page count, and where a document files in the One Touch layout.
 
 Everything here was measured on the lanes that ran before this repo (ACRIS REPRODUCTION.md is the
 authority); the dates in the comments say when.
+
+The words are in Acris.md beside this file.
 """
 import hashlib
 import html as _html

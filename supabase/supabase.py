@@ -21,6 +21,8 @@ Credentials: the env file - `C:/dev/nyc-cre-decoded.env` at home, `~/nyc-cre-dec
 NYC_CRE_DECODED_ENV - holding SUPABASE_DB_URL (Connect > Session pooler > URI) and SUPABASE_DB_PASSWORD.  Nothing here
 prints a credential.  Every `sql` run is appended to `supabase.log` beside this file (kept out of git by `*.log`) so the
 schema has a written history of every hand statement that touched it; `push` needs no log - the ledger is its record.
+
+The words are in Supabase.md beside this file.
 """
 import time
 import argparse, datetime, os, pathlib, re, sys, urllib.parse
@@ -427,7 +429,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="the process's one database: check it, push the phases' schema files, run a statement")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check", help="server, schemas, tables; every schema file on disk against the ledger")
-    sub.add_parser("baseline", help="write schema/schema.sql: the whole database as it stands, from the catalog")
+    sub.add_parser("baseline", help="write supabase/schema.sql: the whole database as it stands, from the catalog")
     p = sub.add_parser("push", help="apply the schema files not yet applied, in version order")
     p.add_argument("--dry", action="store_true", help="list what would be applied; run nothing")
     p.add_argument("--rest", type=int, default=0, help="statement by statement: seconds to rest after each statement that ran 10 s or longer (a small instance's disk budget)")

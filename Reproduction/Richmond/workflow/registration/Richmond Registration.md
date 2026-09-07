@@ -5,7 +5,7 @@ One program, `Richmond Registration.py`, beside this file. It fills the **regist
 ```
 python "Richmond Registration.py" --edge 2026-08-25     the first start names the last day whose registries were walked
 python "Richmond Registration.py"                       afterwards registration.edge.json remembers it
-python "Richmond Registration.py" --width 4 --every 900 --days 30 --pace 0.3 --pending-age "1 hour"
+python "Richmond Registration.py" --every 900 --days 30 --pace 0.3    the defaults, spelled out (four walkers: the fleet's width for this lane, `Richmond Reproduction.py`; a pending is re-asked after claim()'s hour)
 ```
 
 The cycle's authority is `../reproduction/Richmond Reproduction.md`; the shared machinery (the crew and its staggered births - here every walker keeps its OWN session, the county's grant being per session - the outbox, the heartbeat, the refusal park, the hang-up and wall breakers, the width control, the lock) is `Reproduction/rulebook/rulebook.py` and is not repeated here. The hang-up is DORMANT at this county (no session close was ever measured here - the drumroll rule, `Richmond Reproduction.md` §3): it fires only when the wire itself dies, and then the cut pages and details are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next walk, a details item releasing its window's count so the window can close), 60 s of silence, one re-entry with births 0.4 s apart (the county's measured handshake stagger); four refused re-entries in a row park it.

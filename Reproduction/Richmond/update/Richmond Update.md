@@ -8,6 +8,8 @@ The board of the richmond reproduction, as one program: `Richmond Update.py`. It
     python "Richmond Update.py" --once          one tick, written
     python "Richmond Update.py" show            read and print every row, nothing written
     python "Richmond Update.py" reconcile       recount the counters from the table's indexes and overwrite them
+    python "Richmond Update.py" --every 30      a tick every 30 s instead of 60
+    python "Richmond Update.py" --host Office2  this workstation's name in the cloud (default: the machine name); --fresh 180 = a heartbeat older than this is not alive
 
 One board per source, on one machine; its `as_of` stamp is its pulse, and a stale stamp is the signal the board died. `update.lock` refuses a second board on the same machine.
 

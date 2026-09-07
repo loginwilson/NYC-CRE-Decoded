@@ -16,6 +16,8 @@ The enumeration lane of the richmond reproduction, as one program: `Richmond Enu
 
 Any workstation can run it; the ledger of a census lives beside the file on the workstation that swept it. Exit codes: 0 the difference is 0 · 1 a difference · 7 unproven · 2 refused · 3 the probe is broken or the wire died · 5 crash.
 
+Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+
 ## The three checks
 
 | check | what it proves | what it cannot see |

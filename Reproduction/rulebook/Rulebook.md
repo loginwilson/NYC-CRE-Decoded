@@ -86,6 +86,41 @@ Apply a change with the project's program: `python supabase/supabase.py push --d
 
 A proof or a simulation lives outside the repo (login 2026-09-07: "all your tests need to go, every single one ... even if you're doing a test, it should wait and then go in once approved that it works"); what it proves goes into the existing file it proves, dated, and the code it approves alters the existing program - never a new file for a small adjustment. The live cloud table is never a proof's fixture: a simulation that must touch the cloud uses throwaway rows and says so in its first line.
 
+## The shared flags
+
+Every lane, fleet and board program takes these (they are `add_common_args` in `rulebook.py`; this table is written from its own help text, 2026-09-07). A lane's own flags are in its md.
+
+| flag | default | what it does |
+|---|---|---|
+| `--width` | 40 | workers = connections (default 40) |
+| `--host` |  | this workstation's name in the cloud (default: the machine name) |
+| `--stagger` | 5.0 | seconds between worker births (default 5.0; the richmond lanes set 0.4): a ramp of about 200 s at width 40 (2026-09-04: 0.5-s entries were cut, 5-s and 20-s entries served on the same door) |
+| `--claim` | 0 | documents taken per claim (default 12 x width) |
+| `--ttl` | 20 minutes | how long a claim is ours before it goes back on the list |
+| `--pending-age` | 1 hour | re-check a pending once its last check is this old (its claim stays as a cooldown that long); pendings ride ahead of the backfill, and when |
+| `--redial-wait` | 60 | seconds of silence after the session closes before the fresh-batch re-entry; a refused re-entry doubles the next wait (cap 4,800 s), a served one halves it back to this base |
+| `--tries` | 4 | re-entries per incident before parking (the wait doubles each time: 1, 2, 4, 8 minutes at the base) |
+| `--no-pool-check` | off | skip the exit-pool check at entry (tests only) |
+| `--entry-gap` | 20.0 | seconds between one crew's entry and the next (--also) |
+| `--also` | none | host another lane's crew too, e.g. registration:40 |
+| `--one-batch` | off | ONE BATCH (login 2026-09-06, the acris rule): every --also crew rides this crew's entry - one ramp across the crews (each crew's births |
+| `--limit` | 0 | stop after this many documents (a test run) |
+| `--log` |  | also append the printed lines to this file |
+| `--unpark` | off | start although the lane parked itself (a person has decided) |
+| `--manage` | 0 | 1 = the rate and session managers run this lane (default 0: fixed --width, the cycle only) |
+| `--ramp-to-rate` | 1 | managed: 1 = enter with ONE worker and add one every --stagger s until the band; 0 = ramp to --width |
+| `--rate-floor` | 5.0 | managed: docs/s under this = a full step up |
+| `--rate-ideal-lo` | 6.0 | managed: the band's lower edge (login: around 6) |
+| `--rate-ideal-hi` | 7.0 | managed: the band's upper edge |
+| `--dps-ceiling` | 8.0 | managed: the hard line - a full step down at once (login: no more than 8 ever) |
+| `--rps-ceiling` | 60.0 | managed: REQUESTS/s ceiling, the record's meter (notices at 58-81 held for hours; the golden day ~57); 0 = off |
+| `--width-min` | 20 | managed: the manager never retires below this |
+| `--width-max` | 120 | managed: the manager never grows above this (the pool's ceiling is 128) |
+| `--adjust-every` | 120 | managed: seconds per window |
+| `--adjust-step` | 10 | managed: workers per full step |
+| `--ramp-window` | 60.0 | managed: the ramp reads its docs/s and requests/s over this many seconds (read at the current width) |
+| `--session-max-requests` | 0 | managed: end the session at this many requests and re-enter on a fresh batch (login: 1,000,000); 0 = off |
+
 ## Filtering the table (0005, 2026-09-06)
 
 login: "say i wanted to look up deeds, or page numbers, or boroughs" - "assure filtering works on any row and column if
@@ -111,7 +146,7 @@ it off - so a stray query costs at most two minutes, never a runaway. The disk g
 
 ### The proven filters (2026-09-06 15:37, every plan an index scan)
 
-Write filters against the views `reproduction.acris_fields` and `reproduction.richmond_fields` (typed columns: type,
+Write filters against the views `reading.acris_fields` and `reading.richmond_fields` (typed columns: type,
 borough, recorded, doc_date, pages, amount, crfn / doc_type, recorded, book, page, instrument, amount) - a filter on a
 view column IS the indexed expression - and against the registry itself with containment (`@>`) for anything else: a
 parcel, a party, a unit, any key at any depth. The document cell answers a prefix (`like 'D:\...\2003\01 Jan\23\%'
@@ -119,17 +154,17 @@ escape ''`, the day folder). Measured on the pooled connection, a Small instance
 
 | filter | query | ms |
 |---|---|---|
-| deeds in Queens, newest first | `select identifier, recorded, pages, document from reproduction.acris_fields where type = 'DEED' and borough = 'QUEENS' order by identifier desc limit 20` | 207 |
-| a year of deeds by recorded date | `select count(*) from reproduction.acris_fields where type = 'DEED' and recorded between '1995-01-01' and '1995-12-31'` (54,581 rows) | 13,282 beside a running profile build; two indexes ANDed |
-| long documents | `select identifier, type, pages from reproduction.acris_fields where pages >= 50 order by pages desc limit 20` | 199 |
-| amount above ten million | `select identifier, type, amount from reproduction.acris_fields where amount >= 10000000 order by amount desc limit 20` | 200 |
-| one crfn | `select identifier from reproduction.acris_fields where crfn = '2003000003997'` | 181 |
+| deeds in Queens, newest first | `select identifier, recorded, pages, document from reading.acris_fields where type = 'DEED' and borough = 'QUEENS' order by identifier desc limit 20` | 207 |
+| a year of deeds by recorded date | `select count(*) from reading.acris_fields where type = 'DEED' and recorded between '1995-01-01' and '1995-12-31'` (54,581 rows) | 13,282 beside a running profile build; two indexes ANDed |
+| long documents | `select identifier, type, pages from reading.acris_fields where pages >= 50 order by pages desc limit 20` | 199 |
+| amount above ten million | `select identifier, type, amount from reading.acris_fields where amount >= 10000000 order by amount desc limit 20` | 200 |
+| one crfn | `select identifier from reading.acris_fields where crfn = '2003000003997'` | 181 |
 | a parcel by bbl | `select identifier, registry->>'type' from reproduction.acris where registry @> '{"parcels":[{"bbl":"1015131008"}]}' limit 20` | 191 |
 | a party by name | `select identifier, registry->>'type' from reproduction.acris where registry @> '{"parties":[{"name":"CITY OF NEW YORK"}]}' limit 20` | 311 |
 | one day folder | `select identifier, document from reproduction.acris where document like 'D:\NYC CRE Decoded\Reproduction\Acris\By Document\2003\01 Jan\23\%' escape '' limit 20` | 180 |
-| richmond book and page | `select identifier, doc_type, recorded, document from reproduction.richmond_fields where book = '8770' and page = '221'` | 180 |
-| one instrument | `select identifier, doc_type from reproduction.richmond_fields where instrument = '48402'` | 182 |
-| richmond deeds in 2020 | `select count(*) from reproduction.richmond_fields where doc_type = 'Deed' and recorded between '2020-01-01' and '2020-12-31'` (7,118 rows) | 553 |
+| richmond book and page | `select identifier, doc_type, recorded, document from reading.richmond_fields where book = '8770' and page = '221'` | 180 |
+| one instrument | `select identifier, doc_type from reading.richmond_fields where instrument = '48402'` | 182 |
+| richmond deeds in 2020 | `select count(*) from reading.richmond_fields where doc_type = 'Deed' and recorded between '2020-01-01' and '2020-12-31'` (7,118 rows) | 553 |
 | a richmond parcel | `select identifier from reproduction.richmond where registry @> '{"parcels":[{"bbl":"5001570097"}]}' limit 20` | 184 |
 
 The dynamic proof, the same run: one throwaway row landed with a registry and a document path was found by five of these
@@ -147,9 +182,9 @@ and by its page count, with `with_document` and the fields 0005's functions coul
 `amount_unparsed`, `pages_unparsed`) counted alongside; the `all` row is the whole table. `acris_keys` / `richmond_keys`
 count which keys appear at the registry's top level, inside a parcel and inside a party, so an unusual field shows with
 its frequency. A model reads the profile first (a few thousand rows) to see the whole variety, then pulls examples of any
-shape through 0005's indexes: `select * from reproduction.acris_fields where type = 'DEED' and borough = 'QUEENS' and
+shape through 0005's indexes: `select * from reading.acris_fields where type = 'DEED' and borough = 'QUEENS' and
 recorded between '1995-01-01' and '1995-12-31' and jsonb_array_length(parcels) >= 3 limit 20`. Refresh after a lane has
-landed a lot: `refresh materialized view concurrently reproduction.acris_profile` (the unique index on each allows
+landed a lot: `refresh materialized view concurrently reading.acris_profile` (the unique index on each allows
 `concurrently`, so readers are never blocked); a refresh is one scan of the table.
 
 ## What a person sees (0007, 2026-09-06)

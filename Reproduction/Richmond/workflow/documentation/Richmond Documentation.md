@@ -11,6 +11,8 @@ The documentation lane of the richmond reproduction, as one program: `Richmond D
 
 The same file runs on every workstation. `--drive` names the drive by its label. `--width` defaults to 8 (the measured pull width on the courts host). While it runs, `documentation.control` beside it takes `width=N` or `stop`. `--also registration:4` hosts the registration crew in the same process through its own entry. `--limit N` is a test run. A lane that parked itself refuses to start again until `--unpark`.
 
+Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+
 ## Two hosts, three outcomes
 
 The image is minted on the clerk and served by the courts, and the mint's answer is read with redirects OFF:
@@ -30,7 +32,7 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 
 | rule | what the lane does | origin |
 |---|---|---|
-| one entry | one pooled session, one connection per worker at birth, keep-alive after; the courts host gets a pool of its own so switching hosts never re-handshakes; the clerk's front door is fetched once for its cookies | lane.py; rc_lane's per-host pools |
+| one entry | one pooled session, one connection per worker at birth, keep-alive after; the courts host gets a pool of its own so switching hosts never re-handshakes; the clerk's front door is fetched once for its cookies | `rulebook.py`; rc_lane's per-host pools |
 | the cell | the canonical One Touch path, or `pending` (no image, recorded inside the lag) or `absent` (checked, none); nothing else enters the cell | login 2026-09-03, the cell rule |
 | placement | `D:\NYC CRE Decoded\Reproduction\Richmond\By Document\<year>\<MM Mon>\<day>\<id>.pdf` — the day from the RECORDED date, else the id split | login 2026-09-05 (the One Touch mirrors GitHub and Supabase); corpus_paths: recorded is the axis, the id is a submission sequence |
 | no registry, no request | a row without a registry cannot be placed or judged fresh; it waits for registration | the acris rule, same reason |
@@ -41,7 +43,7 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 | restricted vs refused | a 401/403 from the courts host is ambiguous: sealed records refuse at any rate. Every worker holds `--cooldown`, then ONE probe of a **different** claimed document decides — probe served: the document is RESTRICTED, its evidence goes to `documentation.restricted.jsonl`, the cell records `absent`, it is never asked again (the list survives a restart); probe also refused (401/403): the lane is refused — park, exit 2, no retry, no rotation; a probe that answers neither a pdf nor a refusal (a 500, an html page) proves nothing - the document is asked again later and the lane resumes | rc_lane.refusal_verdict; RC_1873622 (an exhibit filed to the City) silenced a 190,594-document run on 2026-08-24 — "richmond should never have stalled" |
 | refusal on the clerk | a captcha, access-denied or block page on the mint: park at once, exit 2 | richmond.check_refused |
 | failures never stop it | a fetch error leaves the document empty for a later pass and writes the reason to `documentation.fails.jsonl` | login 2026-09-03 |
-| hang-up, wall, width, one door, drive, pending recheck, no overlap, the last word | shared with every lane. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every worker a transport error inside 60 s with nothing landed for 10 s - and then hangs up at once, drops the cut batch (the claims expire and come back), waits 60 s with no line open, re-enters once behind a settled exit pool with births 0.4 s apart; four refused re-entries in a row park it. 40 consecutive 503/429 park the lane; `documentation.lock`; the drive checked every minute; pendings re-asked after `--pending-age`; the claim table hands each workstation its slice; every stop leaves its reason | lane.py; Richmond Reproduction.md §3 (the drumroll rule) |
+| hang-up, wall, width, one door, drive, pending recheck, no overlap, the last word | shared with every lane. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every worker a transport error inside 60 s with nothing landed for 10 s - and then hangs up at once, drops the cut batch (the claims expire and come back), waits 60 s with no line open, re-enters once behind a settled exit pool with births 0.4 s apart; four refused re-entries in a row park it. 40 consecutive 503/429 park the lane; `documentation.lock`; the drive checked every minute; pendings re-asked after `--pending-age`; the claim table hands each workstation its slice; every stop leaves its reason | `rulebook.py`; Richmond Reproduction.md §3 (the drumroll rule) |
 | maturation | a `pending` comes back from the claim after `--pending-age` and is minted again; past the 7-day lag it lands `absent`. The old 4 AM `rc_pdf_state --apply` pass lives inside this lane and cannot be separated from it | Richmond Reproduction.md, the 4 AM tasks section: "fold it into the lane" |
 
 ## Calibrations
@@ -53,7 +55,7 @@ The pull carries the project's honest user-agent: the courts host **hangs** the 
 | cooldown | 600 s | the hold before the one probe; long enough that a rate reaction on the courts host has passed |
 | token | mint and pull back to back | tokens minted ahead expired (~10 min): 786 dead tokens one morning, 2026-08-22 |
 | timeouts | mint 60 s; pull (10 s connect, 90 s read), streamed | a 5 MB pdf is read chunk by chunk, so the read timeout is per chunk |
-| pending-age | lane.py's default | one request per pending per interval; the old lane re-asked its pending set every 5 minutes |
+| pending-age | `rulebook.py`'s default | one request per pending per interval; the old lane re-asked its pending set every 5 minutes |
 | stagger | 0.4 s | the county's measured handshake stagger: 160 cold TLS opens in one instant answered SSLError across the board; keep-alive removes every later handshake |
 
 ## Working files

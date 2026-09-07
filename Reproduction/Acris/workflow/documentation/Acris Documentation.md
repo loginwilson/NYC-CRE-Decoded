@@ -11,6 +11,8 @@ The same file runs on every workstation. `--drive` names the drive by its label;
 
     add `--trust-registry-pages` (PROPOSED 2026-09-07, off by default) to skip the viewer fetch - the page count from the registry, one request fewer per document; A/B on a good exit first (below)
 
+Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+
 ## The rules
 
 | rule | what the lane does | origin |

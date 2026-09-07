@@ -13,6 +13,8 @@ Richmond County lists its recorded instruments by date range, with every row car
 
 One machine: the edge is local state. `--width` defaults to 4 walkers (the day window, the heal, a catch-up). `--every 10 --heal-every 900 --heal-days 30 --pace 0.3` are the cadence knobs. `identification.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
 
+Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+
 ## The rules
 
 | rule | what the lane does | origin |
@@ -27,7 +29,7 @@ One machine: the edge is local state. `--width` defaults to 4 walkers (the day w
 | two namespaces | the internal id is ours: `RC_<internal>`; the instrument number repeats across eras and is never a key | measured 2026-08-21 |
 | the cell | the `identifier` only; the counters move with the insert in the same transaction | the cell rule; `insert_ids()` |
 | ids landed once | the monitor remembers the ids it has landed for the heal window and sends only new ones to the cloud | ten-second probes must not re-send the day's ids |
-| one entry, one door, refusal, hang-up, wall, width | shared with every lane; a county refusal shape (captcha, access denied, block page) is a `lane.Refused`. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every walker a transport error inside 60 s with nothing answered for 10 s - and then the cut windows are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next heal, the day window at the next tick, a control before the heal), 60 s of silence, one re-entry with births 0.4 s apart; four refused re-entries in a row park it | lane.py; richmond.py; Richmond Reproduction.md §3 (the drumroll rule) |
+| one entry, one door, refusal, hang-up, wall, width | shared with every lane; a county refusal shape (captcha, access denied, block page) is a `rulebook.Refused`. The hang-up is DORMANT at this county (no session close was ever measured here): it fires only when the wire itself dies - every walker a transport error inside 60 s with nothing answered for 10 s - and then the cut windows are dropped from the queue and forgotten as in flight (`rebatch`: asked again at the next heal, the day window at the next tick, a control before the heal), 60 s of silence, one re-entry with births 0.4 s apart; four refused re-entries in a row park it | `rulebook.py`; richmond.py; Richmond Reproduction.md §3 (the drumroll rule) |
 | identify honestly | the user-agent names this project | measured 2026-08-18; the standing line on bot detection |
 
 ## Calibrations
