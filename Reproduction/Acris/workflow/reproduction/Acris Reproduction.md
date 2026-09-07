@@ -52,7 +52,7 @@ The fleet's own flags (`build_parser` in the fleet part of `rulebook.py`, writte
 | `--unpark` | off | start parked lanes too (a person has decided) |
 | `--no-pool-check` | off | the lanes skip the exit-pool check at entry (tests only) |
 | `--trust-registry-pages` | off | documentation: skip the viewer fetch, the page count from the registry (PROPOSED 2026-09-07; A/B first); passed to a documentation lane launched alone (`--lanes documentation:N`) - in ONE BATCH the launched lane is identification and the flag is not passed on |
-| `--relaunch-wait` | 60 | seconds before relaunching a crashed lane |
+| `--relaunch-wait` | 0 (= the fleet's own 60 s) | seconds before relaunching a crashed lane |
 | `--relaunch-cap` | 3 | relaunches per lane per hour before the fleet parks it |
 | `--stop-wait` | 180 | seconds for the lanes to leave after `stop` (a lane reads its control file on the minute, then joins its workers) before terminating them |
 | `--within` | 10 minutes | `status`: heartbeats this recent |

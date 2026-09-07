@@ -21,7 +21,7 @@ nothing of the other two; the same tree - phase, source - runs through all three
 |---|---|---|
 | database | Supabase project **NYC CRE Decoded** (East US); `supabase/Supabase.md` · `supabase/supabase.py` · `supabase/schema.sql` | three schemas: `reproduction` (the record - `acris`, `richmond` - and the two boards a person opens, `acris_update`, `richmond_update`), `machinery` (what the code needs and a person never reads: `claims`, `updates`), `reading` (the reading layer for products); the whole database as it stands is the one file `schema.sql` |
 | code | this repo | `supabase/` at the root (the database's pair), then `Reproduction/`: the shared rulebook and one folder per source, each its rulebook, update and workflow (below) |
-| documents | the One Touch, `D:\NYC CRE Decoded\Reproduction\` - the same tree as this repo and the database | `<Source>\By Document\<year>\<MM Mon>\<day>\<id>.pdf` - the day folders from the recorded date, else from a digital id's own date (yyyymmdd at its front), else the id split (`FT_4\4100`) with no day folder (`day_folders`, rulebook.py:54-70); a second workstation writes the identical tree under its own drive and records One Touch paths, then transfers |
+| documents | the One Touch, `D:\NYC CRE Decoded\Reproduction\` - the same tree as this repo and the database | `<Source>\By Document\<year>\<MM Mon>\<day>\<id>.pdf` - the day folders from the recorded date, else from a digital id's own date (yyyymmdd at its front), else the id split (`FT_4\4100`) with no day folder (`day_folders`, rulebook.py:53-69); a second workstation writes the identical tree under its own drive and records One Touch paths, then transfers |
 
 Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or printed.
 
