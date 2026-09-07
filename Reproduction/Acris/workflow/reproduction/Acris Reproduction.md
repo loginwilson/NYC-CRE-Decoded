@@ -1155,3 +1155,55 @@ Levers, a person's: wait (a notice lifts on its own clock; a re-entry 41 min aft
 **01:2x — THE BAND IS 4 / 5 / 6 (login: "sub 4/s is not good ... 4 is the floor and 6 is the ceiling ... 5 is the goal").** MANAGE: floor 4, hold 5-6, hard 6 docs/s, 60 req/s ceiling, width 20..60. Why the 00:56 run sat at 3.2-4.4: this exit gives 40 workers 35 req/s (~0.9 req/s per worker) and the 2005-era numeric documents cost ~10.5 requests each (39,457 requests / 3,751 pdfs), so 40 workers cap out near 4; the goal of 5 needs ~53 req/s ≈ 60 workers here, under the ceiling. Takes effect on the next lane process (the running one keeps 6-7 / cap 40 until it is restarted - a clean stop and one re-entry on the same block).
 
 **01:18 — THE FIFTEENTH NOTICE: THE 00:56 RUN DID NOT SUSTAIN. 22.5 MIN / ~49,000 REQUESTS / ~4,600 PDFS ON 89.106.14.** `run end 22.5 min - REFUSED at 2005081702043001 p8 (5/5 signals, 25103 bytes)`; last PROGRESS 21m: 46,609 requests at 36.7/s, 4,488 pdfs, 4.66 docs/s, width 40/40, manager holding in the band. The fleet stilled every lane, parked (documentation.parked), exit 2; no process, no socket left. What it says: the allowance on this block was about double the three earlier fresh blocks (49k vs 24-28.5k) after a 45-minute cooldown instead of 11-19 - the allowance moves with the pause, which is the escalation model - but it is still tens of thousands of requests, not the millions the golden blocks gave. Tonight this VPN provider's exits are throttled for us whatever the code, rate, ramp or band. Fifteen notices; every entry tonight cost an exit. The sustain test has to run where the exits are not: workstation 2 on the office line, or this station after HOURS of stillness on one block, never minutes.
+
+
+---
+
+## OVERNIGHT VERDICT — 2026-09-07 (what is wrong, and the plan)
+
+login, on a timer, asked for a solid conclusion. Here it is, with the evidence, after ruling out code, workstation, concurrency and time-of-day.
+
+### What is NOT the cause
+
+- **Not the code / the migration.** Two independent proofs. (1) *Same binary, opposite outcomes:* last night's exact OneTouch lane `acris_reproduction.py` produced BOTH a 1,348,076-request clean run (09-03, block 213.254.175) AND a 26,279-request refusal (tonight 00:04, block 173.244.43). (2) *The wire is byte-identical old vs new:* old `_mk_session` and new `make_session` each build a `requests.Session`, set exactly ONE custom header (`User-Agent` = the same Chrome/128 string), mount the same `HTTPAdapter(pool_connections=1, max_retries=0, pool_block=True)`, and issue `session.get(url, headers={"Referer": ...})`. The only structural difference is `pool_maxsize` (old width+4, new MAX_WIDTH+4) which never binds under 40 workers and changes no byte on the wire. There is no header, cookie or TLS difference the migration could have introduced.
+- **Not the workstation.** It is all IP. A blocked IP returns the Bandwidth Notice; a fresh IP does not — until it is spent.
+- **Not two access points (concurrency).** `block_watch.log` socket ticks show exactly ONE process with ESTABLISHED ACRIS connections at every tick, in the golden runs and tonight (`pid N ESTABLISHED=39/40`, never two pids at once). The one-access-point rule held.
+- **Not time-of-day.** 09-05 overnight ran ~7 hours clean; tonight's overnight blocked in minutes. Same hours, opposite result.
+
+### What IS the cause — the exit's request allowance
+
+ACRIS meters a **request allowance per exit IP / range, shared across all our lanes.** Two things about it changed on the night of 09-06:
+
+1. **The allowance SIZE collapsed with the exit.** Golden exits refused at 480k–1,350k requests; every exit since 09-06 20:44 refuses at 24k–49k — a 10–50x smaller budget on the same code. That is the range's reputation, not us. (Corroborating: public IP-info services — ip-api, RDAP — return HTTP 403 to our current exit, i.e. they classify it as a flagged datacenter/VPN range.)
+
+| exit block | when | refused at | note |
+|---|---|---|---|
+| 213.254.175 (Tirana) | 09-03 | 1,348,076 req / 386 min | golden |
+| (various golden) | 09-04/05 | 462k–587k req | 1x60/1x80 |
+| 45.95.243 | 09-06 22:15 | request #1 | pre-spent by sync+reg (below) |
+| 94.20.154 | 09-06 22:41 | 24,000 | fresh, doc-only |
+| 135.136.69 | 09-06 23:11 | 28,524 | fresh, doc-only |
+| 173.244.43 | 09-07 00:04 | 26,279 | fresh, OLD code |
+| 89.106.14 | 09-07 00:56 | ~49,000 / 22.5 min | fresh, 45-min cooldown |
+
+2. **login's sync/registration instinct was right, precisely.** The allowance is shared across the three lanes. The 20:44–21:43 gate-3 **synchronization+registration ONE BATCH** spent ~27,000 requests (reg 17,227 + sync 10,205) on block **45.95.243**. Documentation entered that same block at 22:15 and got an **instant** notice — the budget was already gone. That explains the 10th notice exactly. It does NOT explain the 11th–15th (documentation alone on fresh blocks, each hitting its own ~25-50k budget). **Going forward this is moot: registration and synchronization are both at 100%, so only documentation runs and it gets the whole exit to itself.**
+
+Plus the escalation already recorded: hopping exits shrinks the allowance (quick re-entries got ~25k; a 45-minute pause got ~49k), so **holding one exit and resting for hours between notices** matters.
+
+### Why it LOOKED like the migration
+The migration and the exit-quality collapse fell on the same night (09-06), so they correlate. But they are coincident, not causal: the OLD code fails on tonight's exits, and the NEW code ran clean on 09-06's good exit (173.239.217) for ~20 daytime hours. The confound is the exit, dated by time; not the code.
+
+### THE PLAN — to scale under the timer
+The only scaling axis is **(number of high-allowance exits) x (~5–10 docs/s each)**, because ACRIS caps sustained requests/s per exit at ~57–60 (proven flat across widths) and there is no bulk image download — every page is one request.
+
+1. **Station 2 on the office residential line, VPN OFF.** A real resident IP is ACRIS's normal user and should carry a large allowance; Richmond already runs there cleanly. Documentation only, enter once, hold. This is the single most promising move.
+2. **Station 1 on a KNOWN-GOOD VPN location.** Reconnect ExpressVPN to **Tirana (213.254.175)** or the location behind **173.239.217** — both proven large-allowance. Enter once, hold, rest hours between notices, never hop.
+3. **Do not relaunch sync/registration** (100% done) — documentation keeps the whole exit allowance.
+4. **One board machine** (home); station 2 feeds it by heartbeat.
+5. **Throughput reality (honest):** at ~57 req/s per exit and ~10.5 requests/doc, one exit tops near 5.5 docs/s; two good exits ~10–11 docs/s ~= 17.9M docs in ~20 days best case, ~3–4 weeks with notices/rest. **This week is not physically possible.** Levers to shave it: a third good exit; front-loading the cheaper microfilm bands (~5.4 req/doc -> ~10 docs/s); and the skip-viewer experiment below.
+
+### One throughput experiment worth an A/B (not applied — needs one good exit to test)
+`Acris Documentation.py` fetches the viewer page once per document only to read `TotalPages`. But the **registry already holds the page count** (`registry["pages"]`, filled at 100% by registration — e.g. the cut doc's registry carried `"pages": "4"`). If GetImage serves without a preceding viewer fetch (unknown — the viewer may set a session cookie GetImage checks), trusting `registry["pages"]` and skipping the viewer cuts **one request per document**: a 4-page doc goes 5->4 requests (20% fewer), directly ~10–25% more docs per exit-allowance and more docs/s. The test: on a good exit, fetch a GetImage for a doc whose viewer was never loaded this session; if it returns the TIFF, the optimization is safe. Propose behind a `--trust-registry-pages` flag, default off, A/B before trusting.
+
+### Richmond
+Documentation is complete (2,502,936 / 2,502,936). Its rule is settled and needs no fix: run on the office line WITHOUT the VPN (the courts host sits behind Cloudflare, which challenges VPN exits and serves the residential line). Same rule if it ever needs a re-run.
