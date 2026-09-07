@@ -1,4 +1,4 @@
-# RICHMOND REPRODUCTION
+# Richmond Reproduction
 
 ## 0 · THE FLEET PROGRAM — `Richmond Reproduction.py` (2026-09-03)
 

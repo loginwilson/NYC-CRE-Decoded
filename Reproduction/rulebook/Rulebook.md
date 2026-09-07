@@ -1,4 +1,4 @@
-# THE RULEBOOK
+# Rulebook
 
 The phase's shared rules and machinery: a rule is written once here and every lane of every source on every workstation gets it.
 A source's own rules - its URLs minted from the id, its one user-agent, its refusal detector, where its documents file

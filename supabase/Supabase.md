@@ -1,4 +1,4 @@
-# THE DATABASE
+# Supabase
 
 One Supabase project, **NYC CRE Decoded** (East US), holds every table the process fills, and this folder is how the
 repo reaches it. The mapping is one for one with the tree:

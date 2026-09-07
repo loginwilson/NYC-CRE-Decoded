@@ -1,4 +1,4 @@
-# ACRIS REPRODUCTION
+# Acris Reproduction
 
 The acris reproduction as one program: `Acris Reproduction.py`, the fleet - the source's three cycle lanes (identification, registration, documentation) launched together and watched. Its default is ONE BATCH (login 2026-09-06): identification x5 + registration x5 + documentation x5 in one process on one entry, the widths set by `--lanes`, no rate manager; a lane alone (`--lanes documentation:40`) keeps its managers. The lanes fill `reproduction.acris` (`source | identifier | registry | document`); the board beside them is `../../update/Acris Update.py`, the audit `../enumeration/Acris Enumeration.py`. Section 0 is this program's authority; everything after it is the record.
 
