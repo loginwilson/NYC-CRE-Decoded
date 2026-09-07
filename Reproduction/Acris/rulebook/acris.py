@@ -21,6 +21,12 @@ BASE = "https://a836-acris.nyc.gov/DS/DocumentSearch"
 
 # ONE user-agent, set deliberately, never rotated (fetch_pages.py's history: the edge flipped four
 # times between 08-24 and 08-31; this string is the one that has served the 1x40 ever since).
+# ⚠ ACRIS IS THE OPPOSITE OF RICHMOND, ON PURPOSE (do not "fix" this to the honest string).  Measured
+# same IP, same second, one variable (fetch_pages.py, 2026-08-31): acris-decoder/1.0 -> HTTP 503, 3,907 B,
+# 0/6 over 40 s; THIS Chrome/128.0.0.0 string -> HTTP 200, 117,954 B, a real document.  ACRIS's edge
+# discriminates on the version string and 503s the honest agent; Richmond's courts host serves the honest
+# nyc-cre-decoded/1.0 and challenges by EXIT (richmond.py).  The access method is per source; a 503 here is
+# never cured by identifying honestly - that is the proven 503 (see the UA + deadlock memory).
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
       " (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 
