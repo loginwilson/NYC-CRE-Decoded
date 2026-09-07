@@ -269,3 +269,14 @@ recording is PROVISIONAL: the recorded date (and whatever else recording fills) 
 registry adds nothing" means nobody goes back. THE RULE TO ADD (gate 3 or the first window after): a registry without a recorded
 date older than N days is claimed again by the registration lane and re-read; the counters do not move; the re-read that still
 finds no recorded date waits again. The same shape as a pending document. Not tonight's change; written here so it is not lost.
+
+2026-09-06 21:0x — 0009 THE PROVISIONAL REGISTRATION, APPLIED AND PROVEN (login: "if something is filed and has a CRFN and it
+doesn't have a recording yet, we catch it ... fix those before we even go into gate 3"). claim() for registration now offers,
+before the empties, every registry that is an object without a readable recorded date on an id younger than 400 days (the id's
+first eight digits are its date; older and still undated stays as filed - the registration's `absent`); land() keeps a
+registry landed without a recorded date as a cooldown for `--pending-age` (a day for the leveling batch), like a pending
+document, and releases it when a recorded date lands; the counters move only for a new registration. The parser already refuses
+"RECORDED / FILED: N/A" (no made-up date), so a re-read before recording lands the same shape and cools again. Proven by
+`test_provisional.py` on throwaway rows in a rolled-back transaction, before the push and again after: ALL OK (8 checks); the due
+query reads the recorded index and lists 500 in 425 ms. 8,876 real registries are due tonight - gate 3's registration crew
+takes them first, then the new documents the sync finds. `--pending-age "1 day"` on the batch.

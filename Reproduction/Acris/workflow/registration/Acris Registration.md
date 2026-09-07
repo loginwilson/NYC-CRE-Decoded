@@ -54,3 +54,10 @@ Beside this file, never in git: `registration.lock`, `registration.log` (every l
 2026-09-04 — the review against the cycle: the lane module's amendments (the rebatch, the quiet rule, the non-blocking wait and ramp) apply here unchanged; nothing of this lane's own changed. The batch width in the fleet is 10.
 
 2026-09-03 — written from the register floor of `acris_reproduction.py` and `rd_parse.py`, every line read; the parser copied verbatim. Proven offline against a synthetic detail page in the real page's shape and against the key set of a real registry row, and by a simulated run against the live cloud with throwaway rows and no ACRIS request. Not yet proven: a real fetch, which waits for the data move.
+
+2026-09-06 21:0x — A REGISTRATION BEFORE RECORDING IS PROVISIONAL (migration 0009). ACRIS issues the document id and the CRFN
+at indexing and records later; until then the detail page says "RECORDED / FILED: N/A" and the registry has no `recorded` key.
+The lane's claims now bring such registries back (ids younger than 400 days) once their cooldown - `--pending-age`, a day on the
+leveling batch - has run out, and the re-read lands the whole registry again; a recorded date releases it, N/A cools it again.
+Nothing in this file changes: the rule lives in claim() and land(). 8,876 such registries (the old lane's, 2025-10-29 ..
+2026-08-19) are the first work of the gate-3 batch.
