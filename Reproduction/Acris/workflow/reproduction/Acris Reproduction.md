@@ -1224,3 +1224,24 @@ Documentation is complete (2,502,936 / 2,502,936). Its rule is settled and needs
 
 **Two stations need no shard plan:** the cloud `claim()` hands out empty cells in id order, atomic and skip-locked, so both stations draw from one list with no overlap; the order is numeric years first, then BK_, then FT_. (The old lane's `--hi 2014` was that lane's own shard; the GitHub lane claims without bounds.)
 
+
+### CORRECTION (2026-09-07, on login's challenge) — re-entry timing is SECONDARY; the range baseline is the cause
+
+login: "if the argument is that we were re-entering too quick, isn't that countered by the fact we spent all of 09-05/06 restructuring and NOT touching ACRIS?" Correct, and it fixes two things I said:
+
+1. **There was no 20-hour clean run on 173.239.217.** Those were the passive exit-pool draws (every 10 min) while the VPN sat on that exit during the restructuring — not a lane running. In fact 173.239.217 was already refusing (the 9th notice, 09-05 23:52, instant). I conflated an exit-draw with lane activity. Withdrawn.
+2. **The document lane rested ~31 hours** (last run 09-05 14:44 -> next 09-06 22:14), and the first FRESH-block document entry after that rest (94.20.154, 22:41) still got only ~24,000 requests. **So a long cooldown does NOT restore a large allowance.** Re-entry timing / hopping is a real but SECONDARY modulation (49k after 45 min vs 24k after a quick re-entry, same class of range); it is not the cause.
+
+**The cause is the exit RANGE's baseline allowance, and it has been DECLINING across the whole week, on the OLD code, independent of the migration and of our re-entry cadence:**
+
+| date | exit refused at | code |
+|---|---|---|
+| 09-03 | 1,348,076 req | old |
+| 09-04 08:37 | 127,465 req | old |
+| 09-04 17:53 | 462,784 req | old |
+| 09-05 15:18 | 60,028 req | old |
+| 09-06/07 | 24,000-49,000 req | old AND new |
+
+Small allowances (127k, 60k) appear on the OLD code on 09-04 and 09-05 — before the migration ran any document and before tonight's hopping. The trend is the VPN provider's ranges accumulating a datacenter/VPN reputation with ACRIS's edge over the days we've drawn from them (or ACRIS tightening on those ASNs). Rest does not clear it; a fresh IP from the same pool inherits it.
+
+**So the plan is unchanged but on firmer ground:** the escape is a range NOT on that pool — the OFFICE residential line (a real resident, never carrying the ExpressVPN reputation), or a deliberately chosen location we have proof was large (Tirana / 213.254.175 = the 1.35M run), accepting it too may have decayed. The office line is the clean bet.
