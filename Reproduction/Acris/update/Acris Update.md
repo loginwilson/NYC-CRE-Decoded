@@ -62,3 +62,5 @@ the three lane rows, and a row per workstation running a lane - its own landed c
 its rate from the board's own subtraction, its workers, `last_seen` (the heartbeat; fresher than `--fresh` = alive) and its
 last word. The heartbeats table is gone into those rows; the claims moved out of sight into the schema `machinery`. The
 board reads and writes the one table; `show` prints every row.
+
+2026-09-06 22:38 — what a person opens is `reproduction.acris_update` (0010): this board's rows for acris alone, the phase row first, the lanes in the cycle's order, then the workstation rows, columns in reading order (Supabase.md 0010). This program must run beside the lanes: started 22:34 tonight, four minutes after the document lane - the pace columns were blank until its first tick.
