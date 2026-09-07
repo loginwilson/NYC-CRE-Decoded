@@ -1,6 +1,6 @@
 # Richmond Identification
 
-The identification lane of the richmond reproduction, as one program: `Richmond Identification.py`. It keeps the table live at the county's date edge: one monitor and a few walkers behind one entry. The monitor reads today's listing every ten seconds and lands every new internal id as a new row, the `doc_id` cell and nothing else, within seconds of the county listing it; every quarter hour it re-reads the trailing thirty days so a filing the county lists late lands too; on a start after downtime it walks the days it missed. This file is the lane's own authority; the cycle's is `../reproduction/Richmond Reproduction.md`; the source's shared rules are in `Reproduction/Richmond/rulebook/richmond.py` (its document is `Richmond.md` beside it).
+The identification lane of the richmond reproduction, as one program: `Richmond Identification.py`. It keeps the table live at the county's date edge: one monitor and a few walkers behind one entry. The monitor reads today's listing every ten seconds and lands every new internal id as a new row, the `identifier` cell and nothing else, within seconds of the county listing it; every quarter hour it re-reads the trailing thirty days so a filing the county lists late lands too; on a start after downtime it walks the days it missed. This file is the lane's own authority; the cycle's is `../reproduction/Richmond Reproduction.md`; the source's shared rules are in `Reproduction/Richmond/rulebook/richmond.py` (its document is `Richmond.md` beside it).
 
 ## Why the date edge
 
@@ -11,9 +11,9 @@ Richmond County lists its recorded instruments by date range, with every row car
     python "Richmond Identification.py" --edge 2026-08-25      the first start names the last day walked
     python "Richmond Identification.py"                        afterwards identification.edge.json remembers it
 
-One machine: the edge is local state. `--width` defaults to 4 walkers (the day window, the heal, a catch-up). `--every 10 --heal-every 900 --heal-days 30 --pace 0.3` are the cadence knobs. `identification.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
+One machine: the edge is local state. `--width` defaults to 4 walkers (the day window, the heal, a catch-up). `--every 10 --heal-every 900 --heal-days 30 --pace 0.3` are the cadence knobs. `--drive` and `--fresh-days` are this lane's own and only for `--also documentation:N` (the hosted documentation crew's drive label and its 7-day scan lag); the lane alone needs neither. `identification.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
 
-Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+Every lane also takes the shared flags (`--host`, `--width`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
 
 ## The rules
 
@@ -54,11 +54,11 @@ Beside this file, never in git: `identification.edge.json`, `identification.hole
 
 ## History
 
-2026-09-05 — the review against the code: when `insert_ids` failed, the answered windows were already forgotten and their ids neither in `seen` nor re-asked - lost for the run, and the edge could move past them; the answers now stay on the crew for the next minute. The three asks are the monitor's; the crew's own transport retry comes on top.
+2026-09-03 — written from `rc_lane.py` (the probe and the heal cadence), `rc_window.py` (the listing route, the row pattern, the control) and the richmond audit's window rules, every line read. Proven offline against a fake crew and a fake cloud (the control first, the catch-up from the edge, the heal window inclusive of thirty days, ids landed once, the edge moving only after the rows are in, a hole after three failed asks, a control that fails three asks re-asked, a broken control parking the lane, the fail-closed edge file) and by a simulated walk against the live cloud with throwaway ids and no county request: a catch-up window, a heal window, the day window with a filing appearing mid-run, a window failing every ask recorded as a hole, the edge file at today, the counters moved by exactly the rows inserted. Not yet proven: a real listing read from the lane, which waits for the data move.
 
 2026-09-04 (night) — the review against the record: `rebatch` added so a dead wire can never leave a window stuck as in flight (the edge would have frozen behind it); births set to the county's 0.4 s; the inherited cycle named dormant. Proven again offline and by the simulation.
 
-2026-09-03 — written from `rc_lane.py` (the probe and the heal cadence), `rc_window.py` (the listing route, the row pattern, the control) and the richmond audit's window rules, every line read. Proven offline against a fake crew and a fake cloud (the control first, the catch-up from the edge, the heal window inclusive of thirty days, ids landed once, the edge moving only after the rows are in, a hole after three failed asks, a control that fails three asks re-asked, a broken control parking the lane, the fail-closed edge file) and by a simulated walk against the live cloud with throwaway ids and no county request: a catch-up window, a heal window, the day window with a filing appearing mid-run, a window failing every ask recorded as a hole, the edge file at today, the counters moved by exactly the rows inserted. Not yet proven: a real listing read from the lane, which waits for the data move.
+2026-09-05 — the review against the code: when `insert_ids` failed, the answered windows were already forgotten and their ids neither in `seen` nor re-asked - lost for the run, and the edge could move past them; the answers now stay on the crew for the next minute. The three asks are the monitor's; the crew's own transport retry comes on top.
 
 2026-09-05 23:54 — THE FIRST REAL RUN, against the cloud with the rows in (login: "spend the night resyncing ... Richmond, you
 could do more, but one batch"): `--edge 2026-08-31` (the old rc_lane's last live page was 09/01/2026 page 7 at 12:50; the
@@ -66,3 +66,5 @@ cloud's newest recorded date was 2026-09-01), the calibrated width 4. Exit pool 
 births 0 s apart. The control window parsed; the catch-up (09-01..09-05) and the trailing heal listed 2,625 ids and
 inserted 435 new rows by 23:56:09, holes 0, the edge at 2026-09-05; today's listing was empty at midnight (a blank is an
 answer). Stopped by `identification.control` at 23:57:09 (exit 0) so the registration lane could take the county alone.
+
+2026-09-07 — the audit against the code: the cell is `identifier` (0015 renamed the column; the rules table already said so) in the first line and in the program's docstring; `--drive` and `--fresh-days` named as the lane's own for `--also documentation:N` and taken off the shared list; the history in date order.

@@ -29,12 +29,12 @@ Columns, in reading order: `source`, `lane`, `status`, `as_of_et` (Eastern), the
 
 | rule | what the board does | origin |
 |---|---|---|
-| the counters are the lanes' | `land()` adds exactly what was new to a lane's landed and to the phase's landed (rows whose other cell was already filled); `insert_ids()` adds new rows to every needed and to identification's landed. The board never counts the table | SCHEMA.md, the counting rule |
+| the counters are the lanes' | `land()` adds exactly what was new to a lane's landed and to the phase's landed (rows whose other cell was already filled); `insert_ids()` adds new rows to every needed and to identification's landed. The board never counts the table | `Reproduction/rulebook/Rulebook.md`, the counting rule |
 | one subtraction | rate and increase come from the same subtraction of landed between the board's own readings, nearest to 60 s and to 5 min back; the readings ring lives in `update.state.json` and survives a restart | "5.42/s with +0" on the old board, 2026-08-23 |
 | the denominator | every percentage is over needed | login 2026-08-23 |
-| four statuses, computed | complete: landed >= needed, needed > 0 · stalled: the lane's last word is a refusal or a wall · active: the counters moved in the last window · pending: everything else. The phase row is stalled if any lane's last word is a rejection | login 2026-08-23 (four and only four); SCHEMA.md 2026-09-03 (the status follows the lane) |
-| measured movement outranks every proxy | a row whose counters moved is active whatever the heartbeats' freshness says - unless its last word is a rejection: stalled outranks active (the row above) | ACRIS REPRODUCTION.md §4 |
-| eta follows status | complete -> "complete"; pending or stalled -> "paused"; active -> from the rate and what remains, on both bases | ACRIS REPRODUCTION.md §4 |
+| four statuses, computed | complete: landed >= needed, needed > 0 · stalled: the lane's last word is a refusal or a wall · active: the counters moved in the last window · pending: everything else. The phase row is stalled if any lane's last word is a rejection | login 2026-08-23 (four and only four); `Reproduction/rulebook/Rulebook.md` 2026-09-03 (the status follows the lane) |
+| measured movement outranks every proxy | a row whose counters moved is active whatever the heartbeats' freshness says - unless its last word is a rejection: stalled outranks active (the row above) | `../workflow/reproduction/Acris Reproduction.md` §4 |
+| eta follows status | complete -> "complete"; pending or stalled -> "paused"; active -> from the rate and what remains, on both bases | `../workflow/reproduction/Acris Reproduction.md` §4 |
 | never clamp | landed outside 0..needed publishes no metrics: the row says OUT OF BOUNDS and names `reconcile` | the anchor that published landed = -20,721,031, 2026-08-23 |
 | reconcile on demand | `reconcile` recounts from the primary key and the four partial indexes (index-only) and overwrites the counters, printing the drift; after the data move and after a hand edit, never on the tick | login 2026-09-03: "why are we counting all rows every hour?" |
 | a tick never kills the board | a cloud hiccup logs, keeps the readings, and the next tick continues | the board must always run |
@@ -48,7 +48,7 @@ The minute kit says what is happening now; the window kit is the performance ove
 
 ## Working files
 
-Beside this file, never in git: `update.state.json` (the readings ring), `update.log`, `update.lock`.
+Beside this file, never in git: `update.state.json` (the readings ring), `update.log`, `update.lock`. Exit codes: 0 stopped · 1 refused to start (a board already runs on this machine: `update.lock`) · 5 crash.
 
 ## Open
 
@@ -56,9 +56,9 @@ Beside this file, never in git: `update.state.json` (the readings ring), `update
 
 ## History
 
-2026-09-05 — the review against the code: stalled outranks active (board.py tests the rejection before the movement); the increase now prints with its sign (`+288`), as this file's example always showed.
+2026-09-03 — written from `routine_update.py` and `board_truth.py` (the five metrics, the two windows, the four statuses, one subtraction, never clamp, no scan on a tick) against the tables and functions of migration 0001, every line read. Proven offline (the rate, increase, percentage and eta math over synthetic readings; the status table; the fold of heartbeats; the out-of-bounds gate) and by a simulation against the live cloud with throwaway counters and heartbeats (the rows written and read back, active on movement, pending without a heartbeat, stalled on a refusal's last word, complete at needed, the fold of two workstations, the ring surviving a restart, reconcile restoring the empty table's zeros). Not yet run beside real lanes: that waits for the data move.
 
-2026-09-03 - written from `routine_update.py` and `board_truth.py` (the five metrics, the two windows, the four statuses, one subtraction, never clamp, no scan on a tick) against the tables and functions of migration 0001, every line read. Proven offline (the rate, increase, percentage and eta math over synthetic readings; the status table; the fold of heartbeats; the out-of-bounds gate) and by a simulation against the live cloud with throwaway counters and heartbeats (the rows written and read back, active on movement, pending without a heartbeat, stalled on a refusal's last word, complete at needed, the fold of two workstations, the ring surviving a restart, reconcile restoring the empty table's zeros). Not yet run beside real lanes: that waits for the data move.
+2026-09-05 — the review against the code: stalled outranks active (board.py tests the rejection before the movement); the increase now prints with its sign (`+288`), as this file's example always showed.
 
 2026-09-06 — 0007: THE TWO TABS ARE ONE TABLE. login: "You have a database, and you have an updating table that shows you how
 you're progressing on filling in that database." `machinery.updates`, source first: the phase row (`lane = reproduction`),
@@ -74,3 +74,7 @@ board reads and writes the one table; `show` prints every row.
 2026-09-07 13:4x — 0018: the Table Editor sorts a view by its first column (login, seeing the rows scrambled: "That doesn't look good"); every row carries the source, the totals read `reproduction total` ... `documentation total`, an unclaimed workstation block reads `pending`.
 
 2026-09-07 14:0x — 0019: the spacer rows blank (login: "can they just be blank to act as a spacer? ... Just an aesthetic thing"): every column text, a blank is one space, the as-of to the second.
+
+2026-09-07 — the audit of the source folder against the code: the origins name `Reproduction/rulebook/Rulebook.md` and `Acris Reproduction.md` (no `SCHEMA.md` exists since 09-05 - it became Rulebook.md's section "The table"); the exit codes written (0 · 1 a board already runs here · 5); the program's docstring names `../../rulebook/rulebook.py`; this history in one order, oldest first.
+
+2026-09-07 14:29 — a workstation row is that machine's total, all time (login, reading the board: "this last part where it shows the landed, the needed, and the percentage is false because it's supposed to show the total for that workstation ... right now, everything should be actually the same between Total and Workstation 1"). Everything before the second workstation was this machine's, so workstation 1 was seeded to the totals (all four rows, both sources; acris 3,779,204 documents, 21,631,885 identifications and registrations); from here `land()` and `insert_ids()` credit each landing to its workstation and the total alike, and the workstation rows sum to the total. The boards restarted on a fresh readings ring so the seed showed no false rate.

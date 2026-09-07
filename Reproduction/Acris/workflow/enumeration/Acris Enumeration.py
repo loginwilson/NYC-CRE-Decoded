@@ -72,7 +72,7 @@ import requests
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # enumeration -> workflow -> Acris -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import acris                                                    # noqa: E402
@@ -376,7 +376,6 @@ class Probe:
         self.answers = {}                 # crfn -> doc_id | None (void) | "unknown"
         self.reasons = {}
         self.reqs = 0
-        self.transport_streak = 0
         self.transport_hits = []          # (time, worker) of recent wire errors: every worker inside 60 s is the session closed
         self.last_success = time.time()
         self.refused = None
@@ -427,7 +426,6 @@ class Probe:
                 doc_id = self.ask(crfn)
                 with self.lock:
                     self.answers[crfn] = doc_id
-                    self.transport_streak = 0
                     self.last_success = time.time()
             except rulebook.Refused as e:
                 with self.lock:
@@ -437,7 +435,6 @@ class Probe:
             except rulebook.Transport as e:                 # the wire, never an answer: asked again after a pause; every worker hit = the session closed
                 now = time.time()
                 with self.lock:
-                    self.transport_streak += 1
                     self.transport_hits.append((now, born))
                     self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= rulebook.HANGUP_WINDOW_S]
                 if not self.stop.is_set():
@@ -492,7 +489,6 @@ class Probe:
         """ONE entry: a fresh pooled session, the connections born --stagger apart."""
         self.stop = threading.Event()
         self.transport_hits = []
-        self.transport_streak = 0
         self.last_success = time.time()
         self.session = rulebook.make_session(self.width, acris.UA)
         self.workers = []

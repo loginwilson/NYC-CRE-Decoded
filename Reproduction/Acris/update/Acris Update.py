@@ -16,7 +16,7 @@ counts the workflow table.
     python "Acris Update.py" reconcile       recount landed and needed from the table's indexes and overwrite
                                              the counters: after the data move, after a hand edit - never on the tick
 
-This file's own authority is Acris Update.md beside it; the shared rules are in ../../rulebook.py.
+This file's own authority is Acris Update.md beside it; the shared rules are in ../../rulebook/rulebook.py.
 
 The status of a row is computed, never hand-set:  complete (landed >= needed) · stalled (the lane's
 last word is a refusal or a wall) · active (the counters moved in the window) · pending (everything
@@ -31,7 +31,7 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[1]                       # update -> Acris -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 
 import rulebook  # noqa: E402
 

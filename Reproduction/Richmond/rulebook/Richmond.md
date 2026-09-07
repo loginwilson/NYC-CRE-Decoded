@@ -14,12 +14,12 @@ The rules every richmond lane shares, as one module: `richmond.py`. The Richmond
 | the control window | `CONTROL` = 2026-08-19 to 2026-08-20, 315 documents: a window KNOWN to hold rows; page 1 must parse rows or the parser is broken (`ProbeBroken`) and no zero from it may be believed | - |
 | the rows | `parse_listing(html)` -> recorded, type, internal_id, instrument, split per `<tr>` so the pattern can never bleed across rows; `page_count(html)` reads "Page 1 of 18" -> 18, None when the page carries no pager (an empty window) | 2026-08-21 |
 | our id | `doc_id(internal_id)` = `RC_` + the INTERNAL id (the `ViewDocumentInfo` key, unique) - never the instrument number, which repeats across eras: two namespaces | 2026-08-21 |
-| the detail page | `detail_url(internal_id)` -> `Search/viewDocumentInfo/<id>`; `is_detail(html)` = the page carries RECORDED DETAILS | 2026-08-21 |
+| the detail page | `detail_url(internal_id)` -> `Search/viewDocumentInfo/<id>`; a page is a detail when it carries RECORDED DETAILS - `parse_detail` (below) makes that test itself and answers None otherwise | 2026-08-21 |
 | the image lag | `IMAGE_LAG_DAYS` = 7: "No Image Available At This Time" inside the lag is `pending`, outside it `absent` | 2026-08-25 |
 
 ## The refusal
 
-`check_refused(html, where)` raises `richmond.Refused` - a `lane.Refused`, so a crew parks on it exactly as on the ACRIS notice page: stop, do not retry, do not rotate. The shapes: "captcha" or "access denied" in the first 4,000 characters, or "blocked" on a page that carries no `ViewDocumentInfo` link. Neither the shell nor the unauthorized answer below is a refusal.
+`check_refused(html, where)` raises `richmond.Refused` - a `rulebook.Refused`, so a crew parks on it exactly as on the ACRIS notice page: stop, do not retry, do not rotate. The shapes: "captcha" or "access denied" in the first 4,000 characters, or "blocked" on a page that carries no `ViewDocumentInfo` link. Neither the shell nor the unauthorized answer below is a refusal.
 
 ## The grant rule
 
@@ -51,13 +51,14 @@ Three outcomes, never two - login 2026-08-25: "we have the url, if it doesnt sho
 - The mint takes a bare id: no grant rule. `mint_referer(internal_id)` is the detail page it is reached from (spelled `ViewDocumentInfo` as the browser sent it; `detail_url` spells the site's own link `viewDocumentInfo` - the county's routing answers both and both ran live).
 - The token EXPIRES (~10 min, 2026-08-22): mint and pull in one breath, never a buffer of tokens.
 - **The courts host gates on the user-agent** (2026-08-22, one variable, everything else identical): the library default `python-requests/2.34.2` hangs to a ReadTimeout at 45 s, 2 of 2; this project's honest `UA` answers 200 and the full PDF in 1.5 s, 2 of 2. So the pull carries the same honest string with `PULL_HEADERS` (Referer the clerk's front door, Accept `application/pdf,*/*`). A browser string was measured to buy nothing and would make the client dishonest.
+- **Cloudflare in front of the courts host challenges by the address** (2026-09-06): HTTP 403 carrying `cf-mitigated: challenge`, the body the "Just a moment... Enable JavaScript and cookies to continue" page - `is_challenge(status, headers, body)` reads the shape. Cloudflare answers before the courts application sees the request, so a challenge is never about the document and never about the request: measured 21:1x-21:4x one variable at a time, the clerk minting every token, it came back for the old lane's request byte for byte, for three user-agent strings, for a socket bound to the Wi-Fi adapter, for Windows' own `curl.exe` and for a fetcher on a datacenter network with no VPN and none of our code; with the VPN off at 21:57 the same code on the home line (69.204.251) pulled 536 pdfs in two minutes, 0 fails. A challenge is a bot check on the address we come from: the lane parks at once (exit 2), no hold and no probe (a probe answers the same challenge), and the message names the cure - a line without the VPN. Never a browser disguise: a client that solves a bot check lies.
 - `is_pdf(data)`: a PDF is a PDF only when the body starts `%PDF`.
 - `fresh(registry, days)`: inside the scan lag, a document with no image yet is `pending`, not `absent`. An UNREADABLE date is always inside the lag - guessing wrong records a scanned document as having no scan forever; staying pending costs one re-ask (2026-08-26). `recorded_date(registry)` reads the clerk's M/D/YYYY.
-- `canonical_path(doc_id, registry)` -> `storage.canonical("richmond", doc_id, recorded date)`: `D:\NYC CRE Decoded\Reproduction\Richmond\By Document\<year>\<MM Mon>\<day>\<id>.pdf` from the RECORDED date (the id's digits are a submission sequence, not a date); with no readable date the id split (`RC_1\9003`), the old lane's rule (2026-09-05).
+- `canonical_path(doc_id, registry)` -> `rulebook.canonical("richmond", doc_id, recorded date)`: `D:\NYC CRE Decoded\Reproduction\Richmond\By Document\<year>\<MM Mon>\<day>\<id>.pdf` from the RECORDED date (the id's digits are a submission sequence, not a date); with no readable date the id split (`RC_1\9003`), the old lane's rule (2026-09-05).
 
 ## The access shape - and why the cycle is dormant here
 
-The county was measured under the DRUMROLL RULE (`Richmond Reproduction.md` §3): no pacer, no governor, latency is the only governor; 160 concurrent connections ran 26 hours clean; restarts are free; the only safety is stop-on-refusal. What it objects to is a handshake burst - 160 cold TLS opens in one instant answered SSLError across the board - so births are 0.4 s apart and keep-alive removes every later handshake. Identification keeps the census's polite 0.3 s between the pages of one window and registration keeps it between the details of one page (its pages fan out across the walkers) - measured over 2.4 million requests without a trip. The courts host hangs the library-default user-agent and serves the honest one.
+The county was measured under the DRUMROLL RULE (`Richmond Reproduction.md` §3): no pacer, no governor, latency is the only governor; 160 concurrent connections ran 26 hours clean; restarts are free; the only safety is stop-on-refusal. What it objects to is a handshake burst - 160 cold TLS opens in one instant answered SSLError across the board - so births are 0.4 s apart and keep-alive removes every later handshake. Identification keeps the census's polite 0.3 s between the pages of one window and registration keeps it between the details of one page (its pages fan out across the walkers) - measured over 2.4 million requests without a trip. The courts host hangs the library-default user-agent and serves the honest one. In front of the courts host, Cloudflare decides by the address, whatever the user-agent: it challenges the VPN's exits and datacenter addresses and serves the residential line (2026-09-06: two exit blocks on two nights and a datacenter fetcher challenged; the VPN off at 21:57, the same code on the home line pulled 536 pdfs in two minutes). The clerk's own pages serve through the tunnel. So richmond documentation runs on a line WITHOUT the VPN, ACRIS runs ON it, and one machine's tunnel is system-wide: workstation 2 (the office IP) takes richmond documentation.
 
 The lanes inherit the cycle from `rulebook.py` (login's acris design: one entry, staggered births, a hang-up when the whole width dies with nothing landing, a 60-s wait, one re-entry on a fresh batch). At this county it is DORMANT: no session close was ever measured here, so the hang-up fires only when the wire itself dies (wifi, a dead host) - the right thing then. The walkers drop their cut windows and pages at a hang-up and ask them again at the next heal or walk; documentation drops its claims and takes fresh ones. login 2026-09-04: "the way it works doesnt require this whole batch, enter, stagger, redial, exit, rebatch approach ... richmond can just enter and hammer" - the record agrees.
 
@@ -68,11 +69,11 @@ The lanes inherit the cycle from `rulebook.py` (login's acris design: one entry,
 | identification | `BASE`, `UA`, `WINDOW_DAYS`, `CONTROL`, `windows`, `listing_url`, `parse_listing`, `page_count`, `doc_id`, `check_refused`, `IMAGE_LAG_DAYS` |
 | enumeration | `UA`, `WINDOW_DAYS`, `START`, `CONTROL`, `windows`, `listing_url`, `parse_listing`, `page_count`, `doc_id`, `check_refused`, `Refused`, `ProbeBroken` |
 | registration | `BASE`, `UA`, `WINDOW_DAYS`, `CONTROL`, `windows`, `listing_url`, `parse_listing`, `page_count`, `doc_id`, `detail_url`, `parse_detail`, `premature`, `check_refused`, `IMAGE_LAG_DAYS` |
-| documentation | `BASE`, `UA`, `IAPPS`, `PULL_HEADERS`, `mint_url`, `mint_referer`, `classify_mint`, `is_pdf`, `fresh`, `canonical_path`, `check_refused`, `Refused`, `IMAGE_LAG_DAYS` |
+| documentation | `BASE`, `UA`, `IAPPS`, `PULL_HEADERS`, `mint_url`, `mint_referer`, `classify_mint`, `is_pdf`, `is_challenge`, `fresh`, `canonical_path`, `check_refused`, `Refused`, `IMAGE_LAG_DAYS` |
 | reproduction | `IMAGE_LAG_DAYS` - the fleet's `--fresh-days` default |
 | update | nothing - the board never talks to the source |
 
-The module imports `lane` (for `Refused`) and `storage` (the One Touch layout). It makes no request of its own.
+The module imports `rulebook` (for `Refused` and `canonical`, the One Touch layout). It makes no request of its own.
 
 ## Working files
 
@@ -80,8 +81,10 @@ None. The county's refusal shapes are not preserved as files yet: a refusal here
 
 ## History
 
-2026-09-05 — the review against the code: the 0.3-s pace is per page in identification and per detail in registration; the two spellings of the detail route named.
-
 2026-09-03 - the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the image section (two hosts, three outcomes, the honest user-agent at the courts host) added when the documentation lane was written. Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
 
 2026-09-04 (night) - the review of every richmond file against the record (login: "finish richmond the same way"): nothing in this module changed; the access shape written down above, with the finding that the cycle is dormant at this county.
+
+2026-09-05 — the review against the code: the 0.3-s pace is per page in identification and per detail in registration; the two spellings of the detail route named.
+
+2026-09-07 — the audit against the code (every richmond file): the module imports `rulebook`, not `lane` and `storage`, and `Refused` / `canonical` are named as its; `is_challenge` and Cloudflare's challenge written into the image section, the access shape and the callers' table (the code and Richmond Documentation.md had carried the rule since 2026-09-06); `is_detail` dropped from the module - no lane called it, `parse_detail` makes the test itself; the clerk's date read by one parser (`_clerk_date`) for `image_state` and `recorded_date`, the answers unchanged; the history in date order.

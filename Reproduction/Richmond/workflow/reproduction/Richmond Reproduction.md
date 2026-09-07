@@ -1,19 +1,5 @@
 # RICHMOND REPRODUCTION
 
-> Reproduce Richmond County's recorded-instrument corpus in
-> `Legal Instruments.db` — every doc id, its recorded details, its image —
-> complete, current within minutes, and PROVEN so by the update board.
-> Closed COMPLETE and week-audited 2026-08-28. This file is the authority
-> for what runs richmond and what "right" looks like; change the lane's
-> shape in `rulebook.py`, change the rules HERE.
->
-> Three named parts (login 2026-08-28): **THE CYCLE** (the pipeline that
-> reproduces), **RICHMOND UPDATE** (the board that tracks it), and
-> **RICHMOND AUDIT** (the enumeration safety check — NOT part of the
-> cycle; run it whenever you want a proof).
-
-> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `rulebook/Rulebook.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `rulebook/Rulebook.md`, the lane md and `rulebook/Rulebook.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `rulebook.py` roster is `Reproduction/rulebook/rulebook.py` + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_`rulebook.py`) are the lane programs under `workflow/`.
-
 ## 0 · THE FLEET PROGRAM — `Richmond Reproduction.py` (2026-09-03)
 
 The cycle's lanes as one launch: `Reproduction/Richmond/workflow/reproduction/Richmond Reproduction.py`
@@ -48,11 +34,39 @@ relaunch can cure and never relaunches what a person must decide.
 | one fleet per machine | `reproduction.lock`; the lanes' own locks refuse a double, so a lane running by hand is left alone | trap 8 |
 | cross-station | `status` reads the workstation rows of `machinery.updates` (workers, last seen, last word) | rulebook/Rulebook.md |
 
-Proven 2026-09-03 by the fleet simulation over fake `Richmond <Lane>.py` programs (the same
-simulation that proved the acris fleet, pointed at this site): the order and the gap; crashes
-relaunched and the cap; a refusal stilling every lane; the drive's return; a lane already running
-refused and left; the mega lane; width, stop and status. Not yet run on the real lanes: that waits
-for the data move. Re-proven 2026-09-04 (night) after the review.
+Proven by the fleet simulation (2026-09-03, again 2026-09-04) and on the real lanes (2026-09-06): the History below.
+
+## History
+
+2026-09-03 — the fleet program written, section 0 its authority. Proven by the fleet simulation over fake `Richmond <Lane>.py` programs (the same simulation that proved the acris fleet, pointed at this site): the order and the gap; crashes relaunched and the cap; a refusal stilling every lane; the drive's return; a lane already running refused and left; the mega lane; width, stop and status. Not yet run on the real lanes: that waits for the data move.
+
+2026-09-04 (night) — re-proven by the simulation after the review.
+
+2026-09-05 05:xx - THE REVIEW OF EVERY FILE AGAINST THE CODE. The fleet (shared `fleet.py`) handed `--edge` to every relaunch, and both walkers refuse an `--edge` that disagrees with their edge file - so a crash relaunch of identification or registration in a fleet started with `--edge` was refused and the lane stayed down; the edge goes on a lane's FIRST launch only now, as section 0 always said. A `stop` written to a control file was never cleared, so the next start read it at its first minute and left with 0 - the lane clears it when it acts and at start. The stop grace is 180 s (a lane reads `stop` on its minute, then joins its workers). The drive label in every launch line is the One Touch's real one (`OneTouch`). The documentation lane's probe verdict, the census's cut window and 31-day window, the monitor's lost insert - each in its lane's own md.
+
+2026-09-06 20:44 — THE FLEET'S FIRST RUN ON THE REAL LANES, the live proof of section 0. `reproduction.log`: 20:44:11 "fleet up on LoginSurface - synchronization x4, registration x4 - one process (mega lane)", pid 9100 (`synchronization` is identification's name before 0017, 2026-09-07), watched every minute; 21:43:52 "synchronization: pid 9100 left after 60 min - stopped cleanly (0)", "every lane has left - fleet done", "fleet end - exit 0" - stopped by login at 21:43 with every lane. What the run did is the gate-3 record below; the board after it reads every richmond lane 2,502,936 / 2,502,936.
+
+2026-09-06 20:4x — GATE 3 — LEVEL. **Identification and registration level within two minutes.** `python "Richmond Reproduction.py" --lanes identification:4,registration:4 --mega --pending-age "1 day"` (the calibrated widths; login: "you don't even have to limit Richmond"), launched 20:4x beside the ACRIS batch. The sync found 0 new documents (the load carried the old lane's last run and the 499 registered at 00:00 09-06); registration had nothing to register: `richmond registry null = 0`, identification 2,502,936 / 2,502,936, registration 2,502,936 / 2,502,936. Documentation (launched too, "cheap"): 2,502,437 / 2,502,936 - 499 to pull - PARKED 21:05 on Cloudflare's challenge in front of the courts host - not the code (the old lane's exact request), not one exit (a datacenter fetcher with no VPN was challenged too): the courts host's own posture, which has flipped before (Richmond Documentation.md 2026-09-06 21:2x). Richmond reproduction is level on both index lanes; the 499 pages wait on the courts host - one pull tells when.
+
+2026-09-06 22:00 — **DOCUMENTATION LEVEL TOO, with the VPN off (login's theory, proven).** The same lane that Cloudflare challenged through the VPN's exits entered on the home line at 21:57:19 and pulled 536 pdfs in two minutes, 0 fails: documentation 2,502,936 / 2,502,936, 137 pending (scan lag). RICHMOND REPRODUCTION IS LEVEL ON EVERY LANE. The rule it leaves: richmond documentation runs on a line without the VPN, ACRIS on the VPN - workstation 2 (the office IP) takes richmond documentation (Richmond Documentation.md, Launch).
+
+2026-09-07 — the audit against the code: section 0 opens the file and the decoder era sits under its own dated banner below; the fold's renamed names repaired (`fleet.py`, `rc_lane.py`); the proof paragraph and the gate-3 record moved here in date order, with the 2026-09-06 run as the fleet's live proof; the program's five unused wrappers dropped (`main()` calls the machinery directly) and its docstring names section 0 as where the rules of lanes together are written.
+
+## The decoder-era record (2026-08-28 to 2026-09-05)
+
+> **Reading order (2026-09-03).** Section 0 is the fleet program that runs this source in the NYC-CRE-Decoded tree; the lane mds under `workflow/` and `rulebook/Rulebook.md` are the authorities for the running code. Sections 1 onward are the pre-repo authority - the decoder era, `Legal Instruments.db`, the old lane files - kept whole as the record of what was measured. Where they contradict a lane's md or `rulebook/Rulebook.md`, the lane md and `rulebook/Rulebook.md` win. Translations: an empty cell is NULL (the old `''`); the two verdict words are `pending` and `absent` (the old `imageless` / `unservable` are `absent`); the to-do list is the cloud table (`claim`), not a local db; the old `fleet.py` roster is `Reproduction/rulebook/rulebook.py` (its fleet part) + `<Source> Reproduction.py`; the old lane files (`acris_reproduction.py`, `rc_lane.py`) are the lane programs under `workflow/`.
+
+> Reproduce Richmond County's recorded-instrument corpus in
+> `Legal Instruments.db` — every doc id, its recorded details, its image —
+> complete, current within minutes, and PROVEN so by the update board.
+> Closed COMPLETE and week-audited 2026-08-28. This file is the authority
+> for what runs richmond and what "right" looks like; change the lane's
+> shape in `fleet.py`, change the rules HERE.
+>
+> Three named parts (login 2026-08-28): **THE CYCLE** (the pipeline that
+> reproduces), **RICHMOND UPDATE** (the board that tracks it), and
+> **RICHMOND AUDIT** (the enumeration safety check — NOT part of the
+> cycle; run it whenever you want a proof).
 
 ## 1 · THE CYCLE (login's words — this IS richmond reproduction)
 
@@ -253,11 +267,3 @@ lane mints each one again, and past the 7-day lag (`richmond.IMAGE_LAG_DAYS`) it
 lands `absent` (`Richmond Documentation.md`, the maturation row). There is
 nothing to restore and no task to re-enable: the two 4 AM tasks stay disabled,
 and a long acris run can never be frozen by them again.
-
-**2026-09-05 05:xx - THE REVIEW OF EVERY FILE AGAINST THE CODE.** The fleet (shared `fleet.py`) handed `--edge` to every relaunch, and both walkers refuse an `--edge` that disagrees with their edge file - so a crash relaunch of identification or registration in a fleet started with `--edge` was refused and the lane stayed down; the edge goes on a lane's FIRST launch only now, as section 0 always said. A `stop` written to a control file was never cleared, so the next start read it at its first minute and left with 0 - the lane clears it when it acts and at start. The stop grace is 180 s (a lane reads `stop` on its minute, then joins its workers). The drive label in every launch line is the One Touch's real one (`OneTouch`). The documentation lane's probe verdict, the census's cut window and 31-day window, the monitor's lost insert - each in its lane's own md.
-
-## 7 · GATE 3 — LEVEL (2026-09-06 20:4x)
-
-**Identification and registration level within two minutes.** `python "Richmond Reproduction.py" --lanes identification:4,registration:4 --mega --pending-age "1 day"` (the calibrated widths; login: "you don't even have to limit Richmond"), launched 20:4x beside the ACRIS batch. The sync found 0 new documents (the load carried the old lane's last run and the 499 registered at 00:00 09-06); registration had nothing to register: `richmond registry null = 0`, identification 2,502,936 / 2,502,936, registration 2,502,936 / 2,502,936. Documentation (launched too, "cheap"): 2,502,437 / 2,502,936 - 499 to pull - PARKED 21:05 on Cloudflare's challenge in front of the courts host - not the code (the old lane's exact request), not one exit (a datacenter fetcher with no VPN was challenged too): the courts host's own posture, which has flipped before (Richmond Documentation.md 2026-09-06 21:2x). Richmond reproduction is level on both index lanes; the 499 pages wait on the courts host - one pull tells when.
-
-**22:00 — DOCUMENTATION LEVEL TOO, with the VPN off (login's theory, proven).** The same lane that Cloudflare challenged through the VPN's exits entered on the home line at 21:57:19 and pulled 536 pdfs in two minutes, 0 fails: documentation 2,502,936 / 2,502,936, 137 pending (scan lag). RICHMOND REPRODUCTION IS LEVEL ON EVERY LANE. The rule it leaves: richmond documentation runs on a line without the VPN, ACRIS on the VPN - workstation 2 (the office IP) takes richmond documentation (Richmond Documentation.md, Launch).

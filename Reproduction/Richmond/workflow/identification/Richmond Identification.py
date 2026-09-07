@@ -2,7 +2,7 @@
 
 Keeps the table live at the county's date edge.  Richmond County lists its recorded instruments by date
 range, so the live window is the calendar: the lane's monitor reads today's listing every --every
-seconds and lands every new internal id as a new row - the doc_id cell, nothing else - within seconds of
+seconds and lands every new internal id as a new row - the identifier cell, nothing else - within seconds of
 the county listing it; every --heal-every seconds it re-reads the trailing --heal-days so a filing the
 county lists late (back-dated to its recorded day) lands too; and on a start after downtime it walks the
 days it missed.  One plain GET per listing page, through one pooled session; the walkers take whole
@@ -30,7 +30,7 @@ The rules, kept from the lane that ran before this one (rc_lane.py's monitor and
                failing is recorded in identification.holes.jsonl and re-asked by the next heal
   two names    the internal id (ViewDocumentInfo) is ours: RC_<internal>; the instrument number
                repeats across eras and is never a key
-  the cell     the doc_id only; registration reads the recorded details in its own pass (the listing
+  the cell     the identifier only; registration reads the recorded details in its own pass (the listing
                page it needs for the grant is one request away)
   refusal      a captcha, access-denied or block page = the county's decision: park at once, no retry,
                no rotation
@@ -59,7 +59,7 @@ import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # identification -> workflow -> Richmond -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
 import rulebook  # noqa: E402

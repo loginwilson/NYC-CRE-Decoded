@@ -22,7 +22,8 @@ this file is the richmond site: its lanes in the cycle's order, their widths, it
     python "Richmond Reproduction.py" width documentation=24                  a width into a lane's control file (read within a minute)
 
 This file's own authority is Richmond Reproduction.md beside it (the cycle's authority; section 0 is
-this program).  The rules of lanes together are written once in rulebook.py's docstring.  What is
+this program).  The rules of lanes together are written once in Richmond Reproduction.md section 0 (the
+machinery is rulebook.py's fleet part).  What is
 richmond's own here: three small crews (the county has no metronome, latency is its backpressure, and
 the listing walk is one door by nature), births 0.4 s apart (the county's measured handshake stagger,
 set in each lane); --edge is a DATE (YYYY-MM-DD), handed to identification and registration on a first
@@ -38,7 +39,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 WORKFLOW = HERE.parent                            # reproduction -> workflow
 PHASE = HERE.parents[2]                           # reproduction -> workflow -> Richmond -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
 import rulebook  # noqa: E402
@@ -52,28 +53,9 @@ FRESH_DAYS = richmond.IMAGE_LAG_DAYS
 
 
 def site():
-    """Read at call time so a test may point WORKFLOW / HERE elsewhere."""
+    """The richmond site: its lanes in the cycle's order, their widths, where the lane programs live, and
+    which lanes take --edge on a first start."""
     return rulebook.Site(SOURCE, LANES, WIDTHS, WORKFLOW, HERE, edge_lanes=("identification", "registration"))
-
-
-def parse_lanes(spec):
-    return site().parse_lanes(spec)
-
-
-def Fleet(args):
-    return rulebook.Fleet(site(), args)
-
-
-def status(args):
-    return rulebook.status(site(), args)
-
-
-def stop(args):
-    return rulebook.stop(site(), args)
-
-
-def width(args):
-    return rulebook.width(site(), args)
 
 
 def main():

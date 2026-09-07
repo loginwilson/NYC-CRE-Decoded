@@ -19,14 +19,14 @@ Every URL is minted from the id. No URL, token or key is ever stored: the table 
 
 ## The refusal
 
-ACRIS refuses with HTTP 200 carrying its Bandwidth Notice page - never a status code. `check_refused(data, ctype, where)` raises `lane.Refused`, the one exception a crew parks on (exit 2, no retry, no rotation, the reason written beside the lane).
+ACRIS refuses with its Bandwidth Notice page. On the wire the notice has two shapes: HTTP 200 carrying the page, or an HTTP 307 to `/BandwidthPolicy/ACRIS-BW-POL.html` (measured 2026-09-07 05:42, `../workflow/reproduction/Acris Reproduction.md`) - `requests` follows the redirect, so the lane holds the served policy page and the detector reads it as the same notice. `check_refused(data, ctype, where)` raises `rulebook.Refused`, the one exception a crew parks on (exit 2, no retry, no rotation, the reason written beside the lane).
 
 - Images and PDFs pass at once (a body starting `II`, `MM` or `%PDF`).
 - Everything else is read as **visible text**: markup stripped, entities resolved. The notice is Word-generated HTML whose sentences are split across tags, so the raw bytes never contain the phrases (2026-08-06).
 - Two shapes are a refusal: any of the notice's own phrases (`NOTICE_SIGNALS`: "further access to acris is denied", "acris bandwidth notice", "automated scripts/robots", "exceeded the bandwidth limits", "subscription data services"; or the title "Bandwidth Notice"), or the word bandwidth in the first 2,000 characters of a page that carries no document id.
 - The body is **preserved** as `refusals/refusal-<stamp>.html` beside this file before the exception is raised, so the verdict can be audited. A detector that halted a night on a wifi interstitial had thrown its evidence away (2026-08-26).
 
-A connection cut is not a refusal: the far side closing lines is the hang-up, handled by `rulebook.py` as the cycle - a closed line is redialed by its worker; the whole width closed inside a minute with nothing landing is the session's end: hang up at once, drop the cut batch, 60 s of silence, one re-entry on a fresh batch. Only the notice page is a block, and a block lifts on its own clock - never probed.
+A connection cut is not a refusal: the far side closing lines is the hang-up, handled by `rulebook.py` as the cycle - a closed line is redialed by its worker; the whole width closed inside a minute with nothing landing is the session's end: hang up at once, drop the cut batch, 60 s of silence, one re-entry on a fresh batch. Only the notice page - served outright or reached through the 307 - is a block, and a block lifts on its own clock - never probed.
 
 ## The page count and the imageless verdict
 
@@ -34,10 +34,9 @@ A connection cut is not a refusal: the far side closing lines is the hang-up, ha
 
 ## Where a document files
 
-The One Touch address of a document is a pure function of its id and registry (`canonical_path(doc_id, registry)` -> `storage.canonical("acris", borough, year, month folder, doc_id)`):
+The One Touch address of a document is a pure function of its id and its registry's recorded date: `canonical_path(doc_id, registry)` -> `rulebook.canonical("acris", doc_id, recorded)` = `D:\NYC CRE Decoded\Reproduction\Acris\By Document\<year>\<MM Mon>\<day>\<id>.pdf` (`rulebook.day_folders`, the old lane's rule kept exactly so the moved tree stays true).
 
-- **borough** (`borough_of`): the registry's own BOROUGH line; else the first parcel's BBL digit; else the microfilm id's borough digit (`FT_<borough>...`); else `Unknown`. A registry fact - since 2026-09-05 no longer a folder: the document's place is `Acris\By Document\<year>\<MM Mon>\<day>` from the recorded date (`canonical_path` -> `storage.canonical`).
-- **year / month** (`recorded_ym`): the RECORDED date - the axis that aligns every source; the id's embedded date is the submission date and can lag recording by days. Fallbacks: the document date, then a digital id's own date. None for undated microfilm -> `undated/undated`.
+- **the day folders**: from the RECORDED date (the registry's `recorded`, the source's own `m/d/yyyy` text) - the axis that aligns every source; else a digital id's own date (`yyyymmdd` at its front: the submission date, which can lag recording by days); else, for undated film, the id split (`FT_4\4100`, no day folder). No borough folder: the borough is a registry fact, not a place (login 2026-09-05).
 - `fresh(registry, days)`: recorded within the last `days` - a document without an image yet is `pending`, not `absent`; the documentation lane's `--fresh-days`.
 
 ## The index - an audit, never a discovery source
@@ -77,7 +76,7 @@ login, 2026-08-20: "all 4 url paths result in the exact same format so just figu
 | documentation | `UA`, `viewer_url` (with `detail_url` as the page it is reached from), `check_refused`, `total_pages`, `image_url`, `is_tiff`, `is_placeholder`, `fresh`, `canonical_path` |
 | reproduction, update | nothing - the fleet and the board never talk to the source |
 
-The module imports `storage` (the One Touch layout) and `lane.Refused` (so a refusal here is the same exception every crew parks on); `cloud` is imported lazily for the index's app token. It makes no request of its own except the index calls the enumeration lane asks for.
+The module imports `rulebook` (`canonical`, `env`, `Refused`): `canonical` for the One Touch address, `env` for the index's app token (`SOCRATA_APP_TOKEN`, read at call time, never printed), `Refused` so a refusal here is the same exception every crew parks on. It makes no request of its own except the index calls the enumeration lane asks for.
 
 ## Working files
 
@@ -85,10 +84,12 @@ Beside this file, never in git: `refusals/` - the body of every refusal ever det
 
 ## History
 
+2026-09-03 — the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the index measured the same day (real 17,049,742 / personal 4,544,590, good through 2026-07-31). Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
+
+2026-09-04 (night) — the review of every acris file against the cycle: nothing in this module changed; the callers' table and the refusal paragraph were read against the reviewed lane module. The six refusal pages preserved beside the module's old location were folded into `refusals/` here.
+
 2026-09-05 — the review against the code: `updated_at` named as the table's fourth column; the lazy `cloud` import named; a refusal page that could not be saved is now said so in the Refused message instead of silently.
 
-2026-09-03 - the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the index measured the same day (real 17,049,742 / personal 4,544,590, good through 2026-07-31). Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
-
-2026-09-04 (night) - the review of every acris file against the cycle: nothing in this module changed; the callers' table and the refusal paragraph were read against the reviewed lane module. The six refusal pages preserved beside the module's old location were folded into `refusals/` here.
-
 2026-09-05 — `updated_at` gone from the table (0004, login: "Makes the table less clean"); a pending's re-check wait is its claim, kept by `land()` for `--pending-age`.
+
+2026-09-07 — the audit of the source folder against the code: the refusal's two wire shapes written (the 307 to the policy page, followed by `requests` into the page the detector reads), `check_refused` raises `rulebook.Refused` (no `lane` module since the fold); "Where a document files" rewritten from `canonical_path` -> `rulebook.canonical` (the day folders; `borough_of`, `recorded_ym`, `_ym` and `SECTIONS` were called by nothing and left the module); the imports named as they are (`rulebook`: `canonical`, `env`, `Refused`); this history in one order, oldest first.

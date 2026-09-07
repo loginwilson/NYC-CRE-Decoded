@@ -2,7 +2,7 @@
 
 Six parts, each once the file named in the heading, in dependency order:
   storage        where a document lives: the drive by its label, the One Touch tree, the day folders
-  rate_manager   the three managers: batch / rate / session (next_width is pure arithmetic)
+  rate_manager   the rate manager (the Governor; next_width is pure arithmetic) - the batch and session managers are the lane's own cycle, in lane
   cloud          the cloud table from a lane's point of view: claim, land, heartbeat, the outbox
   lane           THE ENTRY every cycle lane shares: one pooled session, staggered births, hang-up, rebatch, re-entry, the park
   fleet          the source's lanes together as one program
@@ -42,7 +42,6 @@ CANON_ROOT = "D:\\"
 LAYOUT = ("NYC CRE Decoded", "Reproduction")
 SOURCE_FOLDER = {"acris": "Acris", "richmond": "Richmond"}
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-BOROUGHS = {1: "Manhattan", 2: "Bronx", 3: "Brooklyn", 4: "Queens", 5: "Staten Island"}   # a registry fact (acris.borough_of), not a folder
 _MDY = re.compile(r"\s*(\d{1,2})/(\d{1,2})/(\d{4})")
 
 
@@ -140,7 +139,8 @@ def documents_root(drive_root):
 
 
 # ======================================================================================================================
-# RATE_MANAGER: THE RATE MANAGER - login 2026-09-04: "rate manager adds a worker every 5 seconds to reach sustained 
+# RATE_MANAGER: THE RATE MANAGER - login 2026-09-04: "rate manager adds a worker every 5 seconds to reach sustained rate
+# preference and then adjusts based on rate".  next_width() is the one decision, pure arithmetic; the Governor thread calls it.
 # ======================================================================================================================
 
 EPS = 1e-9
@@ -174,7 +174,7 @@ def next_width(dps, width, floor, ideal_lo, ideal_hi, hard, wmin, wmax, step):
 class Governor(threading.Thread):
     """Every `every` seconds: read the landings counter, compute dps over the window, decide, act.
     spawn(n) births n workers (the caller staggers them); retire(n) asks n workers to finish and leave.
-    landings() returns the running total (pdf + pending + imageless); alive() returns the live worker count."""
+    landings() returns the running total (filled + pending + absent); alive() returns the live worker count."""
 
     def __init__(self, landings, alive, spawn, retire, stop, log, *, floor=5.0, ideal_lo=6.0, ideal_hi=7.0, hard=8.0,
                  lo=20, hi=120, step=10, every=120, settle=240, knee_windows=2, knee_hold=5, knee_gain=0.15,
@@ -358,13 +358,6 @@ class Governor(threading.Thread):
                     self.log("RATE MANAGER: %.2f docs/s with %d workers - in the band, holding" % (dps, width))
             except Exception as e:                          # one bad window must never stop the manager deciding
                 self.log("RATE MANAGER: error in this window (%s: %.120s) - still deciding next window" % (type(e).__name__, e))
-
-
-def session_over(t0, max_min, now=None):
-    """True once the session has run --session-max-min minutes (0 = never)."""
-    if not max_min:
-        return False
-    return ((now or time.time()) - t0) >= max_min * 60
 
 
 # ======================================================================================================================
@@ -649,7 +642,8 @@ class Outbox:
 
 
 # ======================================================================================================================
-# LANE: THE ENTRY EVERY CYCLE LANE SHARES: one pooled session per crew, staggered births, workers each on
+# LANE: THE ENTRY EVERY CYCLE LANE SHARES: one pooled session per crew, staggered births, workers each on its own keep-alive
+# connection; the hang-up, the rebatch, the re-entry on a fresh batch, the park.
 # ======================================================================================================================
 
 class Refused(RuntimeError):
@@ -746,7 +740,8 @@ def add_common_args(ap):
     # THE THREE MANAGERS (login 2026-09-04: "batch manager makes sure the batch is good to enter and enters 1 time / rate manager
     # adds a worker every 5 seconds to reach sustained rate preference and then adjusts based on rate / session manager tracks
     # requests until the set limit then ends once reached and tells batch manager to go from the top").  Knobs, not code:
-    # --manage 0 (default) = the lane as before, fixed --width; the acris site turns them on for its document 
+    # --manage 0 (default) = the lane as before, fixed --width; the acris site turns them on for its documentation lane
+    # (MANAGE in Acris Reproduction.py).
     ap.add_argument("--manage", type=int, default=0, help="1 = the rate and session managers run this lane (default 0: fixed --width, the cycle only)")
     ap.add_argument("--ramp-to-rate", type=int, default=1, help="managed: 1 = enter with ONE worker and add one every --stagger s until the band; 0 = ramp to --width")
     ap.add_argument("--rate-floor", type=float, default=5.0, help="managed: docs/s under this = a full step up")
@@ -860,6 +855,9 @@ def wait_for_pool(ctx, c):
 
 
 def make_session(width, ua):
+    """One pooled session for a crew.  `width` is the crew's width at birth and is not used for sizing: the pool is
+    MAX_WIDTH + 4 whatever the width, so a resize (the control file, the rate manager) never needs a new session.  The
+    parameter stays because the enumeration and richmond registration programs pass it too."""
     s = requests.Session()
     s.headers.update({"User-Agent": ua})
     s.mount("https://", requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=MAX_WIDTH + 4,
@@ -1496,7 +1494,7 @@ def run(roles, args, here):
 # ======================================================================================================================
 
 WAIT_AFTER = {5: 60}                                             # seconds before a relaunch, by exit code: only a crash is relaunched
-MEANING = {0: "stopped cleanly", 1: "refused to start", 2: "REFUSED by the source", 3: "parked itself: four re-entries in a row refused",
+MEANING = {0: "stopped cleanly", 1: "refused to start", 2: "REFUSED by the source", 3: "parked itself: --tries re-entries in a row refused",
            4: "wall - parked by the lane", 5: "crash", 6: "drive gone"}
 
 
@@ -1517,7 +1515,7 @@ class Site:
 
     @property
     def key(self):
-        return self.source.lower()                                # the cloud's table prefix: acris, richmond
+        return self.source.lower()                                # the source's name: the table reproduction.<key> and its source column
 
     def lane_file(self, name):
         return self.workflow / name / ("%s %s.py" % (self.source, name.capitalize()))
@@ -1829,14 +1827,28 @@ def last_line(path):
     return lines[-1].strip() if lines else ""
 
 
+def host_of(site, args, name):
+    """The lane whose process runs `name`: itself while its own lock is alive; else, on a mega run, the first lane of
+    --lanes while that one's lock is alive (Fleet.run launches it with the rest as --also crews).  A hosted crew takes
+    no lock of its own and reads only its host's control file (_control), so stop, width and status go through the host."""
+    if lock_pid(site, name):
+        return name
+    lanes = [n for n, _ in site.parse_lanes(getattr(args, "lanes", ""))]
+    mega = (bool(getattr(args, "mega", False)) or site.mega_default) and not getattr(args, "separate", False)
+    if mega and name in lanes[1:] and lock_pid(site, lanes[0]):
+        return lanes[0]
+    return name
+
+
 def status(site, args):
     host = args.host or socket.gethostname()
     print("%s lanes on %s:" % (site.key, host))
     for name in site.lanes:
-        pid = lock_pid(site, name)
+        by = host_of(site, args, name)                   # a hosted crew: its host's lock and control file
+        pid = lock_pid(site, by)
         parked = site.lane_dir(name) / ("%s.parked" % name)
-        ctl = site.lane_dir(name) / ("%s.control" % name)
-        state = "RUNNING pid %d" % pid if pid else "not running"
+        ctl = site.lane_dir(by) / ("%s.control" % by)
+        state = ("RUNNING pid %d" % pid if by == name else "RUNNING pid %d (a crew of %s)" % (pid, by)) if pid else "not running"
         if parked.exists():
             state += " - PARKED: %s" % parked.read_text(encoding="utf-8").strip()[:90]
         if ctl.exists() and ctl.read_text(encoding="utf-8").strip():
@@ -1868,7 +1880,14 @@ def stop(site, args):
     for n in names:
         if n not in site.lanes:
             raise SystemExit("stop takes one of %s" % ", ".join(site.lanes))
-    running = {n: lock_pid(site, n) for n in names if lock_pid(site, n)}
+    running = {}
+    for n in names:
+        by = host_of(site, args, n)                      # a hosted crew leaves with its host: the stop goes to the host's control file
+        pid = lock_pid(site, by)
+        if pid and by not in running:
+            running[by] = pid
+            if by != n:
+                print("%s is a crew of %s's process - the stop goes to %s.control (every crew leaves)" % (n, by, by))
     if not running:
         print("nothing running on this machine for %s" % ", ".join(names))
         return 0
@@ -1898,6 +1917,11 @@ def width(site, args):
     w = int(w)
     if w <= 0 or w > MAX_WIDTH:
         raise SystemExit("a crew has 1 to %d workers" % MAX_WIDTH)
+    by = host_of(site, args, name)
+    if by != name:                                       # a hosted crew: `<lane>=N` into the host's control file (_control)
+        p = write_control(site, by, "%s=%d" % (name, w))
+        print("%s=%d written to %s - %s's process reads it within a minute" % (name, w, p.name, by))
+        return 0
     p = write_control(site, name, "width=%d" % w)
     print("width=%d written to %s - %s reads it within a minute%s" % (w, p.name, name, "" if lock_pid(site, name) else " (it is not running now)"))
     return 0
@@ -1923,7 +1947,7 @@ def build_parser(site, description, edge_type, edge_help, fresh_days_default):
     ap.add_argument("--no-pool-check", action="store_true", help="the lanes skip the exit-pool check at entry (tests only)")
     ap.add_argument("--trust-registry-pages", action="store_true",
                     help="documentation: skip the viewer fetch, the page count from the registry (PROPOSED 2026-09-07; A/B first)")
-    ap.add_argument("--relaunch-wait", type=int, default=0, help="seconds before relaunching a crashed lane (default 60)")
+    ap.add_argument("--relaunch-wait", type=int, default=0, help="seconds before relaunching a crashed lane (0 = the fleet's own 60 s)")
     ap.add_argument("--relaunch-cap", type=int, default=3, help="relaunches per lane per hour before the fleet parks it")
     ap.add_argument("--stop-wait", type=int, default=180, help="seconds for the lanes to leave after `stop` (a lane reads its control file on the minute, then joins its workers) before terminating them")
     ap.add_argument("--within", default="10 minutes", help="status: heartbeats this recent")

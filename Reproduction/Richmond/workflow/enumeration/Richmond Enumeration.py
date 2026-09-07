@@ -41,7 +41,8 @@ Rules kept from the programs before this one (rc_window.py, rc_census.py, richmo
   never repair a number             a difference is reported, listed and left; nothing here inserts
 
 Exit codes: 0 the difference is 0 · 1 a difference (ids missing) · 7 unproven · 2 refused ·
-3 the probe is broken or the wire died · 5 crash.
+3 the probe is broken, or the wire died in the trailing window or a range (in the census a dead wire
+leaves its window unswept and the run leaves with 7) · 5 crash.
 """
 import argparse
 import datetime as dt
@@ -58,7 +59,7 @@ import requests
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # enumeration -> workflow -> Richmond -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
 import rulebook  # noqa: E402
@@ -130,9 +131,9 @@ class Ledger:
 
 # ── the county: one pooled session, the listing by window ─────────────────────────────────
 class County:
-    def __init__(self, width, pace, rep):
+    def __init__(self, width, pace):
         self.session = rulebook.make_session(width, richmond.UA)
-        self.pace, self.rep = pace, rep
+        self.pace = pace
         self.lock = threading.Lock()
         self.reqs = 0
         self.stop = threading.Event()
@@ -405,7 +406,7 @@ def main():
         if args.command == "report":
             code = report(args, c, rep)
         else:
-            county = County(max(1, args.workers) if args.all else 1, args.pace, rep)
+            county = County(max(1, args.workers) if args.all else 1, args.pace)
             n = county.control()
             rep("control: %s..%s page 1 parsed %d rows (the window holds %d across its pages) - the parser reads the live markup" % (richmond.CONTROL[0], richmond.CONTROL[1], n, richmond.CONTROL[2]))
             if args.all:

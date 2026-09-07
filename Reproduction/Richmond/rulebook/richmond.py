@@ -1,11 +1,13 @@
 """THE RICHMOND RULES every richmond lane shares: the county's listing search, its window cap, the row
-parser, the control window, the refusal shapes, and the id namespace.
+parser, the control window, the refusal shapes, the id namespace, the detail page behind the grant and its
+one parser, the image minted on the clerk and pulled from the courts host, Cloudflare's challenge in front
+of that host, and where a document files.
 
 Richmond County Clerk (Staten Island's recorded instruments, the pre-ACRIS and parallel corpus).
 Everything here was measured on the lanes that ran before this repo (Richmond Reproduction.md is the
-authority); the dates in the comments say when.
+record); the dates in the comments say when.
 
-The words are in Richmond.md beside this file.
+The words are in Richmond.md beside this file, the module's authority.
 """
 import datetime as dt
 import re
@@ -92,9 +94,19 @@ def detail_url(internal_id):
     return "%s/Search/viewDocumentInfo/%s" % (BASE, str(internal_id).strip())
 
 
-def is_detail(html):
-    """The page carries the recorded details; the shell and the unauthorized answer do not."""
-    return "RECORDED DETAILS" in re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+_DATE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
+
+
+def _clerk_date(text):
+    """The clerk's M/D/YYYY (the listing's and the detail page's date) as a date, or None when it cannot be
+    read - the one parser of that date, shared by image_state and recorded_date."""
+    m = _DATE.match(str(text or "").strip())
+    if not m:
+        return None
+    try:
+        return dt.date(int(m.group(3)), int(m.group(1)), int(m.group(2)))
+    except ValueError:
+        return None
 
 
 def image_state(flat, recorded=""):
@@ -105,13 +117,9 @@ def image_state(flat, recorded=""):
         return "present"
     if "No Image Available At This Time" not in flat:
         return "unknown"
-    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", str(recorded or "").strip())
-    if not m:
+    t = _clerk_date(recorded)
+    if t is None:
         return "pending"                      # an unreadable date is always pending, never absent
-    try:
-        t = dt.date(int(m.group(3)), int(m.group(1)), int(m.group(2)))
-    except ValueError:
-        return "pending"
     return "pending" if (dt.date.today() - t).days < IMAGE_LAG_DAYS else "absent"
 
 
@@ -199,7 +207,6 @@ def windows(start=START, end=None, days=WINDOW_DAYS):
 # is Cloudflare's bot check on the ADDRESS we come from, not the courts host's answer about a document (is_challenge below).
 IAPPS = "https://iapps.courts.state.ny.us"
 PULL_HEADERS = {"Referer": BASE + "/", "Accept": "application/pdf,*/*"}
-_DATE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
 
 
 def mint_url(internal_id):
@@ -256,13 +263,7 @@ def recorded_date(registry):
     """The recorded date in the registry (M/D/YYYY, as the clerk prints it) as a date, or None."""
     if not isinstance(registry, dict):
         return None
-    m = _DATE.match(str(registry.get("recorded", "") or "").strip())
-    if not m:
-        return None
-    try:
-        return dt.date(int(m.group(3)), int(m.group(1)), int(m.group(2)))
-    except ValueError:
-        return None
+    return _clerk_date(registry.get("recorded", ""))
 
 
 def fresh(registry, days=IMAGE_LAG_DAYS):

@@ -1,10 +1,10 @@
 """THE ACRIS RULES every acris lane shares: URLs minted from the id, the one user-agent, the refusal
 detector, the page count, and where a document files in the One Touch layout.
 
-Everything here was measured on the lanes that ran before this repo (ACRIS REPRODUCTION.md is the
-authority); the dates in the comments say when.
+Everything here was measured on the lanes that ran before this repo (the record is
+../workflow/reproduction/Acris Reproduction.md); the dates in the comments say when.
 
-The words are in Acris.md beside this file.
+The words are in Acris.md beside this file: Acris.md is the authority, Acris Reproduction.md the record.
 """
 import hashlib
 import html as _html
@@ -65,7 +65,7 @@ def detail_doc_id(html):
     return m.group(1) if m else None
 
 
-# ── the refusal: HTTP 200 carrying the Bandwidth Notice page (never a status code) ──────────
+# ── the refusal: the Bandwidth Notice page - served with HTTP 200, or reached through an HTTP 307 ──
 
 NOTICE_SIGNALS = ("further access to acris is denied", "acris bandwidth notice",
                   "automated scripts/robots", "exceeded the bandwidth limits", "subscription data services")
@@ -86,7 +86,10 @@ def check_refused(data, ctype, where):
     """Raise Refused on the notice page; pass images and every other page.  The body is preserved
     beside this file so the verdict can be audited (2026-08-26: a detector that halted a night on
     a wifi interstitial had thrown its evidence away).  Two shapes are refusals: the notice's own
-    phrases, or the word bandwidth at the top of a page that carries NO document."""
+    phrases, or the word bandwidth at the top of a page that carries NO document.  On the wire the
+    notice comes as HTTP 200 carrying the page, or as an HTTP 307 to /BandwidthPolicy/ACRIS-BW-POL.html
+    (measured 2026-09-07 05:42): requests follows the redirect, so `data` here is the served policy
+    page and this detector reads it as the same notice."""
     if data[:2] in (b"II", b"MM") or data[:4] == b"%PDF":
         return
     text = visible_text(data)
@@ -126,56 +129,16 @@ def is_tiff(data):
     return data[:2] in (b"II", b"MM")
 
 
-# ── where a document files: borough / year / month from the registry ────────────────────────
+# ── where a document files: the day folders (rulebook.day_folders) ──────────────────────────
 
 _BORO_NAMES = {"MANHATTAN": 1, "BRONX": 2, "BROOKLYN": 3, "QUEENS": 4, "STATEN ISLAND": 5}
 _DATE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
 
 
-def _ym(text):
-    m = _DATE.match((text or "").strip())
-    if not m:
-        return None
-    mm, yy = int(m.group(1)), int(m.group(3))
-    return (yy, mm) if 1 <= mm <= 12 else None
-
-
-def borough_of(doc_id, registry):
-    """The registry's own BOROUGH line, else the first parcel's bbl digit, else the microfilm id's
-    borough digit (FT_<borough>...), else Unknown."""
-    if isinstance(registry, dict):
-        b = str(registry.get("borough", "")).upper().split("/")[0].strip()
-        if b in _BORO_NAMES:
-            return rulebook.BOROUGHS[_BORO_NAMES[b]]
-        for p in registry.get("parcels") or []:
-            bbl = str(p.get("bbl", ""))
-            if bbl[:1].isdigit() and int(bbl[0]) in rulebook.BOROUGHS:
-                return rulebook.BOROUGHS[int(bbl[0])]
-    m = re.match(r"FT_(\d)", doc_id)
-    if m and int(m.group(1)) in rulebook.BOROUGHS:
-        return rulebook.BOROUGHS[int(m.group(1))]
-    return "Unknown"
-
-
-def recorded_ym(doc_id, registry):
-    """(year, month) of the RECORDED date - the axis that aligns every source; the id's embedded date
-    is the submission date and can lag recording by days.  Fallbacks: the document date, then a
-    digital id's own date.  None for undated microfilm."""
-    if isinstance(registry, dict):
-        ym = _ym(registry.get("recorded")) or _ym(registry.get("doc_date"))
-        if ym:
-            return ym
-    if len(doc_id) >= 8 and doc_id[:8].isdigit():
-        yy, mm = int(doc_id[:4]), int(doc_id[4:6])
-        if 1 <= mm <= 12 and 1900 < yy < 2100:
-            return (yy, mm)
-    return None
-
-
 def canonical_path(doc_id, registry):
     """The One Touch address for this document: Acris\\By Document\\<year>\\<MM Mon>\\<day>\\<id>.pdf from the RECORDED
     date, else a digital id's own date, else the id split - rulebook.day_folders, the old lane's rule kept exactly.
-    The borough is a registry fact (borough_of), no longer a folder (login 2026-09-05)."""
+    The borough is a registry fact, no longer a folder (login 2026-09-05)."""
     recorded = registry.get("recorded") if isinstance(registry, dict) else None
     return rulebook.canonical("acris", doc_id, recorded)
 
@@ -314,7 +277,6 @@ def index_crfns(dataset, year):
 # its own rows.  The caller asserts the id echo BEFORE parsing; parse_acris only reads.
 from html.parser import HTMLParser
 
-SECTIONS = ("PARTY 1", "PARTY 2", "PARTY 3", "PARCELS", "REFERENCES", "REMARKS")
 GHOST = {"", "NAME", "PARTY 2", "PARTY 3/OTHER", "PARCELS", "BOROUGH", "REMARKS", "REFERENCES", "CRFN"}
 # scalar labels, exactly as the page prints them (used verbatim in the next-label lookahead so a value
 # can never swallow the following label)

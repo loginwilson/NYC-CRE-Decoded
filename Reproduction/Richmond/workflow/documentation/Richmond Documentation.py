@@ -64,7 +64,7 @@ import requests.adapters
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # documentation -> workflow -> Richmond -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
 import rulebook  # noqa: E402
@@ -88,7 +88,6 @@ class Documentation:
         self.hold = threading.Event()         # a verdict in progress holds every worker
         self.arbiter = threading.Lock()       # one verdict at a time
         self.prep_lock = threading.Lock()
-        self.prepared = None                  # id(session) whose pools and cookies are ready
 
     @property
     def lane(self):
@@ -220,7 +219,7 @@ class Documentation:
 
     def _probe(self, crew, doc_id):
         """Borrow a different claimed document from the crew's queue, mint and pull it, put it back.
-        -> (probe id, "served" | "refused" | "HTTP <n>" / "not a pdf") or None when no probe could be minted."""
+        -> (probe id, "served" | "challenged" | "refused" | "HTTP <n>" / "not a pdf") or None when no probe could be minted."""
         borrowed = []
         try:
             for _ in range(5):

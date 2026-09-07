@@ -5,7 +5,7 @@ citywide counter, so the numbers above the last one we hold are the only live wi
 offers (it sells no date search).  The lane sits at the edge with one monitor and a crew of
 walkers: while the edge is level the monitor probes a few numbers past it every --every seconds;
 the moment a filing shows, the crew walks a full bite of numbers in parallel and every document
-found lands as a new row - the doc_id cell, nothing else - and the edge moves to the last document
+found lands as a new row - the identifier cell, nothing else - and the edge moves to the last document
 seen.  One request per number, a plain GET of the detail page by CRFN, through one pooled session.
 
     python "Acris Identification.py" --edge 2026000247108      the first start names the edge
@@ -29,7 +29,7 @@ The rules, kept from the sync floor that ran before this one:
                can never hide a document from the monitor
   a blank is   an answer, not a failure: the source said no document is at that number
   an error is  not an absence: a request that fails is asked again, never read as blank (2026-08-23)
-  the cell     the doc_id only; registration reads the recorded details in its own pass (the same page,
+  the cell     the identifier only; registration reads the recorded details in its own pass (the same page,
                one more request per new document - the cell rule is worth it)
   refusal      HTTP 200 + the Bandwidth Notice page = a block: park at once, no retry, no rotation
   hang-up      the session closed (every walker hit the wire inside 60 s, nothing answered for 10 s): hang
@@ -37,8 +37,9 @@ The rules, kept from the sync floor that ran before this one:
                flight and the monitor asks them again from the edge), wait --redial-wait (60 s with the
                backoff) with no line open, re-enter once with births 5 s apart; 4 re-entries, then park
   wall         40 consecutive 503/429 with no success between: park with the reason
-  width        --width walkers at launch (default 20 alone; 9 + the monitor in the fleet's batch); `width=N`
-               or `stop` in identification.control
+  width        --width walkers at launch (default 20 alone; 5 in the fleet's ONE BATCH by default, --lanes sets
+               it; the monitor is the main thread's feed, not a connection); `width=N` or `stop` in
+               identification.control
   one door     identification.lock: a second start on this machine is refused while the first lives
   one machine  the edge lives on one workstation; run this lane at home only
 
@@ -54,7 +55,7 @@ import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # identification -> workflow -> Acris -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import acris                                                    # noqa: E402

@@ -26,7 +26,9 @@ The rules are kept from the lane that ran before this one:
               above the number park, missing ones are born staggered); `stop` there stops cleanly
   mega lane   --also registration:10 hosts another lane's crew in this process through its own session,
               one ramp at a time, --entry-gap apart (one entry per floor, as measured); each crew runs
-              the cycle on its own
+              the cycle on its own.  With --one-batch (what the acris fleet passes, login 2026-09-06) the
+              hosted crew joins right after this crew's ramp instead, --stagger apart, no --entry-gap, and
+              one hang-up or one re-entry closes and reopens the whole batch
   pending     goes back to the backfill: a pending is re-checked once its last check is --pending-age old,
               ahead of the empties; when the lane is up to date every claim is pendings, cycling through
               them, so a scan that appears is recorded on the next pass and a document that ages past
@@ -37,12 +39,14 @@ The rules are kept from the lane that ran before this one:
   one door    documentation.lock: a second start on this machine is refused while the first lives
   drive       once a minute the drive must still be there, or the lane parks with the reason
 
-Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused · 3 redials exhausted · 4 wall ·
-5 crash · 6 drive gone.  A parked lane refuses to start until --unpark.
+Exit codes: 0 stopped (control file, limit, Ctrl+C, a signal) · 2 refused · 3 redials exhausted · 4 wall ·
+5 crash · 6 drive gone.  A parked lane refuses to start until --unpark.  A hard kill on Windows (the
+fleet's terminate after --stop-wait, taskkill /F) ends the process without its last word: the heartbeat
+keeps what it said.
 
-The shared pieces it imports: ../../../rulebook/rulebook.py (the entry and the policies), ../../../rulebook/rulebook.py (claim,
-land, heartbeat), ../../../rulebook/rulebook.py (the drive by label, the One Touch layout), ../../rulebook/acris.py
-(the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, where a document files).
+The shared pieces it imports: ../../../rulebook/rulebook.py (the entry and the policies; claim, land, heartbeat,
+the outbox; the drive by label and the One Touch layout), ../../rulebook/acris.py (the ACRIS rules: URLs
+minted from the id, the one user-agent, the refusal detector, where a document files).
 """
 import argparse
 import os
@@ -52,7 +56,7 @@ import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # documentation -> workflow -> Acris -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import img2pdf                                                  # noqa: E402

@@ -30,7 +30,9 @@ The rules are kept from the register floor that ran before this one:
   width       --width at launch; `width=30` or `stop` in registration.control while it runs
   mega lane   --also documentation:10 --drive OneTouch hosts the documentation crew in this process through
               its own session, one ramp at a time, --entry-gap apart (one entry per floor, as measured);
-              each crew runs the cycle on its own
+              each crew runs the cycle on its own.  With --one-batch (what the acris fleet passes, login
+              2026-09-06) the hosted crew joins right after this crew's ramp instead, --stagger apart, no
+              --entry-gap, and one hang-up or one re-entry closes and reopens the whole batch
   pending     a registry pending goes back to the backfill like a document pending: re-checked once
               its last check is --pending-age old, ahead of the empties
   no overlap  claim() hands this workstation its own slice; land() fills the cells once a minute,
@@ -41,9 +43,9 @@ The rules are kept from the register floor that ran before this one:
 Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.  A parked lane refuses
 to start until --unpark.
 
-The shared pieces it imports: ../../../rulebook/rulebook.py (the entry and the policies), ../../../rulebook/rulebook.py (claim,
-land, heartbeat), ../../rulebook/acris.py (the ACRIS rules: URLs minted from the id, the one user-agent,
-the refusal detector, the page parser).
+The shared pieces it imports: ../../../rulebook/rulebook.py (the entry and the policies; claim, land, heartbeat,
+the outbox), ../../rulebook/acris.py (the ACRIS rules: URLs minted from the id, the one user-agent, the
+refusal detector, the page parser).
 """
 import argparse
 import pathlib
@@ -52,7 +54,7 @@ import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[2]                       # registration -> workflow -> Acris -> Reproduction
-sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
+sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: rulebook.py, the machinery as one module
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import acris                                                    # noqa: E402

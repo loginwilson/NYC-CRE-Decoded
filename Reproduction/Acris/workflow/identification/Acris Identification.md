@@ -1,6 +1,6 @@
 # Acris Identification
 
-The identification lane of the acris reproduction, as one program: `Acris Identification.py`. It keeps the table live at the CRFN edge: one monitor and a crew of walkers behind one entry. While the edge is level the monitor probes a few numbers past it every minute; the moment a filing shows, the crew walks a full bite of numbers in parallel, every document found lands as a new row — the `doc_id` cell, nothing else — and the edge moves to the last document seen. This file is the lane's own authority; the cycle's is `../reproduction/Acris Reproduction.md`.
+The identification lane of the acris reproduction, as one program: `Acris Identification.py`. It keeps the table live at the CRFN edge: one monitor and a crew of walkers behind one entry. While the edge is level the monitor probes a few numbers past it every minute; the moment a filing shows, the crew walks a full bite of numbers in parallel, every document found lands as a new row — the `identifier` cell, nothing else — and the edge moves to the last document seen. This file is the lane's own authority; the cycle's is `../reproduction/Acris Reproduction.md`.
 
 ## Why the CRFN edge
 
@@ -13,13 +13,13 @@ ACRIS sells no date window: the id and CRFN searches have no date field, the typ
 
 Home only: the edge lives on one workstation. `--width` defaults to 20 walkers. `--every 60 --watch 8 --bite 1000` are the cadence knobs. `identification.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
 
-Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+Every lane also takes the shared flags - `--width`, `--host`, `--stagger`, `--claim`, `--ttl`, `--pending-age`, `--redial-wait`, `--tries`, `--no-pool-check`, `--entry-gap`, `--also`, `--one-batch`, `--limit`, `--log`, `--unpark` and the managers' knobs (`add_common_args` in `rulebook.py`): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text. `--drive` and `--fresh-days` are this program's own, for a hosted documentation crew (`--also documentation:N`) only.
 
 ## The rules
 
 | rule | what the lane does | origin |
 |---|---|---|
-| the edge | `identification.edge.json` holds the last CRFN whose document the table holds. A start without it needs `--edge`, never a guess. The edge moves only after the documents it passes are in the table, so a crash re-walks the same numbers and loses nothing | the old `_crfn_edge.json`; the 2026-08-28 monitor |
+| the edge | `identification.edge.json` holds the last CRFN whose document the table holds. A start without it needs `--edge`, never a guess; a `--edge` that disagrees with the file is refused too ("remove the file if the number is meant to change"), and the fleet passes `--edge` on the lane's first launch only. The edge moves only after the documents it passes are in the table, so a crash re-walks the same numbers and loses nothing | the old `_crfn_edge.json`; the 2026-08-28 monitor |
 | the monitor stands at the elevator | while level, `--watch` numbers past the edge every `--every` seconds; the crew only walks on a hit | login 2026-08-28: the old loop dispatched a full bite every tick and spent ~36 req/s to land nothing |
 | behind | a document within `--watch` numbers of the end of the probed window means more beyond: walk a `--bite` at once and keep walking until a window ends in blanks | the same monitor |
 | a blank is an answer | the source said no document is at that number. Blanks past the last document are unissued numbers and are asked again next time | the counter is forward-only |
@@ -35,7 +35,7 @@ Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh
 
 | knob | value | how it was measured, how it fails |
 |---|---|---|
-| width | 20 alone; 9 plus the monitor in the fleet's batch | the crew of walkers behind one entry; the counter moves about 1,300 documents a day, in bursts; the monitor is the main thread's feed, not a connection |
+| width | 20 alone; 5 in the fleet's ONE BATCH by default (`--lanes` sets it; Gate 3 ran 10) | the crew of walkers behind one entry; the counter moves about 1,300 documents a day, in bursts; the monitor is the main thread's feed, not a connection |
 | every | 60 s | a watch of 8 requests a minute while level; a filing is seen within a minute |
 | watch | 8 | the old monitor's number; also the trailing-blank rule that decides behind or level |
 | bite | 1,000 | walked by 20 walkers in about a minute; a bite of 131 KB pages is about 130 MB |
@@ -49,15 +49,15 @@ A forward-only counter inherits every gap it already has and reports clean forev
 
 ## Working files
 
-Beside this file, never in git: `identification.edge.json`, `identification.holes.jsonl`, `identification.lock`, `identification.log` (every launch's output, appended), `identification.control`, `identification.parked`, `identification.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
+Beside this file, never in git: `identification.edge.json`, `identification.holes.jsonl`, `identification.lock`, `identification.log` (every launch's output, appended), `identification.control`, `identification.parked`, `identification.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. A hosted crew (`--also`) writes its outbox and fails beside the host lane's file: in the fleet's ONE BATCH this folder holds `registration.outbox.jsonl` and `registration.fails.jsonl`, and documentation's pair when that crew rides the batch. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
 
 ## History
 
-2026-09-05 — the review against the code: the size guard applies to a page that carries an id (a short page without one is the blank the code records); the working files list the log.
+2026-09-03 — written from the sync floor of `acris_reproduction.py` (monitor, crew, land, edge) and `acris_edge.py` (the probe), every line read. Proven offline (the probe URL, the id from a live page, the stub, the truncation guard, the edge file's fail-closed start) and by a simulated walk against the live cloud with throwaway numbers and no ACRIS request: a burst behind the edge walked in bites, personal-property blanks passed, a failing number recorded as a hole and passed, the edge moved only after the rows were in, the level watch and the wider look. Not yet proven: a real probe, which waits for the data move. The old edge file's last movement was 2026-08-31; the table has been behind since, which the audit will show.
 
 2026-09-04 — the review against the cycle: `rebatch` added (the cut window dropped and forgotten as in flight, asked again from the edge after the re-entry); the lane module's amendments apply. Proven by the simulation again the same night.
 
-2026-09-03 — written from the sync floor of `acris_reproduction.py` (monitor, crew, land, edge) and `acris_edge.py` (the probe), every line read. Proven offline (the probe URL, the id from a live page, the stub, the truncation guard, the edge file's fail-closed start) and by a simulated walk against the live cloud with throwaway numbers and no ACRIS request: a burst behind the edge walked in bites, personal-property blanks passed, a failing number recorded as a hole and passed, the edge moved only after the rows were in, the level watch and the wider look. Not yet proven: a real probe, which waits for the data move. The old edge file's last movement was 2026-08-31; the table has been behind since, which the audit will show.
+2026-09-05 — the review against the code: the size guard applies to a page that carries an id (a short page without one is the blank the code records); the working files list the log.
 
 2026-09-05 23:52 — THE FIRST REAL LAUNCH, against the cloud with the rows in (login: "spend the night resyncing ... one
 batch, 10 workers"): `--edge 2026000247108 --width 10`. The entry was right (exit pool one block, 173.239.217; ten births
@@ -65,3 +65,5 @@ batch, 10 workers"): `--edge 2026000247108 --width 10`. The entry was right (exi
 `identification.parked` written, the page saved under `../../rulebook/refusals/`. The lane did what its rules say; the
 notice is the source's and is cleared by a person (`--unpark` after the exit changes). The full reading is in the D:
 record (ACRIS DOCUMENTATION NIGHT 2026-09-04.md): three exit blocks answered with the notice today.
+
+2026-09-07 — the audit of the source folder against the code: the cell is `identifier` (0015); the width in the fleet's ONE BATCH is 5 by default (`--lanes` sets it; the 9-plus-monitor batch was the 09-04 fleet's); the refusal of a disagreeing `--edge` written; `--drive` / `--fresh-days` named as this program's own; a hosted crew's outbox and fails named beside this file; this history in one order, oldest first.

@@ -7,9 +7,9 @@ The registration lane of the acris reproduction, as one program: `Acris Registra
     python "Acris Registration.py"                    home
     python3 "Acris Registration.py"                   workstation 2
 
-No drive: the registry is text and lives in the cloud table only. `--width` defaults to 40. While it runs, `registration.control` beside it takes `width=30` or `stop`. `--also documentation:40 --drive OneTouch` hosts the documentation crew in the same process through its own entry, twenty seconds later. `--limit N` is a test run. A parked lane refuses to start again until `--unpark`. In the fleet's batch it runs 10 wide beside documentation (managed: one worker in, the rate manager's width) and identification 9 plus its monitor, each crew on its own entry.
+No drive: the registry is text and lives in the cloud table only. `--width` defaults to 40. While it runs, `registration.control` beside it takes `width=30` or `stop`. `--also documentation:40 --drive OneTouch` hosts the documentation crew in the same process through its own entry, twenty seconds later; with `--one-batch` (what the acris fleet passes) the hosted crew joins right after this crew's ramp instead, `--stagger` apart, no `--entry-gap`, and one hang-up or one re-entry closes and reopens the whole batch. `--limit N` is a test run. A parked lane refuses to start again until `--unpark`. In the fleet's ONE BATCH (`../reproduction/Acris Reproduction.py`, its default: identification 5, registration 5, documentation 5 in one process on one entry - `--lanes` sets the widths; Gate 3 ran identification 10 and registration 20) this crew joins identification's entry right after its ramp, births 5 s apart, at its fixed width, no manager.
 
-Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh-days`, `--claim`, `--ttl`, `--limit`, `--log`, `--unpark`, the managers' knobs): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text.
+Every lane also takes the shared flags - `--width`, `--host`, `--stagger`, `--claim`, `--ttl`, `--pending-age`, `--redial-wait`, `--tries`, `--no-pool-check`, `--entry-gap`, `--also`, `--one-batch`, `--limit`, `--log`, `--unpark` and the managers' knobs (`add_common_args` in `rulebook.py`): the table "The shared flags" in `Reproduction/rulebook/Rulebook.md`, written from the code's own help text. `--drive` and `--fresh-days` are this program's own, for a hosted documentation crew (`--also documentation:N`) only.
 
 ## The rules
 
@@ -27,6 +27,7 @@ Every lane also takes the shared flags (`--host`, `--width`, `--drive`, `--fresh
 | hang-up | the session closed (every worker a transport error inside 60 s, nothing landed for 10 s): hang up at once, drop the cut batch, wait `--redial-wait` (60 s, ×2 per refused re-entry, ÷2 per served), claim a fresh batch, re-enter once, births 5 s apart; four re-entries per incident, then park, exit 3 | the cycle, login 2026-09-04; see Acris Documentation.md |
 | wall | forty consecutive 503 or 429 with no success between: park, exit 4 | trap 2 |
 | pending goes back to the backfill | a registry pending is re-checked once its last check is `--pending-age` old, ahead of the empties; the wait is the claim itself, kept by `land()` as a cooldown for `--pending-age` (0004; the table holds no clock) | login 2026-09-03 23:5x; 2026-09-05 18:4x |
+| provisional registries | a registry read before recording - the detail page says `RECORDED / FILED: N/A`, the registry has no `recorded` key - on an id younger than 400 days comes back through `claim()` once its cooldown (`--pending-age`) has run out, ahead of the empties; the re-read lands the whole registry again, a recorded date releases it, N/A cools it again; the counters do not move (a registry over a registry). Older and still undated stays as filed | 0009, login 2026-09-06 20:3x: "if something is filed and has a CRFN and it doesn't have a recording yet, we catch it" |
 | no overlap | claim, land once a minute (or at 200 results) through `registration.outbox.jsonl`, heartbeat every minute | rulebook/Rulebook.md |
 | the last word | every stop leaves its reason in the heartbeat and, for a park, in `registration.parked` | the board's status follows the lane |
 
@@ -47,15 +48,15 @@ The same few ids (322 of the whole table on 2026-09-02) never echo on the detail
 
 ## Working files
 
-Beside this file, never in git: `registration.lock`, `registration.log` (every launch's output, appended), `registration.control`, `registration.parked`, `registration.outbox.jsonl`, `registration.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
+Beside this file, never in git: `registration.lock`, `registration.log` (every launch's output, appended), `registration.control`, `registration.parked`, `registration.outbox.jsonl`, `registration.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. A hosted crew (`--also`) writes its outbox and fails beside the host lane's file: in the fleet's ONE BATCH this crew's `registration.outbox.jsonl` and `registration.fails.jsonl` sit under `../identification/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
 
 ## History
 
-2026-09-05 — the review against the code: a page that never echoes the id IS recorded (`registration.fails.jsonl`, the PROGRESS `fail`) - what the lane keeps no count of is persistence per document; the working files list the log; landing is once a minute or at 200 results; the program's docstring had the re-ask waits wrong (0.5 s then 1 s, nothing after the last miss).
+2026-09-03 — written from the register floor of `acris_reproduction.py` and `rd_parse.py`, every line read; the parser copied verbatim. Proven offline against a synthetic detail page in the real page's shape and against the key set of a real registry row, and by a simulated run against the live cloud with throwaway rows and no ACRIS request. Not yet proven: a real fetch, which waits for the data move.
 
 2026-09-04 — the review against the cycle: the lane module's amendments (the rebatch, the quiet rule, the non-blocking wait and ramp) apply here unchanged; nothing of this lane's own changed. The batch width in the fleet is 10.
 
-2026-09-03 — written from the register floor of `acris_reproduction.py` and `rd_parse.py`, every line read; the parser copied verbatim. Proven offline against a synthetic detail page in the real page's shape and against the key set of a real registry row, and by a simulated run against the live cloud with throwaway rows and no ACRIS request. Not yet proven: a real fetch, which waits for the data move.
+2026-09-05 — the review against the code: a page that never echoes the id IS recorded (`registration.fails.jsonl`, the PROGRESS `fail`) - what the lane keeps no count of is persistence per document; the working files list the log; landing is once a minute or at 200 results; the program's docstring had the re-ask waits wrong (0.5 s then 1 s, nothing after the last miss).
 
 2026-09-06 21:0x — A REGISTRATION BEFORE RECORDING IS PROVISIONAL (migration 0009). ACRIS issues the document id and the CRFN
 at indexing and records later; until then the detail page says "RECORDED / FILED: N/A" and the registry has no `recorded` key.
@@ -65,3 +66,5 @@ Nothing in this file changes: the rule lives in claim() and land(). 8,876 such r
 2026-08-19) are the first work of the gate-3 batch.
 
 2026-09-06 21:02 — the 8,876 provisional registries were the gate-3 batch's first work: all re-read through claim()'s due rule, every one landed with its recorded date, 0 left at 21:02; the counters did not move for them (a registry over a registry), 8,082 new registrations landed beside them, registration level 21,631,885 / 21,631,885 at 21:21.
+
+2026-09-07 — the audit of the source folder against the code: the launch paragraph says ONE BATCH as the fleet runs it (5/5/5 by default on one entry, no manager; `--one-batch` named for `--also`) - the 10-beside-managed-documentation batch was the 09-04 fleet's; the provisional registries (0009) a rule row, not history alone; `--drive` / `--fresh-days` named as this program's own; the hosted crew's files named under `../identification/`; the program's import sentence one clause; this history in one order, oldest first.
