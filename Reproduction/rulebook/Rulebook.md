@@ -258,3 +258,14 @@ keys. Gate 1 closed the same hour (Population.md). Next: gate 3 on login's word 
 `--lanes synchronization:10,registration:20 --unpark --edge 2026000245705` (the highest CRFN the table holds, read from the
 table 18:5x; the lane's old state file said 2026000247108 and does not exist any more - the number comes from the table, never
 a guess), the richmond phase lane `--lanes synchronization:10,registration:20 --mega`.
+
+2026-09-06 20:3x — A PROVISIONAL REGISTRATION (found while checking the cleaned CRFNs against the city's index). The open-data
+master datasets (real and personal property together - a check against the real one alone reads federal liens, RFLs and PATs
+as "missing") are complete through 2026-07-31 (good_through) with nothing for August; every document of ours they hold agrees
+with ours, 0 disagreements. What they do NOT hold, besides August: documents ACRIS has indexed (a document id and a CRFN issued)
+but not yet RECORDED - our registry for those has an empty `recorded` because the detail page had none when the lane read it.
+8,876 acris rows have no readable recorded date (via the recorded index), most of them the newest. A registration taken before
+recording is PROVISIONAL: the recorded date (and whatever else recording fills) arrives later, and our rule "a registry over a
+registry adds nothing" means nobody goes back. THE RULE TO ADD (gate 3 or the first window after): a registry without a recorded
+date older than N days is claimed again by the registration lane and re-read; the counters do not move; the re-read that still
+finds no recorded date waits again. The same shape as a pending document. Not tonight's change; written here so it is not lost.
