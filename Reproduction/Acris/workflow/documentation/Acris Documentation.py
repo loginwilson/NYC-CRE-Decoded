@@ -61,6 +61,15 @@ import lane                                                     # noqa: E402
 import storage                                                  # noqa: E402
 
 
+def registry_pages(registry):
+    """The page count registration recorded, as a positive int - or None (missing, non-numeric, zero): the viewer decides."""
+    try:
+        n = int(str(registry.get("pages", "")).strip())
+    except (ValueError, TypeError, AttributeError):
+        return None
+    return n if n > 0 else None
+
+
 class Documentation:
     """What one worker does with one document."""
     source, lane_name = "acris", "documentation"
@@ -68,9 +77,10 @@ class Documentation:
     noun = "pdfs"                 # the PROGRESS line's word for a filled cell
     needs_registry = True         # the registry places the file and judges freshness
 
-    def __init__(self, drive_root, fresh_days):
+    def __init__(self, drive_root, fresh_days, trust_registry_pages=False):
         self.root = drive_root
         self.fresh_days = fresh_days
+        self.trust_registry_pages = bool(trust_registry_pages)   # --trust-registry-pages: skip the viewer fetch (see fetch)
 
     @property
     def lane(self):
@@ -93,9 +103,17 @@ class Documentation:
         if path.is_file() and path.stat().st_size > 0:
             return canon                                     # already on this drive: no request spent
 
-        # 1. the page count, from the viewer page (Referer chain as a browser walks it: detail -> viewer -> image)
-        total = None
+        # 1. the page count, from the viewer page (Referer chain as a browser walks it: detail -> viewer -> image).
+        #    --trust-registry-pages (2026-09-07, PROPOSED - A/B on a good exit before trusting): registration recorded
+        #    `pages` for every row, so the viewer fetch - one request per document, 10-25% of a document's requests -
+        #    can be skipped: `total` comes from the registry and GetImage keeps the viewer URL as its Referer (a header,
+        #    not a fetch).  Only a positive count is trusted; anything else falls back to the viewer, which stays the
+        #    authority for "no image" (TotalPages <= 0).  The one unknown the A/B decides: whether GetImage serves
+        #    without a preceding viewer fetch on the same session (a cookie it might set).
+        total = registry_pages(registry) if self.trust_registry_pages else None
         for attempt in range(3):
+            if total is not None:
+                break
             body, ct = crew.get(acris.viewer_url(doc_id), acris.detail_url(doc_id))
             acris.check_refused(body, ct, doc_id)
             total = acris.total_pages(body)
@@ -142,20 +160,23 @@ def role(drive_root, args):
     """This lane's role, for a sibling lane hosting it with --also documentation:N."""
     if not drive_root:
         raise SystemExit("documentation needs --drive <label>: the drive its files are written to")
-    return Documentation(drive_root, getattr(args, "fresh_days", 30))
+    return Documentation(drive_root, getattr(args, "fresh_days", 30), getattr(args, "trust_registry_pages", False))
 
 
 def main():
     ap = argparse.ArgumentParser(description="acris documentation: one entry, N workers, the cloud table as the to-do list")
     ap.add_argument("--drive", required=True, help="label of the drive to write to (the volume label: OneTouch at home, workstation 2's own)")
     ap.add_argument("--fresh-days", type=int, default=30, help="a document recorded within this many days with no image is pending, not absent")
+    ap.add_argument("--trust-registry-pages", action="store_true",
+                    help="skip the viewer fetch: the page count comes from the registry, one request fewer per document"
+                         " (PROPOSED 2026-09-07 - A/B on a good exit before trusting; off = the proven walk)")
     lane.add_common_args(ap)
     args = ap.parse_args()
     args.lane = "documentation"
 
     drive_root = storage.find_drive(args.drive)
     storage.documents_root(drive_root)
-    roles = lane.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days))
+    roles = lane.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days, args.trust_registry_pages))
     print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, storage.documents_root(drive_root), storage.CANON_ROOT), flush=True)
     sys.exit(lane.run(roles, args, HERE))
 

@@ -172,6 +172,8 @@ class Fleet:
             argv.append("--unpark")
         if getattr(a, "no_pool_check", False):
             argv.append("--no-pool-check")
+        if getattr(a, "trust_registry_pages", False) and name == "documentation":
+            argv.append("--trust-registry-pages")         # only the documentation lane knows the flag
         if not batch:                                     # ONE BATCH runs fixed widths, no manager (login 2026-09-06); a lane alone keeps its managers
             for knob, val in sorted(self.site.manage.get(name, {}).items()):      # the managers' knobs: the site's word for this lane
                 argv += ["--" + knob.replace("_", "-"), str(val)]
@@ -494,6 +496,8 @@ def build_parser(site, description, edge_type, edge_help, fresh_days_default):
     ap.add_argument("--limit", type=int, default=0, help="each lane stops after this many documents (a test run)")
     ap.add_argument("--unpark", action="store_true", help="start parked lanes too (a person has decided)")
     ap.add_argument("--no-pool-check", action="store_true", help="the lanes skip the exit-pool check at entry (tests only)")
+    ap.add_argument("--trust-registry-pages", action="store_true",
+                    help="documentation: skip the viewer fetch, the page count from the registry (PROPOSED 2026-09-07; A/B first)")
     ap.add_argument("--relaunch-wait", type=int, default=0, help="seconds before relaunching a crashed lane (default 60)")
     ap.add_argument("--relaunch-cap", type=int, default=3, help="relaunches per lane per hour before the fleet parks it")
     ap.add_argument("--stop-wait", type=int, default=180, help="seconds for the lanes to leave after `stop` (a lane reads its control file on the minute, then joins its workers) before terminating them")
