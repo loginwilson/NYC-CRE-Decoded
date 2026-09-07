@@ -1950,6 +1950,7 @@ def main(site, description, edge_type, edge_help, fresh_days_default):
 # 2's four, a spacer row before each workstation block; columns source, lane, status, as of (Eastern), the 60 s block
 # (rate, increase, eta), the 5 min block, landed, needed, percentage.  A workstation's number is the order of its first
 # sight; an unclaimed block reads pending.  Every row carries the source: the Table Editor sorts a view by its first column.
+# Every column of the view is text and a blank is one space (0019), so a spacer row shows as nothing in the Editor.
 # ======================================================================================================================
 
 KEEP = 8 * 60                 # seconds of readings kept for the windows

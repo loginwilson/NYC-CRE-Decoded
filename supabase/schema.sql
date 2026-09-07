@@ -1,4 +1,4 @@
--- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-07 13:35 ET.
+-- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-07 13:41 ET.
 -- Idempotent: a fresh project builds from it (push applies it first); an existing project is unchanged by it.
 -- A change is a numbered <version>_<name>.sql beside this file, applied once with `push`, folded in with `baseline`,
 -- and removed in the same commit - so this folder holds one file between changes.
@@ -539,34 +539,34 @@ create or replace view reproduction.acris_update as
             u.source,
             u.lane || ' total'::text AS lane,
             u.status::text AS status,
-            (u.as_of AT TIME ZONE 'America/New_York'::text) AS as_of_et,
-            u.rate_60s,
-            u.increase_60s,
+            to_char((u.as_of AT TIME ZONE 'America/New_York'::text), 'YYYY-MM-DD HH24:MI:SS'::text) AS as_of_et,
+            u.rate_60s::text AS rate_60s,
+            u.increase_60s::text AS increase_60s,
             u.eta_60s,
-            u.rate_5m,
-            u.increase_5m,
+            u.rate_5m::text AS rate_5m,
+            u.increase_5m::text AS increase_5m,
             u.eta_5m,
-            u.landed,
-            u.needed,
-            u.pct
+            u.landed::text AS landed,
+            u.needed::text AS needed,
+            u.pct::text AS pct
            FROM lanes l
              JOIN machinery.updates u ON u.source = 'acris'::text AND u.workstation = ''::text AND u.lane = l.lane
         UNION ALL
          SELECT b.n,
             0,
             'acris'::text AS text,
-            ''::text AS text,
-            ''::text AS text,
-            NULL::timestamp without time zone AS "timestamp",
-            NULL::numeric AS "numeric",
-            NULL::bigint AS int8,
-            ''::text AS text,
-            NULL::numeric AS "numeric",
-            NULL::bigint AS int8,
-            ''::text AS text,
-            NULL::bigint AS int8,
-            NULL::bigint AS int8,
-            NULL::numeric AS "numeric"
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text
            FROM blocks b
         UNION ALL
          SELECT b.n,
@@ -574,19 +574,19 @@ create or replace view reproduction.acris_update as
             'acris'::text AS text,
             (l.lane || ' '::text) || b.n,
             COALESCE(u.status::text, 'pending'::text) AS "coalesce",
-            (u.as_of AT TIME ZONE 'America/New_York'::text) AS timezone,
-            u.rate_60s,
-            u.increase_60s,
+            to_char((u.as_of AT TIME ZONE 'America/New_York'::text), 'YYYY-MM-DD HH24:MI:SS'::text) AS to_char,
+            u.rate_60s::text AS rate_60s,
+            u.increase_60s::text AS increase_60s,
             u.eta_60s,
-            u.rate_5m,
-            u.increase_5m,
+            u.rate_5m::text AS rate_5m,
+            u.increase_5m::text AS increase_5m,
             u.eta_5m,
-            u.landed,
+            u.landed::text AS landed,
                 CASE
                     WHEN s.workstation IS NOT NULL THEN t.needed
                     ELSE NULL::bigint
-                END AS "case",
-            u.pct
+                END::text AS text,
+            u.pct::text AS pct
            FROM blocks b
              CROSS JOIN lanes l
              LEFT JOIN stations s ON s.n = b.n
@@ -596,19 +596,19 @@ create or replace view reproduction.acris_update as
  SELECT source,
     lane,
     status,
-    as_of_et,
-    rate_60s,
-    increase_60s,
-    eta_60s,
-    rate_5m,
-    increase_5m,
-    eta_5m,
-    landed,
-    needed,
-    pct
+    COALESCE(as_of_et, ' '::text) AS as_of_et,
+    COALESCE(rate_60s, ' '::text) AS rate_60s,
+    COALESCE(increase_60s, ' '::text) AS increase_60s,
+    COALESCE(NULLIF(eta_60s, ''::text), ' '::text) AS eta_60s,
+    COALESCE(rate_5m, ' '::text) AS rate_5m,
+    COALESCE(increase_5m, ' '::text) AS increase_5m,
+    COALESCE(NULLIF(eta_5m, ''::text), ' '::text) AS eta_5m,
+    COALESCE(landed, ' '::text) AS landed,
+    COALESCE(needed, ' '::text) AS needed,
+    COALESCE(pct, ' '::text) AS pct
    FROM board
   ORDER BY block, ord;
-comment on view reproduction.acris_update is 'ACRIS UPDATE: three blocks of four rows - the totals (reproduction total, identification total, registration total, documentation total), a spacer row, workstation 1''s four (reproduction 1 ...), a spacer row, workstation 2''s four; source, lane, status, as of (Eastern), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage. Every row carries the source so the Table Editor (which sorts a view by its first column) shows the rows in this order';
+comment on view reproduction.acris_update is 'ACRIS UPDATE: three blocks of four rows - the totals (reproduction total, identification total, registration total, documentation total), a blank spacer row, workstation 1''s four (reproduction 1 ...), a blank spacer row, workstation 2''s four (pending until it first reports); source, lane, status, as of (Eastern, to the second), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage. Every column is text and a blank is one space, so the Table Editor shows a spacer as nothing; every row carries the source because the Editor sorts a view by its first column';
 
 create or replace view reproduction.richmond_update as
  WITH lanes(lane, ord) AS (
@@ -634,34 +634,34 @@ create or replace view reproduction.richmond_update as
             u.source,
             u.lane || ' total'::text AS lane,
             u.status::text AS status,
-            (u.as_of AT TIME ZONE 'America/New_York'::text) AS as_of_et,
-            u.rate_60s,
-            u.increase_60s,
+            to_char((u.as_of AT TIME ZONE 'America/New_York'::text), 'YYYY-MM-DD HH24:MI:SS'::text) AS as_of_et,
+            u.rate_60s::text AS rate_60s,
+            u.increase_60s::text AS increase_60s,
             u.eta_60s,
-            u.rate_5m,
-            u.increase_5m,
+            u.rate_5m::text AS rate_5m,
+            u.increase_5m::text AS increase_5m,
             u.eta_5m,
-            u.landed,
-            u.needed,
-            u.pct
+            u.landed::text AS landed,
+            u.needed::text AS needed,
+            u.pct::text AS pct
            FROM lanes l
              JOIN machinery.updates u ON u.source = 'richmond'::text AND u.workstation = ''::text AND u.lane = l.lane
         UNION ALL
          SELECT b.n,
             0,
             'richmond'::text AS text,
-            ''::text AS text,
-            ''::text AS text,
-            NULL::timestamp without time zone AS "timestamp",
-            NULL::numeric AS "numeric",
-            NULL::bigint AS int8,
-            ''::text AS text,
-            NULL::numeric AS "numeric",
-            NULL::bigint AS int8,
-            ''::text AS text,
-            NULL::bigint AS int8,
-            NULL::bigint AS int8,
-            NULL::numeric AS "numeric"
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text,
+            ' '::text
            FROM blocks b
         UNION ALL
          SELECT b.n,
@@ -669,19 +669,19 @@ create or replace view reproduction.richmond_update as
             'richmond'::text AS text,
             (l.lane || ' '::text) || b.n,
             COALESCE(u.status::text, 'pending'::text) AS "coalesce",
-            (u.as_of AT TIME ZONE 'America/New_York'::text) AS timezone,
-            u.rate_60s,
-            u.increase_60s,
+            to_char((u.as_of AT TIME ZONE 'America/New_York'::text), 'YYYY-MM-DD HH24:MI:SS'::text) AS to_char,
+            u.rate_60s::text AS rate_60s,
+            u.increase_60s::text AS increase_60s,
             u.eta_60s,
-            u.rate_5m,
-            u.increase_5m,
+            u.rate_5m::text AS rate_5m,
+            u.increase_5m::text AS increase_5m,
             u.eta_5m,
-            u.landed,
+            u.landed::text AS landed,
                 CASE
                     WHEN s.workstation IS NOT NULL THEN t.needed
                     ELSE NULL::bigint
-                END AS "case",
-            u.pct
+                END::text AS text,
+            u.pct::text AS pct
            FROM blocks b
              CROSS JOIN lanes l
              LEFT JOIN stations s ON s.n = b.n
@@ -691,19 +691,19 @@ create or replace view reproduction.richmond_update as
  SELECT source,
     lane,
     status,
-    as_of_et,
-    rate_60s,
-    increase_60s,
-    eta_60s,
-    rate_5m,
-    increase_5m,
-    eta_5m,
-    landed,
-    needed,
-    pct
+    COALESCE(as_of_et, ' '::text) AS as_of_et,
+    COALESCE(rate_60s, ' '::text) AS rate_60s,
+    COALESCE(increase_60s, ' '::text) AS increase_60s,
+    COALESCE(NULLIF(eta_60s, ''::text), ' '::text) AS eta_60s,
+    COALESCE(rate_5m, ' '::text) AS rate_5m,
+    COALESCE(increase_5m, ' '::text) AS increase_5m,
+    COALESCE(NULLIF(eta_5m, ''::text), ' '::text) AS eta_5m,
+    COALESCE(landed, ' '::text) AS landed,
+    COALESCE(needed, ' '::text) AS needed,
+    COALESCE(pct, ' '::text) AS pct
    FROM board
   ORDER BY block, ord;
-comment on view reproduction.richmond_update is 'RICHMOND UPDATE: three blocks of four rows - the totals (reproduction total, identification total, registration total, documentation total), a spacer row, workstation 1''s four (reproduction 1 ...), a spacer row, workstation 2''s four; source, lane, status, as of (Eastern), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage. Every row carries the source so the Table Editor (which sorts a view by its first column) shows the rows in this order';
+comment on view reproduction.richmond_update is 'RICHMOND UPDATE: three blocks of four rows - the totals (reproduction total, identification total, registration total, documentation total), a blank spacer row, workstation 1''s four (reproduction 1 ...), a blank spacer row, workstation 2''s four (pending until it first reports); source, lane, status, as of (Eastern, to the second), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage. Every column is text and a blank is one space, so the Table Editor shows a spacer as nothing; every row carries the source because the Editor sorts a view by its first column';
 
 create materialized view if not exists reading.acris_keys as
  SELECT 'registry'::text AS level,
