@@ -56,7 +56,14 @@ WIDTHS = {"synchronization": 5, "registration": 5, "documentation": 5}
 # manager is OFF: the workstations scale, not the width.  The 09-04 knobs, kept for the record (manage 1 turns them back on):
 #   {"manage": 1, "ramp_to_rate": 1, "rate_floor": 5, "rate_ideal_lo": 6, "rate_ideal_hi": 7, "dps_ceiling": 8, "rps_ceiling": 60,
 #    "width_min": 20, "width_max": 120, "adjust_every": 120, "adjust_step": 10, "session_max_requests": 1000000}
-MANAGE = {"documentation": {"manage": 0}}
+# login 2026-09-06 23:1x (after the tenth and eleventh notices on fixed 1x40): "turn the rate manager back on but instead of
+# striving for six to seven ... four to five: four minimum, five the upper ... one batch, enter, rate manager releases workers
+# every five seconds ... the session manager is there to regulate and know when we need a reset."  The band is 4-5 docs/s
+# (the 09-04 band was 6-7 with a ceiling of 8), the width never above 40 (the 1x40; workstations scale, not the width),
+# the request ceiling stays the record's 60/s, the session ends at 1,000,000 requests and re-enters on a fresh batch.
+MANAGE = {"documentation": {"manage": 1, "ramp_to_rate": 1, "rate_floor": 4, "rate_ideal_lo": 4, "rate_ideal_hi": 5, "dps_ceiling": 5,
+                            "rps_ceiling": 60, "width_min": 10, "width_max": 40, "adjust_every": 120, "adjust_step": 5,
+                            "session_max_requests": 1000000}}
 EDGE_HELP = "synchronization's first start: the last CRFN whose document the table holds"
 FRESH_DAYS = 30
 
