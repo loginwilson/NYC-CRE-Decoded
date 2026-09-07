@@ -6,8 +6,8 @@ repo reaches it. The mapping is one for one with the tree:
 | the tree | the database |
 |---|---|
 | the project (this repo) | the project |
-| a phase (`Reproduction/`; later `Construction/`, `Production/`) | a schema (`reproduction`; later `construction`, `production`) |
-| a source (`Reproduction/Acris/`) | a table prefix (`reproduction.acris`, `reproduction.acris_update`, …) |
+| a phase (`Reproduction/`; later `Construction/`, `Production/`) | a schema (`reproduction`; later `construction`, `production`) - and beside it, since 0016, `machinery` (what the code needs and a person never reads: claims, updates) and `reading` (the reading layer for products) |
+| a source (`Reproduction/Acris/`) | a table (`reproduction.acris`) and its board (`reproduction.acris_update`); the prefix `acris_` on the reading layer |
 | a lane (`Acris Documentation.py`) | a cell (`document`) |
 
 **What the database does and does not do.** It never computes the process. The workstations do the work - fetching,
@@ -27,16 +27,19 @@ the one file the CLI applied (0001, 2026-09-03) and every file applied from here
 
 ## The program
 
-    python supabase.py check               the server, the schemas and their tables, every SQL file on disk against the ledger
+    python supabase.py check               the server, the schemas and their relations, every change file on disk against the ledger
     python supabase.py push --dry          what would be applied, in version order; nothing runs
     python supabase.py push                apply it, one transaction per file, stop at the first failure; a file whose first line says
-                                           `-- statement by statement` runs each statement on its own (index builds; CONCURRENTLY)
+                                           `-- statement by statement` runs each statement on its own (index builds; CONCURRENTLY);
+                                           on a fresh project schema.sql is applied first
+    python supabase.py push --rest 30      statement by statement: rest 30 s after each statement that ran 10 s or longer (the disk's budget)
+    python supabase.py baseline            write schema.sql - the whole database as it stands, from the catalog, in an order that builds
     python supabase.py sql -c "select 1"   a statement; -f file.sql a script; --dry prints only; every run logged to supabase.log beside this file
 
 Credentials live in the env file (`C:/dev/nyc-cre-decoded.env` at home, `~/nyc-cre-decoded.env` on a Mac, or the path
 in `NYC_CRE_DECODED_ENV`): `SUPABASE_DB_URL` (Connect › Session pooler › URI; the direct host is IPv6-only and does not
 resolve from home) and `SUPABASE_DB_PASSWORD`. Never committed, never printed. The lanes reach the same database
-through `Reproduction/rulebook/cloud.py`, which reads the same file.
+through the Cloud part of `Reproduction/rulebook/rulebook.py`, which reads the same file.
 
 ## The cost (read 2026-09-05 from supabase.com/pricing and the compute-and-disk guide)
 
@@ -73,6 +76,11 @@ small, and a lane that waits two minutes on the table has something else wrong.
 | 2026-09-05 21:16 - 23:32 | `apply-found` twice (233,381 then 119,633 more acris cells filled with placed documents' paths - 353,014, every document the old stores gave the tree) and `verify` twice: MATCH on both sources each time, every cell state equal to the old table's shifted by the placements; acris path sample 200 of 200 on the drive; richmond 9 then 35 of 200 while its file move runs (the cells lead the disk until it ends) |
 | 2026-09-05 22:04 | 0004 applied with `push` after the load and `verify` (the column drop takes the table's lock; the two acris pending indexes were rebuilt over 21.6M rows, about seven minutes each): `updated_at` and its trigger gone, a row is `source | doc_id | registry | document`, a pending's wait between checks is its claim; a proof run before it went in ALL OK on the populated table (22:13, its connections without the statement timeout; the first run's recount was cut at two minutes) |
 | 2026-09-07 04:56 | 0015 applied with `push` (GATE 5, login's rule after the seventeenth notice at 04:41; the lane parked, the boards left running - they name only `reproduction.updates`): `doc_id` -> `identifier` in `acris`, `richmond`, `machinery.claims` (keys and the eleven indexes followed by themselves), the four field/parcel views re-created, `claim()` / `land()` re-stated with `identifier`. The first `push` ROLLED BACK in 8 s - `cannot remove parameter defaults from existing function` - because the re-statement omitted the live defaults (claim 500 / 20 minutes, land 1 hour); with them kept it applied in 9 s. Proof: eight offline tests ALL OK on the patched code; a proof run before it went in ALL OK on the populated table 04:57-05:06 (reconcile: phase 3,726,582 of 21,631,885; sync and registration 100%); cloud.py's reads against the renamed table; `acris_update` ticking at 05:07 |
+| 2026-09-07 12:49 | 0016 applied: three schemas - `reproduction` (the record and the two boards), `machinery` (claims, updates), `reading` (the eight reading objects); the workstation views dropped |
+| 2026-09-07 13:18 | 0017 applied: the lane row `identification`; `first_seen`; a workstation's reproduction row; the boards in three blocks of four |
+| 2026-09-07 13:3x | 0018 applied: every board row carries the source (the Table Editor sorts a view by its first column); the totals named `<lane> total`; an unclaimed block reads pending. Its version stamp (20260907134500) sorts before 0017's (20260907140000): the ledger lists them in that order, the record here is the order they were applied |
+| 2026-09-07 13:41 | 0019 applied: every column of the two boards text, a blank is one space, the as-of to the second; `schema.sql` = the whole database as one file, written by `baseline` (19 versions folded) |
+| 2026-09-07 15:0x | 0020 applied (the audit): reconcile() from the partial indexes; no PUBLIC execute on the four process functions; a comment on every schema, type, table, column, function, view and materialized view; `baseline` writes the file in building order (schemas, the pg_trgm extension, check_function_bodies off, types, functions, tables with their collations, views, materialized views, indexes last) - the one file builds a fresh project |
 
 ## History
 
@@ -192,7 +200,7 @@ acris_expiration; a Staten Island block 419 ms; a landed throwaway row found by 
 party's name and in the parcels view with borough / block / lot, then deleted. TWO THINGS TO KNOW: (1) a party by PART of a
 name reads the trigram index but a common name is slow on this instance - '%deutsche bank%' 36 s, a rare name 45 s cold - the
 1.9 GB index is read from the burstable disk for every common trigram; the exact full name through the registry GIN stays at
-about 300 ms; a word-level index (full-text on the names) is the better tool for names and is the candidate 0009, not tonight.
+about 300 ms; a word-level index (full-text on the names) is the better tool for names and is a candidate for a later change, not tonight.
 (2) the parcels views are for READING a document's parcels with borough, block and lot spelled out and for joins by identifier;
 a filter by bbl on the view is a full scan (it unnests every row) - finding goes through containment or block_keys, which
 read an index. GATE 2 CLOSED: 0005, 0006, 0007, 0008 applied, recorded and proven.
@@ -207,6 +215,10 @@ stays a registry). PROVEN 20:12: every cleaned value is a 2003-2026 year + nine 
 16,502 registrations in that id range against the city's own index (the open-data master datasets, by document id - never the
 ACRIS site): 2,946 agree, 0 disagree, 7,054 not in the index yet (the index updates monthly; the newest recordings are not
 there, which proves nothing either way). An exact crfn filter now finds every one of them.
+
+## 0009 - THE PROVISIONAL REGISTRATION (2026-09-06 20:35-20:40)
+
+login: "if something is filed and has a CRFN and it doesn't have all of its details filled out yet, it should be considered provisional." A registry object without a recorded date on a modern id is a provisional registration: `claim()` offers it to the registration lane among the due re-checks (before the empties), so the lane re-reads it until the details are in; `land()` keeps its claim as the cooldown while it stays provisional. Applied 20:35-20:40, before gate 3's batch; the record of the proof is Rulebook.md's History (2026-09-06 20:3x). This file had no entry for it until the audit of 2026-09-07.
 
 ## 0010 - ACRIS UPDATE and RICHMOND UPDATE, two views (2026-09-06 22:38)
 
@@ -242,6 +254,10 @@ login, opening `acris_update` after 0017: "That doesn't look good" - the rows ca
 
 login: "For the blank rows, can they just be blank to act as a spacer? Since it goes acris, empty, empty, null, null ... Just an aesthetic thing." The Table Editor prints EMPTY for an empty string and NULL for a null, and a number or a timestamp column can hold nothing else, so every column of `acris_update` / `richmond_update` is text: a blank cell is one space (shown as nothing), the as-of is written to the second, the numbers read as they did. The spacer rows keep the source in the first column (0018: the Editor sorts a view by it). Nothing in the code reads the views; the board program reads and writes `machinery.updates`.
 
+## 0020 - THE AUDIT (2026-09-07 15:0x)
+
+login: "a complete audit of GitHub and supabase on the basis of pure organization and then on the basis of the content in the file and it being accurate to date with no flaws." The database side, read against the live catalog: `schema.sql` could not have built a fresh project - its indexes came before the functions and materialized views they use, two SQL functions named `borough_digit` before it was written, and nothing created the `pg_trgm` extension the trigram indexes need - so `baseline` now writes the file in building order (schemas, the extension, `check_function_bodies` off, types, functions, tables with each column's collation - `identifier collate "C"` had been lost - views, materialized views, indexes last) and every comment with its object; `push` announces and wraps the baseline apply; `check` lists the materialized views and watches `public`. In the database: `reconcile()` counted the rows missing either cell with a sequential scan of the 28 GB table - it now counts from the partial indexes (three index-only counts and a subtraction; richmond in about a second); the four process functions lost their PUBLIC execute (harmless before, harmless after: no API role has USAGE on our schemas); the two column comments that still said synchronization and the claims comment that said doc_ids are re-worded, and the schema `reproduction`, the enum, nine functions, the eight reading objects and every column of claims, updates and the two boards carry a comment. Left for the owner's word: the enum and the thirteen functions live in `reproduction` (the standard puts the code's four in machinery and the readers in reading - a catalog move, no rebuild, but claim() and land() name `us_date` by text and must be re-stated with the code's four calls); row-level security (off, no policies; a risk only if a schema is ever exposed through the Data API - then `enable row level security` with no policies, the owner `postgres` bypasses it); the constraint names (two conventions).
+
 ## ONE FILE (from 0016 on)
 
-The schema lives as `supabase/schema.sql` - the whole database as it stands, written from the project by `python supabase/supabase.py baseline` (login 2026-09-07: "there is no world where a schema should have this many files"). A change is a numbered `supabase/<version>_<name>.sql` beside it, applied once with `push`, folded in with `baseline`, and removed in the same commit; the ledger keeps every version applied (19 so far). A fresh project builds from `schema.sql` first, then any change file.
+The schema lives as `supabase/schema.sql` - the whole database as it stands, written from the project by `python supabase/supabase.py baseline` (login 2026-09-07: "there is no world where a schema should have this many files"). A change is a numbered `supabase/<version>_<name>.sql` beside it, applied once with `push`, folded in with `baseline`, and removed in the same commit; the ledger keeps every version applied (20 so far). A fresh project builds from `schema.sql` first, then any change file.

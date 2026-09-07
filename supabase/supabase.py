@@ -1,15 +1,19 @@
 """THE DATABASE - one Supabase project for the whole process, reached from here.
 
-One project; one schema per phase (`reproduction` today, `construction` and `production` when those phases open); one
-table prefix per source; one cell per lane.  The database never computes the process: the workers on the workstations
-fill it and the boards read it.  Each phase defines its own schema as numbered SQL files in that phase's rulebook
-(`supabase/schema.sql` is the whole database as it stands; a change is `supabase/<version>_<name>.sql`, applied once, folded into schema.sql, removed);
-this program applies them and keeps the record of which are applied in the project's own ledger
+One project; three schemas of our own - `reproduction` (the record, one table per source, and the two boards a person
+opens), `machinery` (what the code needs and a person never reads), `reading` (the reading layer for products) - and a
+schema per later phase when it opens; one cell per lane.  The database never computes the process: the workers on the
+workstations fill it and the boards read it.  The schema is one file, `supabase/schema.sql`, written from the project by
+`baseline`; a change is `supabase/<version>_<name>.sql`, applied once by `push`, folded in by `baseline`, removed in the
+same commit.  This program keeps the record of which versions are applied in the project's own ledger
 (`supabase_migrations.schema_migrations`, the table the Supabase CLI writes too, so either tool agrees).
 
-    python supabase.py check               the server, the schemas and their tables, every SQL file on disk against the ledger
-    python supabase.py push --dry          list the files not yet applied, in version order; run nothing
-    python supabase.py push                apply them, one transaction per file (the file, then its ledger row); stop at the first failure.
+    python supabase.py check               the server, the schemas and their relations, every change file on disk against the ledger
+    python supabase.py push --dry          list the change files not yet applied, in version order; run nothing
+    python supabase.py push                apply them, one transaction per file (the file, then its ledger row); stop at the first failure;
+                                           on a fresh project schema.sql is applied first
+    python supabase.py push --rest 30      statement by statement: rest 30 s after each statement that ran 10 s or longer (the disk's budget)
+    python supabase.py baseline            write schema.sql: the whole database as it stands, from the catalog, in an order that builds
                                            A file whose first line says `-- statement by statement` runs each statement on its own
                                            (autocommit) - for index builds, which must not be one transaction on a small instance,
                                            and for CREATE INDEX CONCURRENTLY; such a file must be re-runnable (if not exists / or replace)
@@ -28,7 +32,7 @@ import time
 import argparse, datetime, os, pathlib, re, sys, urllib.parse
 
 HERE = pathlib.Path(__file__).resolve().parent
-ROOT = HERE.parent                                   # rulebook -> the repo: the phases are its capitalized folders
+ROOT = HERE.parent                                   # supabase/ -> the repo
 LOG = HERE / "supabase.log"
 LEDGER = "supabase_migrations.schema_migrations"
 FILE = re.compile(r"^(\d{14})_(.+)\.sql$")
@@ -95,7 +99,7 @@ def phases():
 
 
 def sql_files():
-    """Every phase's SQL files as (version, name, phase, path), in version order across the phases."""
+    """The change files beside this program as (version, name, folder, path), in version order."""
     out = []
     for ph in phases():
         for f in sorted(ph.iterdir()):
@@ -150,12 +154,11 @@ where n.nspname not like 'pg#_%' escape '#' and n.nspname not in ('information_s
 group by n.nspname order by n.nspname;
 """
 TABLES = """
-select table_schema as schema, table_name as name, table_type as type
-from information_schema.tables
-where table_schema not in ('pg_catalog','information_schema','extensions','graphql','graphql_public',
-                           'net','pgsodium','pgsodium_masks','realtime','storage','supabase_functions',
-                           'supabase_migrations','vault','auth','cron','pgbouncer','_realtime','public')
-order by 1, 2;
+select n.nspname as schema, c.relname as name,
+       case c.relkind when 'v' then 'view' when 'm' then 'materialized view' else 'table' end as kind
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where c.relkind in ('r', 'p', 'v', 'm') and n.nspname in ('reproduction', 'machinery', 'reading', 'public')
+order by 1, 3, 2;
 """
 
 
@@ -171,7 +174,7 @@ def check():
             print("schemas:")
             cur.execute(SCHEMAS)
             show(cur)
-            print("the phases' relations:")
+            print("the project's relations (public must stay empty):")
             cur.execute(TABLES)
             show(cur)
             done = ledger(cur)
@@ -205,16 +208,27 @@ def push(dry, rest=0):
                 con.commit()
                 done = {}
             done = done or {}
-        if not done and not dry:
+        if not done:
             for ph in phases():
                 b = ph / BASELINE
-                if b.exists():
-                    print("fresh project: applying the baseline %s first" % b.relative_to(ROOT))
+                if not b.exists():
+                    continue
+                if dry:
+                    print("fresh project: would apply the baseline %s first" % b.relative_to(ROOT))
+                    continue
+                print("fresh project: applying the baseline %s first" % b.relative_to(ROOT))
+                try:
                     with con.cursor() as cur:
                         cur.execute(b.read_text(encoding="utf-8"))
                         cur.execute("insert into %s (version, statements, name) values (%%s, %%s, %%s)" % LEDGER, ("00000000000000", [], "schema"))
                     con.commit()
                     done["00000000000000"] = "schema"
+                    print("  applied and recorded")
+                except Exception as e:
+                    con.rollback()
+                    print("  ROLLED BACK - %s: %s" % (type(e).__name__, str(e).strip().splitlines()[0]))
+                    print("  the baseline did not build; nothing after it was attempted")
+                    return 1
         todo = [x for x in files if x[0] not in done]
         if not todo:
             print("nothing to apply - %d file(s) on disk, every one in the ledger" % len(files))
@@ -249,13 +263,17 @@ KEPT = ("reproduction", "machinery", "reading")          # the schemas that are 
 
 
 def baseline():
-    """Write supabase/schema.sql: the whole database as it stands - the schemas in KEPT, their types, tables,
-    indexes, functions, views and materialized views - from the catalog, idempotent (if not exists / or replace).  The
-    numbered change files fold into it and leave the folder in the same commit."""
+    """Write supabase/schema.sql: the whole database as it stands - the schemas in KEPT, the extension they lean on, their
+    types, functions, tables (with each column's collation), views, materialized views and, last, their indexes - from the
+    catalog, idempotent (if not exists / or replace) and in an order a fresh project builds from: functions before the
+    indexes and views that use them, materialized views before their unique indexes, check_function_bodies off so a SQL
+    function may name one written after it.  Every comment comes with its object.  The numbered change files fold into
+    it and leave the folder in the same commit."""
     con = connect("supabase.py baseline")
     out = ["-- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on %s ET."
            % time.strftime("%Y-%m-%d %H:%M"),
            "-- Idempotent: a fresh project builds from it (push applies it first); an existing project is unchanged by it.",
+           "-- In building order: schemas, the extension, types, functions, tables, views, materialized views, indexes.",
            "-- A change is a numbered <version>_<name>.sql beside this file, applied once with `push`, folded in with `baseline`,",
            "-- and removed in the same commit - so this folder holds one file between changes.", ""]
     q = lambda t: "'" + t.replace("'", "''") + "'"
@@ -268,36 +286,23 @@ def baseline():
                 if r and r[0]:
                     out.append("comment on schema %s is %s;" % (sch, q(r[0])))
             out.append("")
-            cur.execute("select n.nspname, t.typname, array_agg(e.enumlabel order by e.enumsortorder) from pg_type t"
+            # the extensions our objects lean on (an operator class of an extension used by one of our indexes)
+            cur.execute("select distinct e.extname, ne.nspname from pg_depend d join pg_extension e on e.oid = d.refobjid and d.refclassid = 'pg_extension'::regclass"
+                        " join pg_namespace ne on ne.oid = e.extnamespace where d.classid = 'pg_opclass'::regclass and d.objid in ("
+                        " select unnest(i.indclass)::oid from pg_index i join pg_class c on c.oid = i.indexrelid join pg_namespace n on n.oid = c.relnamespace"
+                        " where n.nspname = any(%s)) order by 1", (list(KEPT),))
+            for ext, esch in cur.fetchall():
+                out.append("create extension if not exists %s with schema %s;" % (ext, esch))
+            out.append("set check_function_bodies = off;                 -- a SQL function may name one written after it")
+            out.append("")
+            cur.execute("select n.nspname, t.typname, array_agg(e.enumlabel order by e.enumsortorder), obj_description(t.oid, 'pg_type') from pg_type t"
                         " join pg_namespace n on n.oid = t.typnamespace join pg_enum e on e.enumtypid = t.oid"
-                        " where n.nspname = any(%s) group by 1, 2 order by 1, 2", (list(KEPT),))
-            for sch, name, labels in cur.fetchall():
+                        " where n.nspname = any(%s) group by 1, 2, t.oid order by 1, 2", (list(KEPT),))
+            for sch, name, labels, c in cur.fetchall():
                 out.append("do $$ begin create type %s.%s as enum (%s); exception when duplicate_object then null; end $$;"
                            % (sch, name, ", ".join(q(l) for l in labels)))
-            out.append("")
-            cur.execute("select n.nspname, c.relname, c.oid, obj_description(c.oid, 'pg_class') from pg_class c"
-                        " join pg_namespace n on n.oid = c.relnamespace where c.relkind = 'r' and n.nspname = any(%s) order by 1, 2", (list(KEPT),))
-            for sch, tbl, oid, tcomment in cur.fetchall():
-                cur.execute("select a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull, pg_get_expr(d.adbin, d.adrelid),"
-                            " col_description(a.attrelid, a.attnum) from pg_attribute a left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum"
-                            " where a.attrelid = %s and a.attnum > 0 and not a.attisdropped order by a.attnum", (oid,))
-                cols = cur.fetchall()
-                cur.execute("select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = %s"
-                            " order by case contype when 'p' then 0 when 'u' then 1 when 'f' then 2 else 3 end, conname", (oid,))
-                cons = cur.fetchall()
-                lines = ["  %-14s %s%s%s" % (c, t, " not null" if nn else "", (" default " + d) if d else "") for c, t, nn, d, _ in cols]
-                lines += ["  constraint %s %s" % (n, d) for n, d in cons]
-                out.append("create table if not exists %s.%s (\n%s\n);" % (sch, tbl, ",\n".join(lines)))
-                if tcomment:
-                    out.append("comment on table %s.%s is %s;" % (sch, tbl, q(tcomment)))
-                for c, _, _, _, cc in cols:
-                    if cc:
-                        out.append("comment on column %s.%s.%s is %s;" % (sch, tbl, c, q(cc)))
-                out.append("")
-            cur.execute("select i.schemaname, i.tablename, i.indexname, i.indexdef from pg_indexes i where i.schemaname = any(%s)"
-                        " and not exists (select 1 from pg_constraint c where c.conname = i.indexname) order by 1, 2, 3", (list(KEPT),))
-            for sch, tbl, name, d in cur.fetchall():
-                out.append(d.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ", 1).replace("CREATE UNIQUE INDEX ", "CREATE UNIQUE INDEX IF NOT EXISTS ", 1) + ";")
+                if c:
+                    out.append("comment on type %s.%s is %s;" % (sch, name, q(c)))
             out.append("")
             cur.execute("select n.nspname, p.proname, pg_get_functiondef(p.oid), pg_get_function_identity_arguments(p.oid), obj_description(p.oid, 'pg_proc')"
                         " from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = any(%s) and p.prokind = 'f' order by 1, 2", (list(KEPT),))
@@ -306,24 +311,54 @@ def baseline():
                 if c:
                     out.append("comment on function %s.%s(%s) is %s;" % (sch, fn, args, q(c)))
                 out.append("")
-            cur.execute("select n.nspname, c.relname, pg_get_viewdef(c.oid, true), obj_description(c.oid, 'pg_class') from pg_class c"
-                        " join pg_namespace n on n.oid = c.relnamespace where c.relkind = 'v' and n.nspname = any(%s) order by 1, 2", (list(KEPT),))
-            for sch, v, d, c in cur.fetchall():
-                out.append("create or replace view %s.%s as\n%s;" % (sch, v, d.rstrip().rstrip(";")))
+            cur.execute("select n.nspname, c.relname, c.oid, obj_description(c.oid, 'pg_class') from pg_class c"
+                        " join pg_namespace n on n.oid = c.relnamespace where c.relkind = 'r' and n.nspname = any(%s) order by 1, 2", (list(KEPT),))
+            for sch, tbl, oid, tcomment in cur.fetchall():
+                cur.execute("select a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull, pg_get_expr(d.adbin, d.adrelid),"
+                            " col_description(a.attrelid, a.attnum),"
+                            " (select quote_ident(co.collname) from pg_collation co where co.oid = a.attcollation and a.attcollation <> t.typcollation)"
+                            " from pg_attribute a join pg_type t on t.oid = a.atttypid left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum"
+                            " where a.attrelid = %s and a.attnum > 0 and not a.attisdropped order by a.attnum", (oid,))
+                cols = cur.fetchall()
+                cur.execute("select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = %s"
+                            " order by case contype when 'p' then 0 when 'u' then 1 when 'f' then 2 else 3 end, conname", (oid,))
+                cons = cur.fetchall()
+                lines = ["  %-14s %s%s%s%s" % (c, t, (" collate " + co) if co else "", " not null" if nn else "", (" default " + d) if d else "")
+                         for c, t, nn, d, _, co in cols]
+                lines += ["  constraint %s %s" % (n, d) for n, d in cons]
+                out.append("create table if not exists %s.%s (\n%s\n);" % (sch, tbl, ",\n".join(lines)))
+                if tcomment:
+                    out.append("comment on table %s.%s is %s;" % (sch, tbl, q(tcomment)))
+                for c, _, _, _, cc, _ in cols:
+                    if cc:
+                        out.append("comment on column %s.%s.%s is %s;" % (sch, tbl, c, q(cc)))
+                out.append("")
+            for kind, word, head in (("v", "view", "create or replace view %s.%s as\n%s;"), ("m", "materialized view", "create materialized view if not exists %s.%s as\n%s;")):
+                cur.execute("select n.nspname, c.relname, c.oid, pg_get_viewdef(c.oid, true), obj_description(c.oid, 'pg_class') from pg_class c"
+                            " join pg_namespace n on n.oid = c.relnamespace where c.relkind = %s and n.nspname = any(%s) order by 1, 2", (kind, list(KEPT)))
+                for sch, v, oid, d, c in cur.fetchall():
+                    out.append(head % (sch, v, d.rstrip().rstrip(";")))
+                    if c:
+                        out.append("comment on %s %s.%s is %s;" % (word, sch, v, q(c)))
+                    cur.execute("select a.attname, col_description(a.attrelid, a.attnum) from pg_attribute a where a.attrelid = %s and a.attnum > 0"
+                                " and not a.attisdropped and col_description(a.attrelid, a.attnum) is not null order by a.attnum", (oid,))
+                    for col, cc in cur.fetchall():
+                        out.append("comment on column %s.%s.%s is %s;" % (sch, v, col, q(cc)))
+                    out.append("")
+            cur.execute("select i.schemaname, i.tablename, i.indexname, i.indexdef, obj_description(c.oid, 'pg_class') from pg_indexes i"
+                        " join pg_class c on c.relname = i.indexname join pg_namespace n on n.oid = c.relnamespace and n.nspname = i.schemaname"
+                        " where i.schemaname = any(%s) and not exists (select 1 from pg_constraint k where k.conname = i.indexname) order by 1, 2, 3", (list(KEPT),))
+            for sch, tbl, name, d, c in cur.fetchall():
+                out.append(d.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ", 1).replace("CREATE UNIQUE INDEX ", "CREATE UNIQUE INDEX IF NOT EXISTS ", 1) + ";")
                 if c:
-                    out.append("comment on view %s.%s is %s;" % (sch, v, q(c)))
-                out.append("")
-            cur.execute("select schemaname, matviewname, definition from pg_matviews where schemaname = any(%s) order by 1, 2", (list(KEPT),))
-            for sch, m, d in cur.fetchall():
-                out.append("create materialized view if not exists %s.%s as\n%s;" % (sch, m, d.rstrip().rstrip(";")))
-                out.append("")
+                    out.append("comment on index %s.%s is %s;" % (sch, name, q(c)))
+            out.append("")
     finally:
         con.close()
     target = phases()[0] / BASELINE
     target.write_text("\n".join(out).rstrip("\n") + "\n", encoding="utf-8")
-    print("wrote %s (%d lines)" % (target.relative_to(ROOT), len(out)))
+    print("wrote %s (%d statements)" % (target.relative_to(ROOT), sum(1 for l in out if l and not l.startswith("--"))))
     return 0
-
 
 def statements(text):
     """The file's statements, split on the semicolons that are outside quotes, dollar-quoted bodies and comments."""
@@ -374,7 +409,6 @@ def label(stmt):
 def push_statements(con, v, n, text, rest=0):
     """One statement at a time, each its own transaction, timed; stop at the first failure (what ran stays - the file is
     re-runnable); the ledger row after the last.  Returns True when the file is recorded."""
-    import time
     stmts = statements(text)
     print("  statement by statement: %d statements" % len(stmts))
     con.rollback()                                            # end the ledger's read transaction: autocommit cannot be set inside one
@@ -426,11 +460,11 @@ def run_sql(sql, dry):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="the process's one database: check it, push the phases' schema files, run a statement")
+    ap = argparse.ArgumentParser(description="the process's one database: check it, push a change file, write its schema, run a statement")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("check", help="server, schemas, tables; every schema file on disk against the ledger")
+    sub.add_parser("check", help="server, schemas, relations; every change file on disk against the ledger")
     sub.add_parser("baseline", help="write supabase/schema.sql: the whole database as it stands, from the catalog")
-    p = sub.add_parser("push", help="apply the schema files not yet applied, in version order")
+    p = sub.add_parser("push", help="apply the change files not yet applied, in version order (a fresh project gets schema.sql first)")
     p.add_argument("--dry", action="store_true", help="list what would be applied; run nothing")
     p.add_argument("--rest", type=int, default=0, help="statement by statement: seconds to rest after each statement that ran 10 s or longer (a small instance's disk budget)")
     s = sub.add_parser("sql", help="one statement (-c) or a script (-f), logged beside this file")
