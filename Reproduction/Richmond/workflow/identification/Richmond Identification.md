@@ -1,6 +1,6 @@
-# Richmond Synchronization
+# Richmond Identification
 
-The synchronization lane of the richmond reproduction, as one program: `Richmond Synchronization.py`. It keeps the table live at the county's date edge: one monitor and a few walkers behind one entry. The monitor reads today's listing every ten seconds and lands every new internal id as a new row, the `doc_id` cell and nothing else, within seconds of the county listing it; every quarter hour it re-reads the trailing thirty days so a filing the county lists late lands too; on a start after downtime it walks the days it missed. This file is the lane's own authority; the cycle's is `../reproduction/Richmond Reproduction.md`; the source's shared rules are in `Reproduction/Richmond/rulebook/richmond.py` (its document is `Richmond.md` beside it).
+The identification lane of the richmond reproduction, as one program: `Richmond Identification.py`. It keeps the table live at the county's date edge: one monitor and a few walkers behind one entry. The monitor reads today's listing every ten seconds and lands every new internal id as a new row, the `doc_id` cell and nothing else, within seconds of the county listing it; every quarter hour it re-reads the trailing thirty days so a filing the county lists late lands too; on a start after downtime it walks the days it missed. This file is the lane's own authority; the cycle's is `../reproduction/Richmond Reproduction.md`; the source's shared rules are in `Reproduction/Richmond/rulebook/richmond.py` (its document is `Richmond.md` beside it).
 
 ## Why the date edge
 
@@ -8,22 +8,22 @@ Richmond County lists its recorded instruments by date range, with every row car
 
 ## Launch
 
-    python "Richmond Synchronization.py" --edge 2026-08-25      the first start names the last day walked
-    python "Richmond Synchronization.py"                        afterwards synchronization.edge.json remembers it
+    python "Richmond Identification.py" --edge 2026-08-25      the first start names the last day walked
+    python "Richmond Identification.py"                        afterwards identification.edge.json remembers it
 
-One machine: the edge is local state. `--width` defaults to 4 walkers (the day window, the heal, a catch-up). `--every 10 --heal-every 900 --heal-days 30 --pace 0.3` are the cadence knobs. `synchronization.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
+One machine: the edge is local state. `--width` defaults to 4 walkers (the day window, the heal, a catch-up). `--every 10 --heal-every 900 --heal-days 30 --pace 0.3` are the cadence knobs. `identification.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
 
 ## The rules
 
 | rule | what the lane does | origin |
 |---|---|---|
-| the edge | `synchronization.edge.json` holds the last day whose listing was walked. A start without it needs `--edge`, never a guess. The edge moves only over windows whose ids are in the table and never past a window still in flight or holed, so a crash re-walks from the last contiguous day and loses nothing | the acris lane's edge; the census's last swept day |
+| the edge | `identification.edge.json` holds the last day whose listing was walked. A start without it needs `--edge`, never a guess. The edge moves only over windows whose ids are in the table and never past a window still in flight or holed, so a crash re-walks from the last contiguous day and loses nothing | the acris lane's edge; the census's last swept day |
 | the day | today's listing every `--every` seconds; a new filing lands within seconds | rc_lane's probe every 10 s (Richmond Reproduction.md §1) |
 | the heal | the trailing `--heal-days` (30, inclusive) every `--heal-every` seconds (15 min); never a window longer than the county's cap | rc_lane's rd heal, 15 min over 30 days; the 30-day cap answers a silent zero beyond it |
 | catch-up | on a start, the days between the edge and the heal window are walked first, in windows of at most 30 days | the census's resumable windows |
 | control first | a window known to hold documents (2026-08-19..20, 315 rows) is asked at start and before every heal; if it parses nothing, the parser is broken and the lane parks (exit 3) rather than believing empty answers | rc_window.control, 2026-08-21: a sync printed level for hours on a false zero |
 | a blank is an answer | the county listed nothing for that day: weekends, holidays, early morning | the listing is the county's own |
-| an error is not an absence | a page that fails is asked again (three asks by the monitor; each time a transport error is retried once more by the crew); a window that keeps failing is recorded in `synchronization.holes.jsonl` and the next heal asks it again | rc_rd_walk, 2026-08-21: the retry unit must never be bigger than the failure unit |
+| an error is not an absence | a page that fails is asked again (three asks by the monitor; each time a transport error is retried once more by the crew); a window that keeps failing is recorded in `identification.holes.jsonl` and the next heal asks it again | rc_rd_walk, 2026-08-21: the retry unit must never be bigger than the failure unit |
 | two namespaces | the internal id is ours: `RC_<internal>`; the instrument number repeats across eras and is never a key | measured 2026-08-21 |
 | the cell | the `identifier` only; the counters move with the insert in the same transaction | the cell rule; `insert_ids()` |
 | ids landed once | the monitor remembers the ids it has landed for the heal window and sends only new ones to the cloud | ten-second probes must not re-send the day's ids |
@@ -48,7 +48,7 @@ A date edge sees what the county lists for the dates it re-reads. A document lis
 
 ## Working files
 
-Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.log` (every launch's output, appended), `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`. Exit codes: 0 stopped · 2 refused · 3 four re-entries in a row refused, or the probe broken (the lane parked itself) · 4 wall · 5 crash.
+Beside this file, never in git: `identification.edge.json`, `identification.holes.jsonl`, `identification.lock`, `identification.log` (every launch's output, appended), `identification.control`, `identification.parked`, `identification.fails.jsonl`. Exit codes: 0 stopped · 2 refused · 3 four re-entries in a row refused, or the probe broken (the lane parked itself) · 4 wall · 5 crash.
 
 ## History
 
@@ -63,4 +63,4 @@ could do more, but one batch"): `--edge 2026-08-31` (the old rc_lane's last live
 cloud's newest recorded date was 2026-09-01), the calibrated width 4. Exit pool one block (173.239.217), entered 23:54:17,
 births 0 s apart. The control window parsed; the catch-up (09-01..09-05) and the trailing heal listed 2,625 ids and
 inserted 435 new rows by 23:56:09, holes 0, the edge at 2026-09-05; today's listing was empty at midnight (a blank is an
-answer). Stopped by `synchronization.control` at 23:57:09 (exit 0) so the registration lane could take the county alone.
+answer). Stopped by `identification.control` at 23:57:09 (exit 0) so the registration lane could take the county alone.

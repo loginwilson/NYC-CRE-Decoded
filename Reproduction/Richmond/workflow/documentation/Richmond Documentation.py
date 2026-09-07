@@ -41,7 +41,7 @@ The rules are kept from the lane that ran before this one (rc_lane.py, rc_pdf_pu
   already here  a file already under this drive is recorded without a request
   failures      a fetch error never stops the lane: the document stays empty for a later pass and the
                 reason is written to documentation.fails.jsonl
-  hang-up, wall, width, one door, drive, pending recheck, no overlap   shared with every lane (lane.py).
+  hang-up, wall, width, one door, drive, pending recheck, no overlap   shared with every lane (rulebook.py).
                 The hang-up is DORMANT at this county (no session close was ever measured here: the
                 drumroll rule); it fires only when the wire itself dies - hang up, drop the cut batch
                 (the claims expire and come back), wait 60 s, re-enter once, births 0.4 s apart
@@ -67,9 +67,8 @@ PHASE = HERE.parents[2]                       # documentation -> workflow -> Ric
 sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
-import lane                                                     # noqa: E402
+import rulebook  # noqa: E402
 import richmond                                                 # noqa: E402
-import storage                                                  # noqa: E402
 
 
 class Documentation:
@@ -120,11 +119,11 @@ class Documentation:
         with self.prep_lock:
             if getattr(s, "_prepared", False):     # the session object itself is marked: after a re-entry the old id could be reused
                 return
-            s.mount(richmond.IAPPS, requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=lane.MAX_WIDTH + 4,
+            s.mount(richmond.IAPPS, requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=rulebook.MAX_WIDTH + 4,
                                                                   max_retries=0, pool_block=True))
             try:
                 crew.get(richmond.BASE + "/", richmond.BASE + "/", timeout=60)
-            except lane.HTTPStatus:
+            except rulebook.HTTPStatus:
                 pass                                      # the front door's status is not the point; the cookies are
             s._prepared = True
 
@@ -135,7 +134,7 @@ class Documentation:
         try:
             return crew.session.get(url, headers=headers, timeout=timeout, allow_redirects=allow_redirects, stream=stream)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.ChunkedEncodingError) as e:
-            raise lane.Transport("%s: %s" % (type(e).__name__, lane.reason(e)))
+            raise rulebook.Transport("%s: %s" % (type(e).__name__, rulebook.reason(e)))
 
     def mint(self, crew, doc_id):
         """-> ('present', token url) | ('noimage', None); 403/429/5xx raise HTTPStatus (the wall counts 429/503)."""
@@ -150,7 +149,7 @@ class Documentation:
             richmond.check_refused(body.decode("utf-8", "replace"), "mint %s" % doc_id)
         outcome, token = richmond.classify_mint(status, loc)
         if outcome == "error":
-            raise lane.HTTPStatus(status, richmond.mint_url(iid))
+            raise rulebook.HTTPStatus(status, richmond.mint_url(iid))
         return outcome, token
 
     def pull(self, crew, doc_id, token_url):
@@ -165,14 +164,14 @@ class Documentation:
                                            " the cure is a line WITHOUT the VPN (the office workstation; one pull tells), never a browser disguise" % doc_id)
                 return self.verdict(crew, doc_id, r.status_code)
             if r.status_code == 429:
-                raise lane.HTTPStatus(429, token_url)
+                raise rulebook.HTTPStatus(429, token_url)
             if r.status_code != 200:
-                raise lane.Retry("HTTP %d from the courts host" % r.status_code)
+                raise rulebook.Retry("HTTP %d from the courts host" % r.status_code)
             data = r.content
         finally:
             r.close()
         if not richmond.is_pdf(data):
-            raise lane.Retry("not a pdf (%d bytes, %r)" % (len(data), data[:8]))
+            raise rulebook.Retry("not a pdf (%d bytes, %r)" % (len(data), data[:8]))
         return data
 
     # ── the verdict on a 4xx from the courts host ────────────────────────────────────────
@@ -180,15 +179,15 @@ class Documentation:
         """Sealed records 403 at any rate; a refusal is about us.  Hold everyone, cool down, then ONE probe
         of a DIFFERENT document decides.  Returns 'restricted' (the document's verdict) or raises Refused."""
         if not self.arbiter.acquire(blocking=False):
-            raise lane.Retry("HTTP %d while a verdict is in progress - asked again later" % code)
+            raise rulebook.Retry("HTTP %d while a verdict is in progress - asked again later" % code)
         try:
             self.hold.set()
-            lane._log(crew.ctx, "documentation: HTTP %d on %s from the courts host - HOLDING every worker %ds; one probe of a DIFFERENT"
+            rulebook._log(crew.ctx, "documentation: HTTP %d on %s from the courts host - HOLDING every worker %ds; one probe of a DIFFERENT"
                       " document decides: the document restricted, or the lane refused" % (code, doc_id, self.cooldown))
             self._sleep(crew, self.cooldown)
             probe = self._probe(crew, doc_id)
             if probe is None:
-                raise lane.Retry("no probe document available - the hold is released unproven; asked again later")
+                raise rulebook.Retry("no probe document available - the hold is released unproven; asked again later")
             probe_id, answer = probe
             if answer == "served":
                 self.restricted.add(doc_id)
@@ -198,7 +197,7 @@ class Documentation:
                                             "probe": probe_id, "verdict": "doc restricted"}) + "\n")
                 except OSError:
                     pass
-                lane._log(crew.ctx, "documentation: VERDICT - %s is RESTRICTED (probe %s returned a pdf): recorded absent, never asked again;"
+                rulebook._log(crew.ctx, "documentation: VERDICT - %s is RESTRICTED (probe %s returned a pdf): recorded absent, never asked again;"
                           " the lane resumes" % (doc_id, probe_id))
                 return "restricted"
             if answer == "challenged":
@@ -208,7 +207,7 @@ class Documentation:
             if answer == "refused":
                 raise richmond.Refused("the courts host refused %s (%d) AND the probe %s - the lane is refused; STOP, no retry, no rotation"
                                        % (doc_id, code, probe_id))
-            raise lane.Retry("HTTP %d on %s, and the probe %s answered neither a pdf nor a refusal (%s) - unproven; asked again later"
+            raise rulebook.Retry("HTTP %d on %s, and the probe %s answered neither a pdf nor a refusal (%s) - unproven; asked again later"
                              % (code, doc_id, probe_id, answer))
         finally:
             self.hold.clear()
@@ -235,7 +234,7 @@ class Documentation:
                     continue
                 try:
                     outcome, token = self.mint(crew, pid)
-                except (lane.HTTPStatus, lane.Transport):
+                except (rulebook.HTTPStatus, rulebook.Transport):
                     continue
                 if outcome != "present":
                     continue
@@ -260,11 +259,11 @@ class Documentation:
     # ── one document ─────────────────────────────────────────────────────────────────────
     def fetch(self, crew, doc_id, registry):
         if not isinstance(registry, dict):
-            raise lane.Retry("no registry yet (%s)" % (registry if registry else "empty"))
+            raise rulebook.Retry("no registry yet (%s)" % (registry if registry else "empty"))
         if doc_id in self.restricted:
             return "absent"                                   # the verdict stands; never asked again
         canon = richmond.canonical_path(doc_id, registry)
-        path = storage.local(self.root, canon)
+        path = rulebook.local(self.root, canon)
         if path.is_file() and path.stat().st_size > 0:
             return canon                                      # already on this drive: no request spent
         while self.hold.is_set() and not crew.stop.is_set():
@@ -277,7 +276,7 @@ class Documentation:
             if richmond.fresh(registry, self.fresh_days):
                 return "pending"
             if registry.get("image_state") == "present":
-                raise lane.Retry("the mint says no image but the registry says present - two sources disagree, asked again")
+                raise rulebook.Retry("the mint says no image but the registry says present - two sources disagree, asked again")
             return "absent"
 
         # 2. the pull, in the same breath
@@ -294,7 +293,7 @@ class Documentation:
         except OSError as e:
             if not os.path.isdir(self.root):
                 self.check(crew.ctx)
-            raise lane.Retry("could not write the file (%s: %s)" % (type(e).__name__, str(e)[:100]))
+            raise rulebook.Retry("could not write the file (%s: %s)" % (type(e).__name__, str(e)[:100]))
         return canon
 
 
@@ -302,7 +301,7 @@ def role(drive_root, args):
     """This lane's role, for a sibling lane hosting it with --also documentation:N."""
     if not drive_root:
         raise SystemExit("documentation needs --drive <label>: the drive its files are written to")
-    a = lane.role_args(args, ("fresh_days", "cooldown"), fresh_days=richmond.IMAGE_LAG_DAYS, cooldown=600)
+    a = rulebook.role_args(args, ("fresh_days", "cooldown"), fresh_days=richmond.IMAGE_LAG_DAYS, cooldown=600)
     return Documentation(HERE, drive_root, a.fresh_days, a.cooldown)
 
 
@@ -312,16 +311,16 @@ def main():
     ap.add_argument("--fresh-days", type=int, default=richmond.IMAGE_LAG_DAYS,
                     help="a document recorded within this many days with no image is pending, not absent (the measured scan lag)")
     ap.add_argument("--cooldown", type=int, default=600, help="seconds every worker holds while a 401/403 from the courts host is arbitrated")
-    lane.add_common_args(ap)
+    rulebook.add_common_args(ap)
     ap.set_defaults(width=8, stagger=0.4)   # rc_bench 2026-08-25: 8 pullers 28.23 docs/s, 16 -> 18.76 (self-contending past the pipe); 0.4 s between first handshakes
     args = ap.parse_args()
     args.lane = "documentation"
 
-    drive_root = storage.find_drive(args.drive)
-    storage.documents_root(drive_root)
-    roles = lane.roles_for("Richmond", args, HERE, drive_root, Documentation(HERE, drive_root, args.fresh_days, args.cooldown))
-    print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, storage.documents_root(drive_root), storage.CANON_ROOT), flush=True)
-    sys.exit(lane.run(roles, args, HERE))
+    drive_root = rulebook.find_drive(args.drive)
+    rulebook.documents_root(drive_root)
+    roles = rulebook.roles_for("Richmond", args, HERE, drive_root, Documentation(HERE, drive_root, args.fresh_days, args.cooldown))
+    print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, rulebook.documents_root(drive_root), rulebook.CANON_ROOT), flush=True)
+    sys.exit(rulebook.run(roles, args, HERE))
 
 
 if __name__ == "__main__":

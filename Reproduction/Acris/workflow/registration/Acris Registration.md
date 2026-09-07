@@ -7,7 +7,7 @@ The registration lane of the acris reproduction, as one program: `Acris Registra
     python "Acris Registration.py"                    home
     python3 "Acris Registration.py"                   workstation 2
 
-No drive: the registry is text and lives in the cloud table only. `--width` defaults to 40. While it runs, `registration.control` beside it takes `width=30` or `stop`. `--also documentation:40 --drive OneTouch` hosts the documentation crew in the same process through its own entry, twenty seconds later. `--limit N` is a test run. A parked lane refuses to start again until `--unpark`. In the fleet's batch it runs 10 wide beside documentation (managed: one worker in, the rate manager's width) and synchronization 9 plus its monitor, each crew on its own entry.
+No drive: the registry is text and lives in the cloud table only. `--width` defaults to 40. While it runs, `registration.control` beside it takes `width=30` or `stop`. `--also documentation:40 --drive OneTouch` hosts the documentation crew in the same process through its own entry, twenty seconds later. `--limit N` is a test run. A parked lane refuses to start again until `--unpark`. In the fleet's batch it runs 10 wide beside documentation (managed: one worker in, the rate manager's width) and identification 9 plus its monitor, each crew on its own entry.
 
 ## The rules
 

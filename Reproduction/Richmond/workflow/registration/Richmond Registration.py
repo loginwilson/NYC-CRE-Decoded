@@ -37,7 +37,7 @@ The rules, kept from the walker that landed 2.4M details (rc_rd_walk.py, rc_rd_r
   the cell      the registry only; documentation reads the image in its own pass
   refusal       a captcha, access-denied or block page = the county's decision: park at once, no
                 retry, no rotation
-  hang-up, wall, width, one door   shared with every lane (lane.py).  The hang-up is DORMANT at this county
+  hang-up, wall, width, one door   shared with every lane (rulebook.py).  The hang-up is DORMANT at this county
                 (no session close was ever measured here: the drumroll rule); it fires only when the
                 wire itself dies - hang up, drop the cut pages and details (asked again at the next
                 walk; the table still says which ids need work), wait 60 s, re-enter once, births
@@ -64,7 +64,7 @@ PHASE = HERE.parents[2]                       # registration -> workflow -> Rich
 sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
-import lane                                                     # noqa: E402
+import rulebook  # noqa: E402
 import richmond                                                 # noqa: E402
 
 CONTROL = "control"
@@ -122,7 +122,7 @@ class Registration:
     def session(self):
         s = getattr(self.tls, "session", None)
         if s is None:
-            s = lane.make_session(1, self.ua)
+            s = rulebook.make_session(1, self.ua)
             self.tls.session = s
         return s
 
@@ -138,11 +138,11 @@ class Registration:
             try:
                 r = self.session().get(url, headers={"Referer": richmond.BASE + "/"}, timeout=90)
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.ChunkedEncodingError) as e:
-                last = lane.Transport("%s: %s" % (type(e).__name__, lane.reason(e)))
+                last = rulebook.Transport("%s: %s" % (type(e).__name__, rulebook.reason(e)))
                 continue
             try:
                 if r.status_code >= 400:
-                    raise lane.HTTPStatus(r.status_code, url)
+                    raise rulebook.HTTPStatus(r.status_code, url)
                 html = r.text
             finally:
                 r.close()
@@ -205,7 +205,7 @@ class Registration:
             a, b = s.isoformat(), e.isoformat()
             self.windows[(a, b)] = {"pages": None, "answered": set(), "details": 0}
             self._queue(crew, ("page", a, b, 1))
-        lane._log(ctx, "registration: walking %s (%s..%s)" % (what, start, end))
+        rulebook._log(ctx, "registration: walking %s (%s..%s)" % (what, start, end))
 
     def feed(self, crew, ctx):
         now = time.time()
@@ -239,7 +239,7 @@ class Registration:
                                     "why": why[:120]}) + "\n")
         except OSError:
             pass
-        lane._log(ctx, "registration: %s %s..%s page %s failed three asks - a hole; asked again at the next walk" % (key[0], key[1], key[2], key[3]))
+        rulebook._log(ctx, "registration: %s %s..%s page %s failed three asks - a hole; asked again at the next walk" % (key[0], key[1], key[2], key[3]))
 
     def _window_done(self, a, b):
         w = self.windows.get((a, b))
@@ -318,7 +318,7 @@ class Registration:
                     try:
                         need = crew.cloud.todo(ids)
                     except Exception as e:
-                        lane._log(ctx, "registration: could not ask the table about %d ids (%s) - the page is asked again at the next walk" % (len(ids), lane.reason(e)))
+                        rulebook._log(ctx, "registration: could not ask the table about %d ids (%s) - the page is asked again at the next walk" % (len(ids), rulebook.reason(e)))
                         self.reask.add(key)
                         continue
                     if need:
@@ -356,11 +356,11 @@ class Registration:
             try:
                 landed, left = crew.outbox.drain(lambda rows: crew.cloud.land(rows, self.pending_age))
                 if landed:
-                    lane._log(ctx, "registration: landed %d registr%s" % (landed, "y" if landed == 1 else "ies"))
+                    rulebook._log(ctx, "registration: landed %d registr%s" % (landed, "y" if landed == 1 else "ies"))
                 if left:
-                    lane._log(ctx, "registration: the cloud did not take %d landing%s - kept in the outbox for the next minute" % (left, "" if left == 1 else "s"))
+                    rulebook._log(ctx, "registration: the cloud did not take %d landing%s - kept in the outbox for the next minute" % (left, "" if left == 1 else "s"))
             except Exception as e:
-                lane._log(ctx, "registration: landing failed (%s) - kept in the outbox" % lane.reason(e))
+                rulebook._log(ctx, "registration: landing failed (%s) - kept in the outbox" % rulebook.reason(e))
         # the edge never jumps a window still open or holed: a done window moves it only when no earlier window is
         # open; a done window behind an open one is kept until the open one answers, then both move the edge
         today = self.today()
@@ -387,7 +387,7 @@ class Registration:
 
 def role(drive_root, args):
     """This lane's role, for the fleet hosting it with --also registration:N - its own knobs, the host's --edge and --pending-age."""
-    return Registration(HERE, lane.role_args(args, ("edge", "pending_age"), edge="", days=30, every=900, pace=0.3, pending_age="1 hour"))
+    return Registration(HERE, rulebook.role_args(args, ("edge", "pending_age"), edge="", days=30, every=900, pace=0.3, pending_age="1 hour"))
 
 
 def main():
@@ -398,17 +398,16 @@ def main():
     ap.add_argument("--pace", type=float, default=0.3, help="seconds between the details of one page")
     ap.add_argument("--drive", default="", help="only for --also documentation:N")
     ap.add_argument("--fresh-days", type=int, default=richmond.IMAGE_LAG_DAYS, help="only for --also documentation:N (the 7-day scan lag)")
-    lane.add_common_args(ap)
+    rulebook.add_common_args(ap)
     ap.set_defaults(width=4, stagger=0.4)            # 0.4 s between first handshakes: the county's measured stagger
     args = ap.parse_args()
     args.lane = "registration"
 
     drive_root = None
     if args.drive:
-        import storage
-        drive_root = storage.find_drive(args.drive)
-    roles = lane.roles_for("Richmond", args, HERE, drive_root, Registration(HERE, args))
-    sys.exit(lane.run(roles, args, HERE))
+        drive_root = rulebook.find_drive(args.drive)
+    roles = rulebook.roles_for("Richmond", args, HERE, drive_root, Registration(HERE, args))
+    sys.exit(rulebook.run(roles, args, HERE))
 
 
 if __name__ == "__main__":

@@ -19,8 +19,8 @@ nothing of the other two; the same tree - phase, source - runs through all three
 
 | what | where | shape |
 |---|---|---|
-| database | Supabase project **NYC CRE Decoded** (East US); `supabase/Supabase.md` · `supabase/supabase.py` | one schema per phase: `reproduction`; per source a workflow table (`acris`, `richmond`), two update tables (`*_update`, `*_update_lanes`), a claims table and a heartbeats table; each phase's schema as numbered SQL in `<Phase>/rulebook/schema/` |
-| code | this repo | `supabase/` at the root (the database's pair), then `Reproduction/` with the same three folders at every level (below) |
+| database | Supabase project **NYC CRE Decoded** (East US); `supabase/Supabase.md` · `supabase/supabase.py` · `supabase/schema.sql` | three schemas: `reproduction` (the record - `acris`, `richmond` - and the two boards a person opens, `acris_update`, `richmond_update`), `machinery` (what the code needs and a person never reads: `claims`, `updates`), `reading` (the reading layer for products); the whole database as it stands is the one file `schema.sql` |
+| code | this repo | `supabase/` at the root (the database's pair), then `Reproduction/`: the shared rulebook and one folder per source, each its rulebook, update and workflow (below) |
 | documents | the One Touch, `D:\NYC CRE Decoded\Reproduction\` - the same tree as this repo and the database | `<Source>\By Document\<year>\<MM Mon>\<day>\<id>.pdf`, the day from the recorded date; a second workstation writes the identical tree under its own drive and records One Touch paths, then transfers |
 
 Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or printed.
@@ -28,28 +28,25 @@ Credentials live in `C:/dev/nyc-cre-decoded.env` (home), never committed or prin
 ## The layout - the same three folders at every level
 
 ```
-supabase/       Supabase.md · supabase.py       the one database (one project, one schema per phase) and its one program
-Reproduction/                                   the phase
-  rulebook/     Rulebook.md · lane.py · fleet.py · board.py · cloud.py · storage.py · rate_manager.py · requirements.txt · schema/
-                                                the rules every lane of every source shares, written once; schema/ = the phase's tables as numbered SQL
-  workflow/     Reproduction.md · Reproduction.py   the phase's authority, and every source's fleet kicked off as configured
-  update/       Update.md                       the phase board across sources (a later SQL decision)
-  Acris/                                        a source
-    rulebook/   acris.py · Acris.md             the source's rules as one module, and its authority
-    workflow/   reproduction/ enumeration/ synchronization/ registration/ documentation/
-                                                a pair per folder: `Acris <Lane>.md` (its authority) · `Acris <Lane>.py` (its one program)
-    update/     Acris Update.md · Acris Update.py   the board: one program, two tabs in Supabase
+supabase/       Supabase.md · supabase.py · schema.sql   the one database, its one program, and its definition as it stands
+Reproduction/                                            the phase
+  rulebook/     Rulebook.md · rulebook.py                the rules every lane of every source shares, and the machinery as one module
+  Acris/                                                 a source
+    rulebook/   Acris.md · acris.py                      the source's authority, and its rules as one module
+    update/     Acris Update.md · Acris Update.py        the board: one program; what a person opens is reproduction.acris_update
+    workflow/   reproduction/ enumeration/ identification/ registration/ documentation/
+                                                         a pair per folder: `Acris <Lane>.md` (its authority) · `Acris <Lane>.py` (its one program)
   Richmond/     the same
 ```
 
-Three levels, one shape (login 2026-09-05): a **lane** is one program in its own folder, run alone from there -
-`python "Acris Documentation.py" --drive OneTouch` is the whole command; a **source** is its lanes together,
-configured in its fleet program (`Acris Reproduction.py`); the **phase** is every source's fleet, kicked off as
-configured (`Reproduction/workflow/Reproduction.py`). Every folder that holds code holds a pair - the md is that
-thing's own authority, the py its one program - and a proof beside it (`test_*.py`) that asks nothing of any source.
-Nothing is loose: a source folder is its three folders; the phase folder is its three folders and the sources; the root
-is the phases and the database's own folder, `supabase/`. The phase's authority is `Reproduction/workflow/Reproduction.md`;
-the rulebook's is `Reproduction/rulebook/Rulebook.md`; the database's is `supabase/Supabase.md`.
+Two levels, one shape (login 2026-09-05, tightened 2026-09-07): a **lane** is one program in its own folder, run alone from
+there - `python "Acris Documentation.py" --drive OneTouch` is the whole command; a **source** is its lanes together,
+configured in its fleet program (`Acris Reproduction.py`); the phase is the sources side by side - there is no phase-level
+program. Every folder holds one pair and nothing else - the md is that thing's own authority, the py its one program. A
+test or a simulation lives outside the repo, and what it proves goes into the existing file (login 2026-09-07: "it should
+be actually altering the existing code, not just making new files"). Nothing is loose: a source folder is its three
+folders; the phase folder is the shared rulebook and the sources; the root is the phases and the database's own folder,
+`supabase/`. The rulebook's authority is `Reproduction/rulebook/Rulebook.md`; the database's is `supabase/Supabase.md`.
 
 ## The phase: reproduction
 
@@ -61,7 +58,7 @@ own code in its own folder, toggled independently and configurable in width; thr
 | lane | job | fills |
 |---|---|---|
 | enumeration | the audit, not a cycle lane: counts the source (acris: Socrata + CRFN; richmond: census + date/range), compares with the table, difference must be 0 | nothing (no table) |
-| synchronization | keeps the table live: the CRFN edge monitor and walkers for acris, the date walk for richmond | `identifier` |
+| identification | keeps the table live: the CRFN edge monitor and walkers for acris, the date walk for richmond | `identifier` |
 | registration | the recorded details, by a URL minted from the id stem; no navigation step | `registry` |
 | documentation | the document, by minted access; saved to the drive, its full One Touch path recorded | `document` |
 
@@ -73,17 +70,17 @@ but empty counts as landed.
 **Two workstations, no overlap.** The table is the only to-do list. A lane calls `claim()` for a slice of empty cells
 with its name and an expiry on them, atomic and skip-locked so two machines never receive the same document; the
 pendings due for a re-check come first. It fills them with `land()` once a minute, which drops the claims; expired
-claims go back on the list. Each running lane writes `heartbeat()` once a minute. Synchronization runs at home;
+claims go back on the list. Each running lane writes `heartbeat()` once a minute. Identification runs at home;
 registration and documentation on any machine.
 
 **Joining a second workstation (the steps, refreshed 2026-09-07 after gate 4's first night; on login's word).** Nothing
 on the second machine needs Claude Code: the batch, rate and session managers are plain Python in `Reproduction/rulebook/`
-(`lane.py`, `rate_manager.py`) and run wherever the lane runs. There is no allocation to hand out: the table is the only
+(`rulebook.py`) and run wherever the lane runs. There is no allocation to hand out: the table is the only
 to-do list, `claim()` is atomic and skip-locked with the host's name on every claim, so two machines never receive the same
 document, and a claim that expires (20 minutes) goes back on the list. The steps:
 
 1. Python 3.12. `git clone https://github.com/loginwilson/NYC-CRE-Decoded` (or unzip main) into `C:\dev\nyc-cre-decoded`, then
-   `pip install -r Reproduction/rulebook/requirements.txt` (requests, psycopg2-binary, img2pdf, Pillow).
+   `pip install requests>=2.31 psycopg2-binary>=2.9 img2pdf>=0.5 Pillow>=10`.
 2. The env file `C:\dev\nyc-cre-decoded.env` holding `SUPABASE_DB_URL` (Connect > Session pooler > URI) and
    `SUPABASE_DB_PASSWORD` - typed in by hand, copied from the home machine, never committed, never printed.
    `python supabase/supabase.py check` must print the ledger with every migration applied.
@@ -104,16 +101,18 @@ document, and a claim that expires (20 minutes) goes back on the list. The steps
    60 s, claims a fresh batch and re-enters once; a notice page parks it (`documentation.parked` in the lane folder) and a
    person clears it (`--unpark`). Stop with `python "Acris Reproduction.py" stop`.
 6. **The board runs on ONE machine per source** - at home (`python "Acris Update.py"` in `Reproduction/Acris/update`), never on
-   both at once. Station 2's lane feeds it through its heartbeat: `reproduction.acris_workstations` shows the station's own row
-   (landed by this station, rate, workers, last seen) and `reproduction.acris_update` the totals. If the home board is down,
+   both at once. Station 2's lane feeds it through its heartbeat and its landings: `reproduction.acris_update` shows the totals block,
+   then workstation 1's four rows and workstation 2's four (a workstation's number is the order of its first sight). If the home board is down,
    start it on station 2 instead.
 
-Synchronization stays on one machine; registration and documentation run on any. The code, the rules and the to-do list are
+Identification stays on one machine; registration and documentation run on any. The code, the rules and the to-do list are
 the same everywhere.
 
-**The update.** One program per source, always running, reading only: tab 1 is the phase (rows with all three cells
-filled against rows), tab 2 is the lanes (each cell filled against rows), both with 60-second and 5-minute rate,
-increase, percent and eta, landed, needed, percent of total, status and as-of. The status follows the lane's own
+**The update.** One program per source, always running, reading only. What a person opens is `reproduction.acris_update` /
+`richmond_update`: three blocks of four rows - the totals (reproduction: rows with all three cells filled; identification,
+registration, documentation: that cell filled), then workstation 1's four, then workstation 2's four, a blank line before
+each workstation block - with source, lane, status, as of (Eastern), the 60-second and 5-minute rate, increase and eta,
+landed, needed and percentage. The status follows the lane's own
 heartbeat: `active` (fresh heartbeat, landed rising) · `pending` (no fresh heartbeat, not complete: paused or parked) ·
 `stalled` (the lane's last word is a refusal or a wall; a refusal parks at once) · `complete` (100 %).
 

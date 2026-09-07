@@ -40,8 +40,8 @@ The rules are kept from the lane that ran before this one:
 Exit codes: 0 stopped (control file, limit, Ctrl+C, kill) · 2 refused · 3 redials exhausted · 4 wall ·
 5 crash · 6 drive gone.  A parked lane refuses to start until --unpark.
 
-The shared pieces it imports: ../../../rulebook/lane.py (the entry and the policies), ../../../rulebook/cloud.py (claim,
-land, heartbeat), ../../../rulebook/storage.py (the drive by label, the One Touch layout), ../../rulebook/acris.py
+The shared pieces it imports: ../../../rulebook/rulebook.py (the entry and the policies), ../../../rulebook/rulebook.py (claim,
+land, heartbeat), ../../../rulebook/rulebook.py (the drive by label, the One Touch layout), ../../rulebook/acris.py
 (the ACRIS rules: URLs minted from the id, the one user-agent, the refusal detector, where a document files).
 """
 import argparse
@@ -57,8 +57,7 @@ sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import img2pdf                                                  # noqa: E402
 import acris                                                    # noqa: E402
-import lane                                                     # noqa: E402
-import storage                                                  # noqa: E402
+import rulebook  # noqa: E402
 
 
 def registry_pages(registry):
@@ -97,9 +96,9 @@ class Documentation:
         if not isinstance(registry, dict):
             # no recorded details yet: the document cannot be placed (borough, year, month) or judged
             # fresh; it waits for registration - not one request is spent on it
-            raise lane.Retry("no registry yet (%s)" % (registry if registry else "empty"))
+            raise rulebook.Retry("no registry yet (%s)" % (registry if registry else "empty"))
         canon = acris.canonical_path(doc_id, registry)
-        path = storage.local(self.root, canon)
+        path = rulebook.local(self.root, canon)
         if path.is_file() and path.stat().st_size > 0:
             return canon                                     # already on this drive: no request spent
 
@@ -124,7 +123,7 @@ class Documentation:
             if attempt < 2:
                 time.sleep(0.6 * (attempt + 1))          # 0.6 s, then 1.2 s; no wait after the last miss
         if total is None:
-            raise lane.Retry("viewer page did not identify itself after 3 asks (%d bytes, ct=%s)" % (len(body), ct))
+            raise rulebook.Retry("viewer page did not identify itself after 3 asks (%d bytes, ct=%s)" % (len(body), ct))
         if total <= 0:
             return "pending" if acris.fresh(registry, self.fresh_days) else "absent"
 
@@ -141,7 +140,7 @@ class Documentation:
                 break
             frames.append(data)
         if len(frames) != total:
-            raise lane.Retry("short: %d/%d pages - %s" % (len(frames), total, why))
+            raise rulebook.Retry("short: %d/%d pages - %s" % (len(frames), total, why))
 
         # 3. the file, written whole or not at all
         try:
@@ -152,7 +151,7 @@ class Documentation:
         except OSError as e:
             if not os.path.isdir(self.root):
                 self.check(crew.ctx)
-            raise lane.Retry("could not write the file (%s: %s)" % (type(e).__name__, str(e)[:100]))
+            raise rulebook.Retry("could not write the file (%s: %s)" % (type(e).__name__, str(e)[:100]))
         return canon
 
 
@@ -170,15 +169,15 @@ def main():
     ap.add_argument("--trust-registry-pages", action="store_true",
                     help="skip the viewer fetch: the page count comes from the registry, one request fewer per document"
                          " (PROPOSED 2026-09-07 - A/B on a good exit before trusting; off = the proven walk)")
-    lane.add_common_args(ap)
+    rulebook.add_common_args(ap)
     args = ap.parse_args()
     args.lane = "documentation"
 
-    drive_root = storage.find_drive(args.drive)
-    storage.documents_root(drive_root)
-    roles = lane.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days, args.trust_registry_pages))
-    print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, storage.documents_root(drive_root), storage.CANON_ROOT), flush=True)
-    sys.exit(lane.run(roles, args, HERE))
+    drive_root = rulebook.find_drive(args.drive)
+    rulebook.documents_root(drive_root)
+    roles = rulebook.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days, args.trust_registry_pages))
+    print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, rulebook.documents_root(drive_root), rulebook.CANON_ROOT), flush=True)
+    sys.exit(rulebook.run(roles, args, HERE))
 
 
 if __name__ == "__main__":

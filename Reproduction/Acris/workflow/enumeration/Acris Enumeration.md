@@ -6,7 +6,7 @@ The enumeration lane of the acris reproduction, as one program: `Acris Enumerati
 
 **BULK BASELINE + LIVE TAIL = TOTAL** (login, 2026-08-29, for every source). The baseline is complete but always stale; the tail is live but reaches only so far back. Neither proves anything alone: the audit is the arithmetic that closes them against each other, and their ranges must overlap so no filing can hide in a seam.
 
-For acris the baseline is ACRIS's own published index on NYC Open Data (two Socrata masters, one per corpus, refreshed monthly and weeks behind) and the tail is the CRFN walk of the synchronization lane. The index is read from a different host than the web endpoint, so the audit is never a second door at ACRIS. And the index can silently omit real records: it dropped 201 live documents in 2016 alone, found only by the per-year CRFN census. So acris needs three checks, not two.
+For acris the baseline is ACRIS's own published index on NYC Open Data (two Socrata masters, one per corpus, refreshed monthly and weeks behind) and the tail is the CRFN walk of the identification lane. The index is read from a different host than the web endpoint, so the audit is never a second door at ACRIS. And the index can silently omit real records: it dropped 201 live documents in 2016 alone, found only by the per-year CRFN census. So acris needs three checks, not two.
 
 ## Launch
 
@@ -25,7 +25,7 @@ Any workstation can run the diff and the census (they read the index and the tab
 | **the diff** — every id the index holds must be in the table, shard by shard (a month of digital ids; a film prefix `FT_<borough><digit>` or `BK_<yy>`; the odd ids outside every band) | the baseline: film completeness rests on this alone, since film has no counter | what the index itself omits, and everything after its `good_through_date` |
 | **the census** — per year, the index's CRFN list; holes = numbers in 1..top the index does not hold | an upper bound on documents missed in the digital era, named number by number | which holes are void and which are documents: that needs the probe |
 | **the probe** — each named hole asked of ACRIS by CRFN: void (the stub), held (its document is in the table) or MISSING; each year's top confirmed by a gallop past the index's highest number | the identity per year: index + held + missing + void = issued, closed only when nothing is unknown | the tail: the current year is capped at the index's own top, everything above it is the walk's |
-| **the tail** — reported, not proven here | the edge file's number and age, whether synchronization is alive | anything past the edge |
+| **the tail** — reported, not proven here | the edge file's number and age, whether identification is alive | anything past the edge |
 
 Ids the table holds that the index does not are classified, never counted against the table: **tail** (dated after the index closed), **seam** (dated inside the last 92 days before it closed: recorded after), **omitted** (older: the index dropped it, the walk found it), **odd** (no date to judge by). They are listed with their class in `enumeration.extra.txt`.
 
@@ -45,7 +45,7 @@ Ids the table holds that the index does not are classified, never counted agains
 | an error is not a void | a number that fails three asks is UNKNOWN and leaves the year's identity OPEN; a blank answer (the stub) is a void | live_delta, 2026-08-23 |
 | the probe is a door, on the cycle | one pooled session, `--width` connections born `--stagger` (5 s) apart, no pacer; HTTP 200 + the notice page is a refusal: stop, no retry, no rotation, `enumeration.parked` until `--unpark`; every line hit the wire inside 60 s with nothing answered for 10 s is the session closed: hang up, wait `--redial-wait` (60 s; ×2 refused, ÷2 served), re-enter once on what is still unanswered; `--tries` (4) refused re-entries in a row stop it with exit 3 and the journal resumes on the next run; the gallop re-enters once on three wire failures | the lanes' access shape and cycle (Acris Documentation.md) |
 | never beside the cycle | the probe refuses to start while any lane's heartbeat in the cloud is fresher than 3 minutes. The heartbeat cannot see a lane that does not heartbeat (the old lane at home): that is what login's word is for | ACRIS REPRODUCTION.md §5 |
-| the current year is capped | holes are named only up to the index's own top for the running year; everything above it was walked number by number by synchronization | acris_void_walk.py |
+| the current year is capped | holes are named only up to the index's own top for the running year; everything above it was walked number by number by identification | acris_void_walk.py |
 | resumable | `enumeration.holes.json` is written after every year, `enumeration.probe.json` every 30 seconds; a rerun classifies only what is still unknown | the void walk's journal |
 
 ## Calibrations
@@ -69,7 +69,7 @@ Beside this file, never in git: `enumeration.report.txt` (the last run's report,
 
 ## Open
 
-- **Landing what the audit finds.** Missing ids (the diff) and missing documents (the probe) are listed, never inserted. The synchronization lane's insert is the one door for new rows; a small script over the two lists, on login's word, is the likely shape.
+- **Landing what the audit finds.** Missing ids (the diff) and missing documents (the probe) are listed, never inserted. The identification lane's insert is the one door for new rows; a small script over the two lists, on login's word, is the likely shape.
 - **The census against the table's own CRFNs.** The holes are named from the index alone; the table's registries carry `crfn` too, but reading them per year is a scan of every registry (no expression index yet). When the schema grows an index on the registry's CRFN, the census can name holes against the table directly and the probe shrinks to what neither holds.
 - **The 322 ids whose detail page fails** (registration's open decision): 318 are in the real master and 4 in the personal master, so the diff will always find them present and say nothing; their registry is registration's question, not the audit's.
 

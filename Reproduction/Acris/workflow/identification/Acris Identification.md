@@ -1,6 +1,6 @@
-# Acris Synchronization
+# Acris Identification
 
-The synchronization lane of the acris reproduction, as one program: `Acris Synchronization.py`. It keeps the table live at the CRFN edge: one monitor and a crew of walkers behind one entry. While the edge is level the monitor probes a few numbers past it every minute; the moment a filing shows, the crew walks a full bite of numbers in parallel, every document found lands as a new row — the `doc_id` cell, nothing else — and the edge moves to the last document seen. This file is the lane's own authority; the cycle's is `../reproduction/Acris Reproduction.md`.
+The identification lane of the acris reproduction, as one program: `Acris Identification.py`. It keeps the table live at the CRFN edge: one monitor and a crew of walkers behind one entry. While the edge is level the monitor probes a few numbers past it every minute; the moment a filing shows, the crew walks a full bite of numbers in parallel, every document found lands as a new row — the `doc_id` cell, nothing else — and the edge moves to the last document seen. This file is the lane's own authority; the cycle's is `../reproduction/Acris Reproduction.md`.
 
 ## Why the CRFN edge
 
@@ -8,24 +8,24 @@ ACRIS sells no date window: the id and CRFN searches have no date field, the typ
 
 ## Launch
 
-    python "Acris Synchronization.py" --edge 2026000247108      the first start names the edge
-    python "Acris Synchronization.py"                           afterwards synchronization.edge.json remembers it
+    python "Acris Identification.py" --edge 2026000247108      the first start names the edge
+    python "Acris Identification.py"                           afterwards identification.edge.json remembers it
 
-Home only: the edge lives on one workstation. `--width` defaults to 20 walkers. `--every 60 --watch 8 --bite 1000` are the cadence knobs. `synchronization.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
+Home only: the edge lives on one workstation. `--width` defaults to 20 walkers. `--every 60 --watch 8 --bite 1000` are the cadence knobs. `identification.control` takes `width=N` or `stop`. A parked lane refuses to start again until `--unpark`.
 
 ## The rules
 
 | rule | what the lane does | origin |
 |---|---|---|
-| the edge | `synchronization.edge.json` holds the last CRFN whose document the table holds. A start without it needs `--edge`, never a guess. The edge moves only after the documents it passes are in the table, so a crash re-walks the same numbers and loses nothing | the old `_crfn_edge.json`; the 2026-08-28 monitor |
+| the edge | `identification.edge.json` holds the last CRFN whose document the table holds. A start without it needs `--edge`, never a guess. The edge moves only after the documents it passes are in the table, so a crash re-walks the same numbers and loses nothing | the old `_crfn_edge.json`; the 2026-08-28 monitor |
 | the monitor stands at the elevator | while level, `--watch` numbers past the edge every `--every` seconds; the crew only walks on a hit | login 2026-08-28: the old loop dispatched a full bite every tick and spent ~36 req/s to land nothing |
 | behind | a document within `--watch` numbers of the end of the probed window means more beyond: walk a `--bite` at once and keep walking until a window ends in blanks | the same monitor |
 | a blank is an answer | the source said no document is at that number. Blanks past the last document are unissued numbers and are asked again next time | the counter is forward-only |
-| an error is not an absence | a failed request is asked again, never read as blank. Three failed asks make a hole: recorded in `synchronization.holes.jsonl`, passed, and left to the audit — one bad number never freezes the edge | acris_edge.quick_crfn, 2026-08-23: a broad except once printed "quiet" after eight instant failures |
+| an error is not an absence | a failed request is asked again, never read as blank. Three failed asks make a hole: recorded in `identification.holes.jsonl`, passed, and left to the audit — one bad number never freezes the edge | acris_edge.quick_crfn, 2026-08-23: a broad except once printed "quiet" after eight instant failures |
 | personal-property runs | UCC filings take numbers in the same counter and answer blank here (about a sixth of the sequence). After `--widen-after` empty watches one wider look of `--widen` numbers is taken, so a run of them can never hide a document from a narrow watch | live_delta's CRFN measurements; a stall the old monitor could not rule out |
 | a live page is a full page | a page that prints an id from fewer than 20 KB is suspect truncation and is asked again, never reported live; a page with no id at all is a blank - an answer - whatever its size | acris_edge, `_MIN_DETAIL` |
 | the cell | the `identifier` only. The page fetched is the registry page, and registration will fetch it again for the recorded details: one more request per new document. The cell rule is worth it | login 2026-09-03: each lane fills its own cell and nothing else |
-| the counters | a new row moves `needed` for the phase and every lane, and synchronization's `landed`, in the same transaction as the insert | the counting rule |
+| the counters | a new row moves `needed` for the phase and every lane, and identification's `landed`, in the same transaction as the insert | the counting rule |
 | one entry, one door, refusal, hang-up, wall, width | shared with every lane; see Acris Documentation.md. The cycle for a walker crew: every walker a transport error inside 60 s with nothing answered for 10 s is the session closed - hang up at once, drop the cut window from the queue and forget it as in flight (`rebatch`), 60 s of silence with the backoff, one re-entry with births 5 s apart, and the monitor asks the same numbers again from the edge, which never moved past an unanswered number | lane.py; login 2026-09-04, the cycle |
 | one machine | the edge is local state; the lane runs at home | rulebook/Rulebook.md |
 
@@ -47,7 +47,7 @@ A forward-only counter inherits every gap it already has and reports clean forev
 
 ## Working files
 
-Beside this file, never in git: `synchronization.edge.json`, `synchronization.holes.jsonl`, `synchronization.lock`, `synchronization.log` (every launch's output, appended), `synchronization.control`, `synchronization.parked`, `synchronization.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
+Beside this file, never in git: `identification.edge.json`, `identification.holes.jsonl`, `identification.lock`, `identification.log` (every launch's output, appended), `identification.control`, `identification.parked`, `identification.fails.jsonl`, `Reproduction/Acris/rulebook/refusals/`. Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
 
 ## History
 
@@ -60,6 +60,6 @@ Beside this file, never in git: `synchronization.edge.json`, `synchronization.ho
 2026-09-05 23:52 — THE FIRST REAL LAUNCH, against the cloud with the rows in (login: "spend the night resyncing ... one
 batch, 10 workers"): `--edge 2026000247108 --width 10`. The entry was right (exit pool one block, 173.239.217; ten births
 5 s apart; one entry) and the first request - CRFN 2026000247109 - was ACRIS's Bandwidth Notice: parked at once, exit 2,
-`synchronization.parked` written, the page saved under `../../rulebook/refusals/`. The lane did what its rules say; the
+`identification.parked` written, the page saved under `../../rulebook/refusals/`. The lane did what its rules say; the
 notice is the source's and is cleared by a person (`--unpark` after the exit changes). The full reading is in the D:
 record (ACRIS DOCUMENTATION NIGHT 2026-09-04.md): three exit blocks answered with the notice today.

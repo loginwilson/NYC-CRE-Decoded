@@ -24,8 +24,8 @@ _working/
 *.tmp
 *.db-journal
 refusals/
-synchronization.edge.json
-synchronization.edge.tmp
+identification.edge.json
+identification.edge.tmp
 registration.edge.json
 registration.edge.tmp
 enumeration.*.json

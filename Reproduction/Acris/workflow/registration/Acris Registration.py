@@ -41,7 +41,7 @@ The rules are kept from the register floor that ran before this one:
 Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.  A parked lane refuses
 to start until --unpark.
 
-The shared pieces it imports: ../../../rulebook/lane.py (the entry and the policies), ../../../rulebook/cloud.py (claim,
+The shared pieces it imports: ../../../rulebook/rulebook.py (the entry and the policies), ../../../rulebook/rulebook.py (claim,
 land, heartbeat), ../../rulebook/acris.py (the ACRIS rules: URLs minted from the id, the one user-agent,
 the refusal detector, the page parser).
 """
@@ -56,8 +56,7 @@ sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's ruleboo
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import acris                                                    # noqa: E402
-import lane                                                     # noqa: E402
-import storage                                                  # noqa: E402
+import rulebook  # noqa: E402
 
 
 class Registration:
@@ -84,10 +83,10 @@ class Registration:
             if attempt < 2:
                 time.sleep(0.5 * (attempt + 1))          # 0.5 s, then 1 s; no wait after the last miss
         else:
-            raise lane.Retry("page does not echo the id after 3 asks (%d bytes, ct=%s)" % (len(body), ct))
+            raise rulebook.Retry("page does not echo the id after 3 asks (%d bytes, ct=%s)" % (len(body), ct))
         rec = acris.parse_acris(html)
         if not rec:
-            raise lane.Retry("page echoed the id but no field parsed (%d bytes)" % len(body))
+            raise rulebook.Retry("page echoed the id but no field parsed (%d bytes)" % len(body))
         rec["at"] = time.strftime("%Y-%m-%dT%H:%M:%S")     # when this registry was read
         return rec
 
@@ -101,13 +100,13 @@ def main():
     ap = argparse.ArgumentParser(description="acris registration: one entry, N workers, the cloud table as the to-do list")
     ap.add_argument("--drive", default="", help="only for --also documentation:N - the label of the drive it writes to")
     ap.add_argument("--fresh-days", type=int, default=30, help="only for --also documentation:N")
-    lane.add_common_args(ap)
+    rulebook.add_common_args(ap)
     args = ap.parse_args()
     args.lane = "registration"
 
-    drive_root = storage.find_drive(args.drive) if args.drive else None
-    roles = lane.roles_for("Acris", args, HERE, drive_root, Registration())
-    sys.exit(lane.run(roles, args, HERE))
+    drive_root = rulebook.find_drive(args.drive) if args.drive else None
+    roles = rulebook.roles_for("Acris", args, HERE, drive_root, Registration())
+    sys.exit(rulebook.run(roles, args, HERE))
 
 
 if __name__ == "__main__":

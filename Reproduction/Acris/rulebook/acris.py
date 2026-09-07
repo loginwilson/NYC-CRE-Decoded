@@ -14,8 +14,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-import storage
-from lane import Refused
+import rulebook
+from rulebook import Refused
 
 BASE = "https://a836-acris.nyc.gov/DS/DocumentSearch"
 
@@ -144,14 +144,14 @@ def borough_of(doc_id, registry):
     if isinstance(registry, dict):
         b = str(registry.get("borough", "")).upper().split("/")[0].strip()
         if b in _BORO_NAMES:
-            return storage.BOROUGHS[_BORO_NAMES[b]]
+            return rulebook.BOROUGHS[_BORO_NAMES[b]]
         for p in registry.get("parcels") or []:
             bbl = str(p.get("bbl", ""))
-            if bbl[:1].isdigit() and int(bbl[0]) in storage.BOROUGHS:
-                return storage.BOROUGHS[int(bbl[0])]
+            if bbl[:1].isdigit() and int(bbl[0]) in rulebook.BOROUGHS:
+                return rulebook.BOROUGHS[int(bbl[0])]
     m = re.match(r"FT_(\d)", doc_id)
-    if m and int(m.group(1)) in storage.BOROUGHS:
-        return storage.BOROUGHS[int(m.group(1))]
+    if m and int(m.group(1)) in rulebook.BOROUGHS:
+        return rulebook.BOROUGHS[int(m.group(1))]
     return "Unknown"
 
 
@@ -172,10 +172,10 @@ def recorded_ym(doc_id, registry):
 
 def canonical_path(doc_id, registry):
     """The One Touch address for this document: Acris\\By Document\\<year>\\<MM Mon>\\<day>\\<id>.pdf from the RECORDED
-    date, else a digital id's own date, else the id split - storage.day_folders, the old lane's rule kept exactly.
+    date, else a digital id's own date, else the id split - rulebook.day_folders, the old lane's rule kept exactly.
     The borough is a registry fact (borough_of), no longer a folder (login 2026-09-05)."""
     recorded = registry.get("recorded") if isinstance(registry, dict) else None
-    return storage.canonical("acris", doc_id, recorded)
+    return rulebook.canonical("acris", doc_id, recorded)
 
 
 def fresh(registry, days):
@@ -212,9 +212,8 @@ class Void(RuntimeError):
 
 def socrata_token():
     """SOCRATA_APP_TOKEN from the nyc-cre-decoded env file, never printed."""
-    import cloud
     try:
-        return cloud.env().get("SOCRATA_APP_TOKEN", "")
+        return rulebook.env().get("SOCRATA_APP_TOKEN", "")
     except SystemExit:
         return ""
 

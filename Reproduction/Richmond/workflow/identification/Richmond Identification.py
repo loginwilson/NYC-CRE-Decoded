@@ -1,4 +1,4 @@
-"""RICHMOND SYNCHRONIZATION - one program.
+"""RICHMOND IDENTIFICATION - one program.
 
 Keeps the table live at the county's date edge.  Richmond County lists its recorded instruments by date
 range, so the live window is the calendar: the lane's monitor reads today's listing every --every
@@ -8,14 +8,14 @@ county lists late (back-dated to its recorded day) lands too; and on a start aft
 days it missed.  One plain GET per listing page, through one pooled session; the walkers take whole
 windows, pages in order, --pace apart.
 
-    python "Richmond Synchronization.py" --edge 2026-08-25        the first start names the last day walked
-    python "Richmond Synchronization.py"                          afterwards the edge file remembers it
+    python "Richmond Identification.py" --edge 2026-08-25        the first start names the last day walked
+    python "Richmond Identification.py"                          afterwards the edge file remembers it
 
-This file's own authority is Richmond Synchronization.md beside it; the cycle's is ../reproduction/Richmond Reproduction.md.
+This file's own authority is Richmond Identification.md beside it; the cycle's is ../reproduction/Richmond Reproduction.md.
 
 The rules, kept from the lane that ran before this one (rc_lane.py's monitor and heal, rc_window.py):
 
-  the edge     synchronization.edge.json beside this file holds the last day whose listing was walked;
+  the edge     identification.edge.json beside this file holds the last day whose listing was walked;
                a start without it needs --edge (never guessed); the edge moves only after the ids of a
                window are in the table, so a crash re-walks and loses nothing
   the day      today's listing every --every seconds (10 s): a filing lands within seconds
@@ -27,14 +27,14 @@ The rules, kept from the lane that ran before this one (rc_lane.py's monitor and
                lane parks (the 2026-08-21 lesson: a sync printed level for hours on a false zero)
   a blank is   an answer: the county listed nothing for that day (weekends, holidays, early morning)
   an error is  not an absence: a page that fails is asked again (three asks), a window that keeps
-               failing is recorded in synchronization.holes.jsonl and re-asked by the next heal
+               failing is recorded in identification.holes.jsonl and re-asked by the next heal
   two names    the internal id (ViewDocumentInfo) is ours: RC_<internal>; the instrument number
                repeats across eras and is never a key
   the cell     the doc_id only; registration reads the recorded details in its own pass (the listing
                page it needs for the grant is one request away)
   refusal      a captcha, access-denied or block page = the county's decision: park at once, no retry,
                no rotation
-  hang-up      shared with every lane (lane.py) and DORMANT at this county: no session close was ever
+  hang-up      shared with every lane (rulebook.py) and DORMANT at this county: no session close was ever
                measured here (the drumroll rule: no pacer, latency is the governor, 160 lines ran 26 h
                clean).  It fires only when the wire itself dies - every walker a transport error inside
                60 s with nothing answered for 10 s: hang up, drop the cut windows (asked again at the
@@ -42,8 +42,8 @@ The rules, kept from the lane that ran before this one (rc_lane.py's monitor and
                re-entries in a row refused, then park
   wall         40 consecutive 503/429 with no success between: park with the reason
   width        --width walkers at launch (default 4: the day window, the heal, a catch-up); `width=N`
-               or `stop` in synchronization.control
-  one door     synchronization.lock: a second start on this machine is refused while the first lives
+               or `stop` in identification.control
+  one door     identification.lock: a second start on this machine is refused while the first lives
   one machine  the edge lives on one workstation; run this lane on one machine
 
 Exit codes: 0 stopped · 2 refused · 3 redials exhausted or the probe broken · 4 wall · 5 crash.
@@ -58,27 +58,27 @@ import sys
 import time
 
 HERE = pathlib.Path(__file__).resolve().parent
-PHASE = HERE.parents[2]                       # synchronization -> workflow -> Richmond -> Reproduction
+PHASE = HERE.parents[2]                       # identification -> workflow -> Richmond -> Reproduction
 sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 sys.path.insert(0, str(PHASE / "Richmond" / "rulebook"))
 
-import lane                                                     # noqa: E402
+import rulebook  # noqa: E402
 import richmond                                                 # noqa: E402
 
 CONTROL = "control"
 
 
-class Synchronization:
+class Identification:
     """The monitor (feed + land, on the lane's main thread) and what one walker does with one window."""
-    source, lane_name = "richmond", "synchronization"
+    source, lane_name = "richmond", "identification"
     ua = richmond.UA
     noun = "windows"              # the PROGRESS line's word for a walked window; documents are in the status
     needs_registry = False
 
     def __init__(self, here, args):
         self.here = pathlib.Path(here)
-        self.state_path = self.here / "synchronization.edge.json"
-        self.holes_path = self.here / "synchronization.holes.jsonl"
+        self.state_path = self.here / "identification.edge.json"
+        self.holes_path = self.here / "identification.holes.jsonl"
         self.every, self.heal_every, self.heal_days, self.pace = args.every, args.heal_every, args.heal_days, args.pace
         self.edge = self._load_edge(args.edge)
         self.inflight = {}            # key -> (start, end)
@@ -165,7 +165,7 @@ class Synchronization:
                 wins = richmond.windows(self.edge + dt.timedelta(days=1), heal_start - dt.timedelta(days=1), richmond.WINDOW_DAYS)
                 for s, e in wins:
                     self._queue(crew, "catch-up", s, e)
-                lane._log(ctx, "synchronization: catching up %d window(s) from %s to %s" % (len(wins), self.edge + dt.timedelta(days=1), heal_start - dt.timedelta(days=1)))
+                rulebook._log(ctx, "identification: catching up %d window(s) from %s to %s" % (len(wins), self.edge + dt.timedelta(days=1), heal_start - dt.timedelta(days=1)))
             self.next_heal = now                     # the first heal at once (its control is already queued)
             self.next_day = now
         if now >= self.next_heal:
@@ -205,7 +205,7 @@ class Synchronization:
                                             "kind": key[0], "why": why[:120]}) + "\n")
                 except OSError:
                     pass
-                lane._log(ctx, "synchronization: %s window %s..%s failed three asks - a hole; the next heal asks again" % (key[0], key[1], key[2]))
+                rulebook._log(ctx, "identification: %s window %s..%s failed three asks - a hole; the next heal asks again" % (key[0], key[1], key[2]))
         new_ids = {}
         moved = None
         # the edge never jumps a window still out or holed: only windows before the earliest open one may move it
@@ -240,11 +240,11 @@ class Synchronization:
             except Exception as e:
                 with crew.lock:
                     crew.results = results + crew.results           # the answers stay on the crew: read again next minute (their windows are asked again only if lost)
-                lane._log(ctx, "synchronization: could not land %d ids (%s) - kept, next minute" % (len(new_ids), lane.reason(e)))
+                rulebook._log(ctx, "identification: could not land %d ids (%s) - kept, next minute" % (len(new_ids), rulebook.reason(e)))
                 return
             self.seen.update(new_ids)
             self.inserted += n
-            lane._log(ctx, "synchronization: %d ids listed, %d new rows" % (len(new_ids), n))
+            rulebook._log(ctx, "identification: %d ids listed, %d new rows" % (len(new_ids), n))
         if moved and moved > self.edge:
             self.edge = moved
             self._save_edge()
@@ -287,12 +287,12 @@ def _iso(recorded):
 
 
 def role(drive_root, args):
-    """This lane's role, for the fleet hosting it with --also synchronization:N - its own knobs, the host's --edge."""
-    return Synchronization(HERE, lane.role_args(args, ("edge",), edge="", every=10, heal_every=900, heal_days=30, pace=0.3))
+    """This lane's role, for the fleet hosting it with --also identification:N - its own knobs, the host's --edge."""
+    return Identification(HERE, rulebook.role_args(args, ("edge",), edge="", every=10, heal_every=900, heal_days=30, pace=0.3))
 
 
 def main():
-    ap = argparse.ArgumentParser(description="richmond synchronization: the county's date edge, one monitor, a few walkers")
+    ap = argparse.ArgumentParser(description="richmond identification: the county's date edge, one monitor, a few walkers")
     ap.add_argument("--edge", default="", help="the last day whose listing was walked, YYYY-MM-DD (first start only)")
     ap.add_argument("--every", type=int, default=10, help="seconds between reads of today's listing")
     ap.add_argument("--heal-every", type=int, default=900, help="seconds between re-reads of the trailing window")
@@ -300,18 +300,17 @@ def main():
     ap.add_argument("--pace", type=float, default=0.3, help="seconds between the pages of one window")
     ap.add_argument("--drive", default="", help="only for --also documentation:N")
     ap.add_argument("--fresh-days", type=int, default=richmond.IMAGE_LAG_DAYS, help="only for --also documentation:N (the 7-day scan lag)")
-    lane.add_common_args(ap)
+    rulebook.add_common_args(ap)
     ap.set_defaults(width=4, stagger=0.4)            # 0.4 s between first handshakes: the county's measured stagger (160 cold opens at once = SSLError)
     args = ap.parse_args()
-    args.lane = "synchronization"
+    args.lane = "identification"
     args.heal_days = max(1, min(args.heal_days, richmond.WINDOW_DAYS))
 
     drive_root = None
     if args.drive:
-        import storage
-        drive_root = storage.find_drive(args.drive)
-    roles = lane.roles_for("Richmond", args, HERE, drive_root, Synchronization(HERE, args))
-    sys.exit(lane.run(roles, args, HERE))
+        drive_root = rulebook.find_drive(args.drive)
+    roles = rulebook.roles_for("Richmond", args, HERE, drive_root, Identification(HERE, args))
+    sys.exit(rulebook.run(roles, args, HERE))
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ ACRIS refuses with HTTP 200 carrying its Bandwidth Notice page - never a status 
 - Two shapes are a refusal: any of the notice's own phrases (`NOTICE_SIGNALS`: "further access to acris is denied", "acris bandwidth notice", "automated scripts/robots", "exceeded the bandwidth limits", "subscription data services"; or the title "Bandwidth Notice"), or the word bandwidth in the first 2,000 characters of a page that carries no document id.
 - The body is **preserved** as `refusals/refusal-<stamp>.html` beside this file before the exception is raised, so the verdict can be audited. A detector that halted a night on a wifi interstitial had thrown its evidence away (2026-08-26).
 
-A connection cut is not a refusal: the far side closing lines is the hang-up, handled by `lane.py` as the cycle - a closed line is redialed by its worker; the whole width closed inside a minute with nothing landing is the session's end: hang up at once, drop the cut batch, 60 s of silence, one re-entry on a fresh batch. Only the notice page is a block, and a block lifts on its own clock - never probed.
+A connection cut is not a refusal: the far side closing lines is the hang-up, handled by `rulebook.py` as the cycle - a closed line is redialed by its worker; the whole width closed inside a minute with nothing landing is the session's end: hang up at once, drop the cut batch, 60 s of silence, one re-entry on a fresh batch. Only the notice page is a block, and a block lifts on its own clock - never probed.
 
 ## The page count and the imageless verdict
 
@@ -71,7 +71,7 @@ login, 2026-08-20: "all 4 url paths result in the exact same format so just figu
 
 | lane | from the module |
 |---|---|
-| synchronization | `BASE`, `UA`, `crfn_url`, `detail_doc_id`, `clean_html`, `check_refused`, `MIN_DETAIL` |
+| identification | `BASE`, `UA`, `crfn_url`, `detail_doc_id`, `clean_html`, `check_refused`, `MIN_DETAIL` |
 | enumeration | `INDEX`, `index_state`, `index_prefixes`, `index_ids`, `index_crfns`, `Void`, `crfn_url`, `detail_doc_id`, `clean_html`, `check_refused`, `UA`, `MIN_DETAIL`, `BASE` |
 | registration | `BASE`, `UA`, `detail_url`, `echoes`, `clean_html`, `check_refused`, `parse_acris` |
 | documentation | `UA`, `viewer_url` (with `detail_url` as the page it is reached from), `check_refused`, `total_pages`, `image_url`, `is_tiff`, `is_placeholder`, `fresh`, `canonical_path` |

@@ -56,7 +56,7 @@ Beside this file, never in git: `enumeration.report.txt`, `enumeration.log`, `en
 
 ## Open
 
-- **Landing what the audit finds.** Missing ids are listed, never inserted; the synchronization lane's insert is the door for new rows.
+- **Landing what the audit finds.** Missing ids are listed, never inserted; the identification lane's insert is the door for new rows.
 - **The old ledger.** `Richmond Census.db` on the drive holds the 2026-08 sweep; a fresh `--all` will take about the same time as it did (days at the polite pace). Whether to seed the new ledger from the old one is a decision, not a default: a sweep is the proof, a copy is a claim.
 
 ## History

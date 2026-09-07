@@ -13,17 +13,17 @@ repo reaches it. The mapping is one for one with the tree:
 **What the database does and does not do.** It never computes the process. The workstations do the work - fetching,
 parsing, saving a document; later, reading one on a GPU - and the database does two small things per document: it
 hands out a claim and accepts a landing, both index lookups. It holds the tables: the shared to-do list two
-workstations draw from without overlap (`claim`), the boards (`*_update`, `*_update_lanes`) and the heartbeats. The
+workstations draw from without overlap (`claim`), the counters and the boards (`machinery.updates`, read as `reproduction.acris_update` / `richmond_update`). The
 documents are never in it; they live on the One Touch and a cell holds the path. So the plan's included compute is
 sized for it, and what it costs is disk (login 2026-09-05: "all the compute is outside of supabase and supabase is
 just storage of a data table").
 
-**Where each phase's schema lives.** In that phase's rulebook, as numbered SQL files -
-`<Phase>/rulebook/schema/<version>_<name>.sql`, one file per dictated decision, applied once and never edited after; a
-new decision is a new file. The phase's rulebook md explains its table in the dictated words
-(`Reproduction/rulebook/Rulebook.md`, "The table"). The program beside this file applies the files and records each in
-the project's ledger, `supabase_migrations.schema_migrations` - the table the Supabase CLI writes too, so the one file
-the CLI applied (0001, 2026-09-03) and every file applied from here sit in one record.
+**Where the schema lives.** Beside this file, as one file - `supabase/schema.sql`, the whole database as it stands, written from the
+project by `supabase.py baseline` (login 2026-09-07: "there is no world where a schema should have this many files"); a change is a
+numbered `supabase/<version>_<name>.sql`, applied once with `push`, folded in with `baseline`, removed in the same commit. The rulebook
+md explains the table in the dictated words (`Reproduction/rulebook/Rulebook.md`, "The table"). The program beside this file applies
+the files and records each in the project's ledger, `supabase_migrations.schema_migrations` - the table the Supabase CLI writes too, so
+the one file the CLI applied (0001, 2026-09-03) and every file applied from here sit in one record.
 
 ## The program
 
@@ -57,8 +57,8 @@ reads in bulk, and the documents.
 
 `supabase.py` connects through the session pooler with TCP keepalives and **no statement timeout**: the project's default
 is two minutes on the `postgres` role (`show statement_timeout`), enough for a lane's claim or landing and too short for
-a migration that builds an index over the populated table or for a count over it. The population program does the same
-(`pg_connect()` in `Reproduction/workflow/population/Population.py`); the lanes keep the default - their statements are
+a migration that builds an index over the populated table or for a count over it. The one-time population program did the same
+(2026-09-05; retired with the move done); the lanes keep the default - their statements are
 small, and a lane that waits two minutes on the table has something else wrong.
 
 ## The state
@@ -66,20 +66,20 @@ small, and a lane that waits two minutes on the table has something else wrong.
 | when | what |
 |---|---|
 | 2026-09-03 17:01 | schema `reproduction` created by 0001 (ten tables, four functions), applied with the Supabase CLI and recorded in the ledger |
-| 2026-09-05 15:55 | 0002 (pendings first; documentation claims only where a registry is) applied from here with `push` and recorded in the ledger; `test_schema.py` ALL OK on the empty table after it |
+| 2026-09-05 15:55 | 0002 (pendings first; documentation claims only where a registry is) applied from here with `push` and recorded in the ledger; a proof run before it went in ALL OK on the empty table after it |
 | 2026-09-05 15:55 - 17:59 | every table empty (verified 15:55: 0 rows, 0 claims, 0 heartbeats per source; the board rows in place - one phase row and three lane rows per source); the repo's lanes cannot run for real before the rows are in. READY TO RECEIVE: the cell rules as check constraints, the four to-do indexes per source (pendings keyed on `updated_at`), `claim` with its six arguments, `land`, `heartbeat`, `reconcile` |
 | 2026-09-05 17:0x | 0003 applied: `source` first in `acris` and `richmond` (`source | doc_id | registry | document | updated_at`); test_schema ALL OK on the empty tables |
 | 2026-09-05 17:59 - 21:10 | THE DATA MOVE (`Reproduction/workflow/population/Population.py load`): 24,126,063 rows by COPY from `Legal Instruments.db` - acris 21,623,562, richmond 2,502,501 - zero rejects; 19,095 registries noted for a stripped NUL escape (jsonb cannot hold `\u0000`); database about 23 GB on the 40 GB disk |
 | 2026-09-05 21:16 - 23:32 | `apply-found` twice (233,381 then 119,633 more acris cells filled with placed documents' paths - 353,014, every document the old stores gave the tree) and `verify` twice: MATCH on both sources each time, every cell state equal to the old table's shifted by the placements; acris path sample 200 of 200 on the drive; richmond 9 then 35 of 200 while its file move runs (the cells lead the disk until it ends) |
-| 2026-09-05 22:04 | 0004 applied with `push` after the load and `verify` (the column drop takes the table's lock; the two acris pending indexes were rebuilt over 21.6M rows, about seven minutes each): `updated_at` and its trigger gone, a row is `source | doc_id | registry | document`, a pending's wait between checks is its claim; test_schema.py ALL OK on the populated table (22:13, its connections without the statement timeout; the first run's recount was cut at two minutes) |
-| 2026-09-07 04:56 | 0015 applied with `push` (GATE 5, login's rule after the seventeenth notice at 04:41; the lane parked, the boards left running - they name only `reproduction.updates`): `doc_id` -> `identifier` in `acris`, `richmond`, `machinery.claims` (keys and the eleven indexes followed by themselves), the four field/parcel views re-created, `claim()` / `land()` re-stated with `identifier`. The first `push` ROLLED BACK in 8 s - `cannot remove parameter defaults from existing function` - because the re-statement omitted the live defaults (claim 500 / 20 minutes, land 1 hour); with them kept it applied in 9 s. Proof: eight offline tests ALL OK on the patched code; test_schema.py ALL OK on the populated table 04:57-05:06 (reconcile: phase 3,726,582 of 21,631,885; sync and registration 100%); cloud.py's reads against the renamed table; `acris_update` ticking at 05:07 |
+| 2026-09-05 22:04 | 0004 applied with `push` after the load and `verify` (the column drop takes the table's lock; the two acris pending indexes were rebuilt over 21.6M rows, about seven minutes each): `updated_at` and its trigger gone, a row is `source | doc_id | registry | document`, a pending's wait between checks is its claim; a proof run before it went in ALL OK on the populated table (22:13, its connections without the statement timeout; the first run's recount was cut at two minutes) |
+| 2026-09-07 04:56 | 0015 applied with `push` (GATE 5, login's rule after the seventeenth notice at 04:41; the lane parked, the boards left running - they name only `reproduction.updates`): `doc_id` -> `identifier` in `acris`, `richmond`, `machinery.claims` (keys and the eleven indexes followed by themselves), the four field/parcel views re-created, `claim()` / `land()` re-stated with `identifier`. The first `push` ROLLED BACK in 8 s - `cannot remove parameter defaults from existing function` - because the re-statement omitted the live defaults (claim 500 / 20 minutes, land 1 hour); with them kept it applied in 9 s. Proof: eight offline tests ALL OK on the patched code; a proof run before it went in ALL OK on the populated table 04:57-05:06 (reconcile: phase 3,726,582 of 21,631,885; sync and registration 100%); cloud.py's reads against the renamed table; `acris_update` ticking at 05:07 |
 
 ## History
 
 2026-09-05 — Created at the root (first as `rulebook/`, renamed `supabase/` the same hour - login: "should rule book just be supabase?" - the folder is named for the one thing it holds), from `Reproduction/supabase/` (login: "Isn't that a bit confusing? I have no idea
 how this works compared to how we've set up the acris and Richmond folders" · "supabase shouldn't even be in
 reproduction … the project gets a supabase folder"). The database is the project's, so its md and program live at the
-root; each phase keeps only its SQL (`Reproduction/rulebook/schema/`) and its proof (`test_schema.py`).
+root; each phase keeps only its SQL (`Reproduction/rulebook/schema/`) and its proof (proven before it went in).
 Retired: the Supabase CLI and its 300-line `config.toml` (settings for a local copy of Supabase we never run),
 `db_push.ps1` and `decoded_sql.py` (both folded into `supabase.py`), the folder's README and `SCHEMA.md` (folded into
 the phase rulebook's "The table"). The ledger the CLI wrote is kept and shared. Nothing in the database changed with
@@ -128,7 +128,7 @@ transaction on the live project and was rolled back: 12 updates rows carried ove
 heartbeats), 96 claims carried, then a heartbeat, a claim of one, a landing as pending (the cooldown), a landing as absent
 (released; the lane row and the machine's row each +1), reconcile - and nothing kept. `push` applies it in order after
 0005 and 0006; the code that reads and writes the new table (cloud.py, board.py, the update programs, Population.py's
-verify, test_schema.py) is committed with it.
+verify, a proof run before it went in) is committed with it.
 
 2026-09-06 13:18 — THE FOURTH RESTART, AND THE INDEX THEY SHARE. The paced push (`--rest 600`, launched 13:16 after a
 half hour's rest, on Small) restarted the instance two minutes into acris_pages (17:18:35 UTC). Three of the four restarts
@@ -168,7 +168,7 @@ which applied in one transaction: reproduction.updates (the phase, lane and work
 machinery.claims carried over from the eight old tables, claim/land/heartbeat/reconcile rewritten over them, the old tables
 dropped. PROVEN: 0006 read 17:08 (read_0006_profile) - four materialized views populated (acris_profile 3.1 MB, 13,098 rows of
 type x borough x year among 15,022; acris_keys 40 keys; richmond_profile 2,369 rows; richmond_keys 18 keys), a facet answered
-in 168-267 ms; 0007 by Reproduction/rulebook/test_schema.py 17:10 on the live table: two hosts claiming at once took disjoint
+in 168-267 ms; 0007 by a proof run before it went in 17:10 on the live table: two hosts claiming at once took disjoint
 slices and together exactly the six test pendings, a pending landed keeps its claim as a cooldown, the expired cooldown is
 handed to the next claim, the two empty rows landed moved the lane row, the phase row and HOST-A's own workstation row by 2,
 the cell rule rejected a wrong word, heartbeats from two hosts made two workstation rows, cleanup left nothing, reconcile
@@ -210,18 +210,30 @@ there, which proves nothing either way). An exact crfn filter now finds every on
 
 ## 0010 - ACRIS UPDATE and RICHMOND UPDATE, two views (2026-09-06 22:38)
 
-login (22:3x): "It should be as simple as going to Acris update ... source Acris, the lane - the full phase, reproduction, or synchronization, registration, documentation - and all those metrics for the 60-second update, the 5-minute metrics, landed, needed, the percentage of needed, the as-of ... shouldn't the updates be separate, an Acris reproduction update table and a Richmond reproduction update table?" `reproduction.updates` stays the one storage table (0007: land() and insert_ids() move its counters, the lanes heartbeat onto it, the board programs write the metrics onto it every minute); what a person OPENS is now per source: `reproduction.acris_update` and `reproduction.richmond_update` - each the table cut to its source, the phase row (`reproduction`) first, then synchronization, registration, documentation, then each workstation's own rows; the columns in login's reading order: lane, workstation, landed, needed, pct, rate_60s, increase_60s, pct_60s, eta_60s, rate_5m, increase_5m, pct_5m, eta_5m, status, workers, last_seen, last_word, as_of. Views only - no lock on the table, applied at 22:38 while the document lane landed (`20260906223000_update_views.sql`, recorded). The board programs must run beside the lanes (`Acris Update.py`, `Richmond Update.py`, a tick every 60 s): the lanes write only counters and heartbeats; without the board the pace columns stay blank and `as_of` stale - which is what login saw at 22:35 (the acris board was started at 22:34, the richmond board at 22:36). A physical split into two tables is possible at a pause (the functions and the board name the table by source already); not while a lane lands.
+login (22:3x): "It should be as simple as going to Acris update ... source Acris, the lane - the full phase, reproduction, or identification, registration, documentation - and all those metrics for the 60-second update, the 5-minute metrics, landed, needed, the percentage of needed, the as-of ... shouldn't the updates be separate, an Acris reproduction update table and a Richmond reproduction update table?" `reproduction.updates` stays the one storage table (0007: land() and insert_ids() move its counters, the lanes heartbeat onto it, the board programs write the metrics onto it every minute); what a person OPENS is now per source: `reproduction.acris_update` and `reproduction.richmond_update` - each the table cut to its source, the phase row (`reproduction`) first, then identification, registration, documentation, then each workstation's own rows; the columns in login's reading order: lane, workstation, landed, needed, pct, rate_60s, increase_60s, pct_60s, eta_60s, rate_5m, increase_5m, pct_5m, eta_5m, status, workers, last_seen, last_word, as_of. Views only - no lock on the table, applied at 22:38 while the document lane landed (`20260906223000_update_views.sql`, recorded). The board programs must run beside the lanes (`Acris Update.py`, `Richmond Update.py`, a tick every 60 s): the lanes write only counters and heartbeats; without the board the pace columns stay blank and `as_of` stale - which is what login saw at 22:35 (the acris board was started at 22:34, the richmond board at 22:36). A physical split into two tables is possible at a pause (the functions and the board name the table by source already); not while a lane lands.
 
 ## 0011 - THE UPDATE VIEWS MADE SIMPLE (2026-09-06 22:45)
 
-login, reading 0010's views: "it makes a 3-row Acris into 6 ... half the workstations are empty ... showing numbers for other workstations that I haven't started yet ... a lot of 3.57 on an empty workstation ... it should be simple". The blank workstation was the LANE row (the whole lane across every station) and the LoginSurface rows were this station's own count since it joined - two kinds of rows in one list. Now `acris_update` / `richmond_update` = FOUR rows per source, no workstation column: the phase (reproduction), synchronization, registration, documentation, each with landed / needed / pct, the 60-second block, the 5-minute block, status, workers alive, last heartbeat and word, as_of. The per-station detail stands apart as `acris_workstations` / `richmond_workstations` (workstation, lane, landed_by_this_station, its share of the rate, its workers, its heartbeat). Views only, dropped and re-created (a view cannot lose a column through `create or replace`); applied 22:45 and recorded. "int8" in Supabase's column header is the editor's type badge (a 64-bit integer), not a value of ours.
+login, reading 0010's views: "it makes a 3-row Acris into 6 ... half the workstations are empty ... showing numbers for other workstations that I haven't started yet ... a lot of 3.57 on an empty workstation ... it should be simple". The blank workstation was the LANE row (the whole lane across every station) and the LoginSurface rows were this station's own count since it joined - two kinds of rows in one list. Now `acris_update` / `richmond_update` = FOUR rows per source, no workstation column: the phase (reproduction), identification, registration, documentation, each with landed / needed / pct, the 60-second block, the 5-minute block, status, workers alive, last heartbeat and word, as_of. The per-station detail stands apart as `acris_workstations` / `richmond_workstations` (workstation, lane, landed_by_this_station, its share of the rate, its workers, its heartbeat). Views only, dropped and re-created (a view cannot lose a column through `create or replace`); applied 22:45 and recorded. "int8" in Supabase's column header is the editor's type badge (a 64-bit integer), not a value of ours.
 
 ## 0012 - THE UPDATE VIEWS WITH ONLY THE COLUMNS A PERSON READS (2026-09-06 22:5x)
 
-login: "Acris: its reproduction, synchronization, registration, and its documentation ... a separate table for the same exact thing for workstations ... you probably don't need to see all those counts ... the last word ... the manager should be in the background." `acris_update` / `richmond_update`: four rows, and per row only landed, needed, pct, the 60-second block (rate, increase, pct increase, eta), the 5-minute block, status, as_of. `acris_workstations` / `richmond_workstations`: one row per machine per lane - landed_by_this_station, its 60-second and 5-minute rate and increase, workers, status, last_word, as_of. Workers, the heartbeat and the last word stay on the storage table for the programs. Applied and recorded 22:5x.
+login: "Acris: its reproduction, identification, registration, and its documentation ... a separate table for the same exact thing for workstations ... you probably don't need to see all those counts ... the last word ... the manager should be in the background." `acris_update` / `richmond_update`: four rows, and per row only landed, needed, pct, the 60-second block (rate, increase, pct increase, eta), the 5-minute block, status, as_of. `acris_workstations` / `richmond_workstations`: one row per machine per lane - landed_by_this_station, its 60-second and 5-minute rate and increase, workers, status, last_word, as_of. Workers, the heartbeat and the last word stay on the storage table for the programs. Applied and recorded 22:5x.
 
 ## 0013 - as_of AND last_seen IN EASTERN TIME (2026-09-06 23:1x)
 
 login: "make the as_of timestamp always Eastern - North American Eastern, Toronto or New York - that's where most people view it from." The board writes `now()` (a timestamptz, stored UTC); Supabase's table editor renders timestamptz in UTC (a screenshot read 03:14 while it was 23:14 in New York). The views now expose `(as_of at time zone 'America/New_York') as as_of_et` (and `last_seen_et` on the workstation views): the stored instant rendered as New York wall-clock, DST handled by the zone, the same for every viewer with no client setting. Applied 23:1x. NB when a lane has been refused the board correctly shows `status = stalled` and `rate_60s = 0` (its last word was a refusal, nothing has landed since) - that is the board reporting a dead lane faithfully, not a reporting bug.
 
 **0014 — 20260907011000_update_views_no_interval_pct.sql (applied 2026-09-07 01:10 ET).** The interval percent columns (pct_60s, pct_5m) leave `reproduction.acris_update` and `reproduction.richmond_update` (login: "I never really read it ... I look at the main overall numbers then the interval rates, increases, and eta"). The two source views now read: lane | landed | needed | pct | rate_60s | increase_60s | eta_60s | rate_5m | increase_5m | eta_5m | status | as_of_et. The board still stores pct_60s / pct_5m in `reproduction.updates`; the workstation views are unchanged. Views only, no lock.
+
+## 0016 - THE ORGANIZATION (2026-09-07 12:49)
+
+login: "why isn't it just reproduction -> acris, acris update, richmond, richmond update?" Three schemas now: `reproduction` holds the record and the two boards a person opens (`acris`, `acris_update`, `richmond`, `richmond_update`) and nothing else; `machinery` holds what the code needs and a person never reads (`claims`, `updates`); `reading` holds the reading layer for products (`acris_fields`, `acris_parcels`, `acris_keys`, `acris_profile` and the richmond four). The per-workstation views (`*_workstations`) are gone. heartbeat(), reconcile() and land() re-stated on `machinery.updates`.
+
+## 0017 - IDENTIFICATION + THE BOARD IN THREE BLOCKS (2026-09-07 13:18)
+
+login: "rename everything from synchronization to identification"; "you just need a source before the lane ... reproduction, identification, registration, documentation. Those four are in a total block, and after that, there is a space, and then it goes into the workstation 1 block and then the workstation 2 block ... all in the one table for each source." The lane row is `identification` (the check constraint too); `machinery.updates.first_seen` numbers the workstations by their first sight; a workstation's `reproduction` row holds its completions (land() credits them from here; LoginSurface seeded with its documents landed, every one a completion since registration was 100 %); reconcile() names the identification row. `acris_update` / `richmond_update` rebuilt: columns source, lane, status, as_of_et, rate_60s, increase_60s, eta_60s, rate_5m, increase_5m, eta_5m, landed, needed, pct; rows = the four totals, a blank line, workstation 1's four (`reproduction 1` ...), a blank line, workstation 2's four - the second block stands with its labels alone until the office workstation first reports. Proven 13:18-13:23: 14 rows in order on both sources; the board on the new code writes the workstation rows' percentage and eta.
+
+## ONE FILE (from 0016 on)
+
+The schema lives as `supabase/schema.sql` - the whole database as it stands, written from the project by `python supabase/supabase.py baseline` (login 2026-09-07: "there is no world where a schema should have this many files"). A change is a numbered `supabase/<version>_<name>.sql` beside it, applied once with `push`, folded in with `baseline`, and removed in the same commit; the ledger keeps every version applied (17 so far). A fresh project builds from `schema.sql` first, then any change file.

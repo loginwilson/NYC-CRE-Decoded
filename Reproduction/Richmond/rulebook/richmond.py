@@ -8,7 +8,7 @@ authority); the dates in the comments say when.
 import datetime as dt
 import re
 
-import lane
+import rulebook
 
 BASE = "https://www.richmondcountyclerk.com"
 
@@ -32,9 +32,9 @@ _ROW = re.compile(
 _PAGES = re.compile(r'Page\s*<span[^>]*>(\d+)</span>\s*of\s*(\d+)')
 
 
-class Refused(lane.Refused):
+class Refused(rulebook.Refused):
     """The county declined (captcha, access denied, block page).  Stop; do not retry, do not rotate.
-    A lane.Refused, so a crew parks on it exactly as on the ACRIS notice page."""
+    A rulebook.Refused, so a crew parks on it exactly as on the ACRIS notice page."""
 
 
 class ProbeBroken(RuntimeError):
@@ -275,6 +275,5 @@ def fresh(registry, days=IMAGE_LAG_DAYS):
 
 def canonical_path(doc_id, registry):
     """The One Touch address: Richmond\\By Document\\<year>\\<MM Mon>\\<day>\\<id>.pdf from the RECORDED date (the id's
-    digits are a submission sequence, not a date); with no readable date the id split (storage.day_folders)."""
-    import storage
-    return storage.canonical("richmond", doc_id, recorded_date(registry))
+    digits are a submission sequence, not a date); with no readable date the id split (rulebook.day_folders)."""
+    return rulebook.canonical("richmond", doc_id, recorded_date(registry))

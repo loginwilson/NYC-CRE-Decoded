@@ -1,4 +1,4 @@
-"""ACRIS SYNCHRONIZATION - one program.
+"""ACRIS IDENTIFICATION - one program.
 
 Keeps the table live at the CRFN edge.  ACRIS issues the City Register File Number as one strict
 citywide counter, so the numbers above the last one we hold are the only live window the source
@@ -8,21 +8,21 @@ the moment a filing shows, the crew walks a full bite of numbers in parallel and
 found lands as a new row - the doc_id cell, nothing else - and the edge moves to the last document
 seen.  One request per number, a plain GET of the detail page by CRFN, through one pooled session.
 
-    python "Acris Synchronization.py" --edge 2026000247108      the first start names the edge
-    python "Acris Synchronization.py"                           afterwards the edge file remembers it
+    python "Acris Identification.py" --edge 2026000247108      the first start names the edge
+    python "Acris Identification.py"                           afterwards the edge file remembers it
 
-This file's own authority is Acris Synchronization.md beside it; the cycle's is ../reproduction/Acris Reproduction.md.
+This file's own authority is Acris Identification.md beside it; the cycle's is ../reproduction/Acris Reproduction.md.
 
 The rules, kept from the sync floor that ran before this one:
 
-  the edge     synchronization.edge.json beside this file holds the last CRFN whose document we hold;
+  the edge     identification.edge.json beside this file holds the last CRFN whose document we hold;
                a start without it needs --edge (never guessed); the edge moves only after the documents
                it passes are in the table, so a crash re-walks and loses nothing
   level        --watch numbers past the edge every --every seconds; blanks past the last document are
                unissued numbers and are asked again next time
   behind       a document near the end of the probed window means more beyond: walk a --bite at once,
                and keep walking until the window ends in --watch blanks
-  the holes    a number that fails three asks is recorded in synchronization.holes.jsonl and passed,
+  the holes    a number that fails three asks is recorded in identification.holes.jsonl and passed,
                so one bad number never freezes the edge; the audit reconciles it
   ucc runs     personal-property filings take numbers in the same counter and answer blank here; after
                --widen-after empty watches one wider look (--widen numbers) is taken, so a run of them
@@ -38,8 +38,8 @@ The rules, kept from the sync floor that ran before this one:
                backoff) with no line open, re-enter once with births 5 s apart; 4 re-entries, then park
   wall         40 consecutive 503/429 with no success between: park with the reason
   width        --width walkers at launch (default 20 alone; 9 + the monitor in the fleet's batch); `width=N`
-               or `stop` in synchronization.control
-  one door     synchronization.lock: a second start on this machine is refused while the first lives
+               or `stop` in identification.control
+  one door     identification.lock: a second start on this machine is refused while the first lives
   one machine  the edge lives on one workstation; run this lane at home only
 
 Exit codes: 0 stopped · 2 refused · 3 redials exhausted · 4 wall · 5 crash.
@@ -53,26 +53,25 @@ import sys
 import time
 
 HERE = pathlib.Path(__file__).resolve().parent
-PHASE = HERE.parents[2]                       # synchronization -> workflow -> Acris -> Reproduction
+PHASE = HERE.parents[2]                       # identification -> workflow -> Acris -> Reproduction
 sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import acris                                                    # noqa: E402
-import lane                                                     # noqa: E402
-import storage                                                  # noqa: E402
+import rulebook  # noqa: E402
 
 
-class Synchronization:
+class Identification:
     """The monitor (feed + land, on the lane's main thread) and what one walker does with one number."""
-    source, lane_name = "acris", "synchronization"
+    source, lane_name = "acris", "identification"
     ua = acris.UA
     noun = "documents"            # the PROGRESS line's word for a live number
     needs_registry = False
 
     def __init__(self, here, args):
         self.here = pathlib.Path(here)
-        self.state_path = self.here / "synchronization.edge.json"
-        self.holes_path = self.here / "synchronization.holes.jsonl"
+        self.state_path = self.here / "identification.edge.json"
+        self.holes_path = self.here / "identification.holes.jsonl"
         self.every, self.watch, self.bite = args.every, args.watch, args.bite
         self.widen, self.widen_after = args.widen, args.widen_after
         self.edge = self._load_edge(args.edge)
@@ -117,7 +116,7 @@ class Synchronization:
         if doc_id is None:
             return ("blank", None)                                  # an answer: no document at this number
         if len(body) < acris.MIN_DETAIL:
-            raise lane.Retry("detail parsed from only %d bytes - suspect truncation, not reported live" % len(body))
+            raise rulebook.Retry("detail parsed from only %d bytes - suspect truncation, not reported live" % len(body))
         return ("live", doc_id)
 
     def classify(self, value):
@@ -138,7 +137,7 @@ class Synchronization:
             if self.empty_watches >= self.widen_after:
                 n = self.widen
                 self.empty_watches = 0
-                lane._log(ctx, "synchronization: %d empty watches - one wider look of %d numbers past the edge"
+                rulebook._log(ctx, "identification: %d empty watches - one wider look of %d numbers past the edge"
                           % (self.widen_after, n))
         window_end = self.edge + n
         for crfn in range(self.edge + 1, window_end + 1):
@@ -189,7 +188,7 @@ class Synchronization:
         try:
             n = crew.cloud.insert_ids([d for _, d in lives])
         except Exception as e:
-            lane._log(ctx, "synchronization: could not land %d documents (%s) - kept, next minute" % (len(lives), lane.reason(e)))
+            rulebook._log(ctx, "identification: could not land %d documents (%s) - kept, next minute" % (len(lives), rulebook.reason(e)))
             return
         self.inserted += n
         old, self.edge = self.edge, lives[-1][0]
@@ -204,7 +203,7 @@ class Synchronization:
             if k <= end:
                 self.answers.pop(k, None)
                 self.attempts.pop(k, None)
-        lane._log(ctx, "synchronization: %d documents found, %d new - edge %d -> %d - %s"
+        rulebook._log(ctx, "identification: %d documents found, %d new - edge %d -> %d - %s"
                   % (len(lives), n, old, self.edge, "BEHIND, walking a bite" if self.behind else "level"))
 
     def rebatch(self, crew, ctx):
@@ -226,12 +225,12 @@ class Synchronization:
 
 
 def role(drive_root, args):
-    """This lane's role, for the fleet hosting it with --also synchronization:N - its own knobs, the host's --edge."""
-    return Synchronization(HERE, lane.role_args(args, ("edge",), edge=0, every=60, watch=8, bite=1000, widen=64, widen_after=5))
+    """This lane's role, for the fleet hosting it with --also identification:N - its own knobs, the host's --edge."""
+    return Identification(HERE, rulebook.role_args(args, ("edge",), edge=0, every=60, watch=8, bite=1000, widen=64, widen_after=5))
 
 
 def main():
-    ap = argparse.ArgumentParser(description="acris synchronization: the CRFN edge, one monitor, a crew of walkers")
+    ap = argparse.ArgumentParser(description="acris identification: the CRFN edge, one monitor, a crew of walkers")
     ap.add_argument("--edge", type=int, default=0, help="the last CRFN whose document the table holds (first start only)")
     ap.add_argument("--every", type=int, default=60, help="seconds between watches while level")
     ap.add_argument("--watch", type=int, default=8, help="numbers probed past the edge per watch")
@@ -240,14 +239,14 @@ def main():
     ap.add_argument("--widen-after", type=int, default=5, help="empty watches before the wider look")
     ap.add_argument("--drive", default="", help="only for --also documentation:N")
     ap.add_argument("--fresh-days", type=int, default=30, help="only for --also documentation:N")
-    lane.add_common_args(ap)
+    rulebook.add_common_args(ap)
     ap.set_defaults(width=20)
     args = ap.parse_args()
-    args.lane = "synchronization"
+    args.lane = "identification"
 
-    drive_root = storage.find_drive(args.drive) if args.drive else None
-    roles = lane.roles_for("Acris", args, HERE, drive_root, Synchronization(HERE, args))
-    sys.exit(lane.run(roles, args, HERE))
+    drive_root = rulebook.find_drive(args.drive) if args.drive else None
+    roles = rulebook.roles_for("Acris", args, HERE, drive_root, Identification(HERE, args))
+    sys.exit(rulebook.run(roles, args, HERE))
 
 
 if __name__ == "__main__":

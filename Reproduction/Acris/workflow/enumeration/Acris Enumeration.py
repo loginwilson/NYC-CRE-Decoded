@@ -30,7 +30,7 @@ cannot see:
                 table) or MISSING (a document the table lacks); each year's top confirmed by a gallop
                 past the index's highest number.  Identity per year: index + held + missing + void =
                 issued, closed only when nothing is unknown
-  the tail      the walk's (synchronization): reported from the edge file's age, unproven past it
+  the tail      the walk's (identification): reported from the edge file's age, unproven past it
 
 Rules kept from the programs before this one (acris_census.py, acris_void_walk.py, live_delta.py,
 acris_bulk_rd.py, bulk.py):
@@ -76,8 +76,7 @@ sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's ruleboo
 sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 
 import acris                                                    # noqa: E402
-import cloud                                                    # noqa: E402
-import lane                                                     # noqa: E402
+import rulebook  # noqa: E402
 
 FIRST_YEAR = 2003                                   # ACRIS's first CRFN year
 FIB = (1, 2, 3, 5, 8, 13, 21, 34, 55, 89)           # the confirm spread past a candidate top (a hole is not the edge)
@@ -301,7 +300,7 @@ def tail(c, rep, state):
     rep("THE TAIL (the walk's): index good through %s, highest CRFN %s" % (state["good_through"] or "?", state["crfn"] or "?"))
     newest = c.max_id("2", "3")
     rep("  table's newest digital id: %s%s" % (newest or "none", (" (dated %s)" % id_date(newest)) if newest else ""))
-    edge_file = HERE.parent / "synchronization" / "synchronization.edge.json"
+    edge_file = HERE.parent / "identification" / "identification.edge.json"
     if edge_file.exists():
         try:
             e = json.loads(edge_file.read_text(encoding="utf-8"))
@@ -310,12 +309,12 @@ def tail(c, rep, state):
         except (ValueError, KeyError, OSError) as ex:
             rep("  edge file unreadable (%s)" % ex)
     else:
-        rep("  no edge file on this workstation (synchronization keeps it at home)")
-    alive = [r for r in c.alive("3 minutes") if r[0] == "synchronization"]
+        rep("  no edge file on this workstation (identification keeps it at home)")
+    alive = [r for r in c.alive("3 minutes") if r[0] == "identification"]
     if alive:
-        rep("  synchronization alive: " + ", ".join("%s (%ds ago, width %s)" % (r[1], r[3], r[2]) for r in alive))
+        rep("  identification alive: " + ", ".join("%s (%ds ago, width %s)" % (r[1], r[3], r[2]) for r in alive))
     else:
-        rep("  synchronization is not running anywhere (no heartbeat in 3 minutes)")
+        rep("  identification is not running anywhere (no heartbeat in 3 minutes)")
     rep("  the tail is proven only by the walk: unproven past the edge")
 
 
@@ -370,7 +369,7 @@ class Probe:
 
     def __init__(self, args, c, rep):
         self.args, self.c, self.rep = args, c, rep
-        self.width = max(1, min(args.width, lane.MAX_WIDTH))
+        self.width = max(1, min(args.width, rulebook.MAX_WIDTH))
         self.session = None
         self.q = queue.Queue()
         self.lock = threading.Lock()
@@ -401,10 +400,10 @@ class Probe:
             r = self.session.get(url, headers={"Referer": acris.BASE + "/"}, timeout=45)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
                 requests.exceptions.ChunkedEncodingError) as e:
-            raise lane.Transport("%s: %s" % (type(e).__name__, lane.reason(e)))
+            raise rulebook.Transport("%s: %s" % (type(e).__name__, rulebook.reason(e)))
         try:
             if r.status_code >= 400:
-                raise lane.HTTPStatus(r.status_code, url)
+                raise rulebook.HTTPStatus(r.status_code, url)
             return r.content, r.headers.get("Content-Type", "")
         finally:
             r.close()
@@ -415,7 +414,7 @@ class Probe:
         acris.check_refused(body, ct, "crfn %d" % crfn)
         doc_id = acris.detail_doc_id(acris.clean_html(body.decode("utf-8", "replace")))
         if doc_id is not None and len(body) < acris.MIN_DETAIL:
-            raise lane.Retry("detail parsed from only %d bytes - suspect truncation" % len(body))
+            raise rulebook.Retry("detail parsed from only %d bytes - suspect truncation" % len(body))
         return doc_id
 
     def worker(self, born):
@@ -430,20 +429,20 @@ class Probe:
                     self.answers[crfn] = doc_id
                     self.transport_streak = 0
                     self.last_success = time.time()
-            except lane.Refused as e:
+            except rulebook.Refused as e:
                 with self.lock:
                     self.refused = str(e)
                 self.stop.set()
                 return
-            except lane.Transport as e:                 # the wire, never an answer: asked again after a pause; every worker hit = the session closed
+            except rulebook.Transport as e:                 # the wire, never an answer: asked again after a pause; every worker hit = the session closed
                 now = time.time()
                 with self.lock:
                     self.transport_streak += 1
                     self.transport_hits.append((now, born))
-                    self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= lane.HANGUP_WINDOW_S]
+                    self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= rulebook.HANGUP_WINDOW_S]
                 if not self.stop.is_set():
                     self.q.put((crfn, attempt))
-                self.stop.wait(lane.HANGUP_PAUSE_S)
+                self.stop.wait(rulebook.HANGUP_PAUSE_S)
             except Exception as e:                      # HTTPStatus, Retry, anything else: asked again, then unknown
                 if attempt + 1 < 3 and not self.stop.is_set():
                     self.q.put((crfn, attempt + 1))
@@ -466,26 +465,26 @@ class Probe:
                         self.answers[crfn] = doc_id
                         self.last_success = time.time()
                     return doc_id is not None
-                except lane.Refused:
+                except rulebook.Refused:
                     raise
-                except lane.Transport as e:
+                except rulebook.Transport as e:
                     last = e
                     wire += 1
-                    time.sleep(lane.HANGUP_PAUSE_S)
+                    time.sleep(rulebook.HANGUP_PAUSE_S)
                 except Exception as e:
                     last = e
                     time.sleep(1)
             if wire < 3 or round_ == 2:
                 break
             self._reenter("the session closed under the gallop (three wire failures at crfn %d)" % crfn)
-        raise lane.Retry("crfn %d: three asks failed (%s)" % (crfn, str(last)[:120]))
+        raise rulebook.Retry("crfn %d: three asks failed (%s)" % (crfn, str(last)[:120]))
 
     # ── the cycle for the probe: the whole width, the hang-up, the wait, one re-entry ──
     def hung_up(self):
         now = time.time()
         with self.lock:
-            self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= lane.HANGUP_WINDOW_S]
-            if not self.transport_hits or now - self.last_success <= lane.HANGUP_QUIET_S:
+            self.transport_hits = [(t, b) for t, b in self.transport_hits if now - t <= rulebook.HANGUP_WINDOW_S]
+            if not self.transport_hits or now - self.last_success <= rulebook.HANGUP_QUIET_S:
                 return False
             return len({b for _, b in self.transport_hits}) >= max(1, self.width) or len(self.transport_hits) >= self.width
 
@@ -495,7 +494,7 @@ class Probe:
         self.transport_hits = []
         self.transport_streak = 0
         self.last_success = time.time()
-        self.session = lane.make_session(self.width, acris.UA)
+        self.session = rulebook.make_session(self.width, acris.UA)
         self.workers = []
         for i in range(self.width):
             t = threading.Thread(target=self.worker, args=(i + 1,), daemon=True, name="probe-%d" % (i + 1))
@@ -519,14 +518,14 @@ class Probe:
         in a row stop the probe with exit 3 and the journal resumes on the next run."""
         now = time.time()
         answered = len(self.answers) - self.answered_at_redial
-        if self.tries and (answered >= lane.SERVED_LANDINGS or now - self.last_redial >= lane.SERVED_S):
+        if self.tries and (answered >= rulebook.SERVED_LANDINGS or now - self.last_redial >= rulebook.SERVED_S):
             self.tries = 0
             self.wait_s = max(self.wait_s // 2, self.args.redial_wait)
         elif self.tries:
             self.wait_s = min(self.wait_s * 2, 4800)
         if self.tries >= self.args.tries:
             self.stop.set()
-            raise lane.Transport("%s; %d re-entries in a row were refused" % (why, self.tries))
+            raise rulebook.Transport("%s; %d re-entries in a row were refused" % (why, self.tries))
         self.rep("PROBE: %s - hanging up; re-entry %d/%d in %ds on what is still unanswered, no line open"
                  % (why, self.tries + 1, self.args.tries, self.wait_s))
         self._leave()
@@ -534,7 +533,7 @@ class Probe:
         end = time.time() + self.wait_s
         while time.time() < end:
             time.sleep(min(10, max(0.0, end - time.time())))
-        while not lane.net_up():
+        while not rulebook.net_up():
             self.rep("PROBE: the network is DOWN - waiting a minute, no try spent")
             time.sleep(60)
         self.tries += 1
@@ -620,10 +619,10 @@ class Probe:
                 last_line = now
             if self.hung_up():
                 self._reenter("the session closed (every line hit the wire inside %ds, nothing answered for %ds)"
-                              % (lane.HANGUP_WINDOW_S, int(now - self.last_success)))
+                              % (rulebook.HANGUP_WINDOW_S, int(now - self.last_success)))
         with self.lock:
             if self.refused:
-                raise lane.Refused(self.refused)
+                raise rulebook.Refused(self.refused)
 
     def save(self):
         tmp = self.journal_path.with_suffix(".tmp")
@@ -679,7 +678,7 @@ class Probe:
         if not years:
             raise SystemExit("nothing to probe: %s names no year%s" % (holes_path.name, (" in --years %s" % self.args.years) if self.args.years else ""))
         lock = HERE / "enumeration.lock"
-        lane.take_lock(lock)
+        rulebook.take_lock(lock)
         self.rep("THE PROBE: %d years, one entry of %d connections, births %.1fs apart - the cycle on a close, stops on the notice page"
                  % (len(years), self.width, self.args.stagger))
         self._enter()
@@ -696,7 +695,7 @@ class Probe:
                     continue
                 try:
                     issued, reqs = self.year_top(y, seed)
-                except lane.Retry as e:
+                except rulebook.Retry as e:
                     self.rep("%d  top UNPROVEN: %s" % (y, e))
                     issued, reqs = None, 0
                 if issued is None:
@@ -712,11 +711,11 @@ class Probe:
                 self.save()
             # 3. the identity
             code = self.identity(years, holes)
-        except lane.Refused as e:
+        except rulebook.Refused as e:
             self.rep("REFUSED: %s - stopped, nothing retried, nothing rotated. %s written; a person decides." % (e, parked.name))
             parked.write_text("REFUSED %s - %s\n" % (time.strftime("%Y-%m-%d %H:%M"), e), encoding="utf-8")
             code = 2
-        except lane.Transport as e:
+        except rulebook.Transport as e:
             self.rep("HANG-UP: %s - stopped; the journal resumes on the next run" % e)
             code = 3
         except KeyboardInterrupt:
@@ -758,11 +757,11 @@ def main():
 
     rep = Report(HERE)
     rep("ACRIS ENUMERATION on %s - %s" % (host, "the probe" if args.probe else "the census" if args.census else "the diff"))
-    c = cloud.Cloud("acris", "enumeration", host, app="acris enumeration")
+    c = rulebook.Cloud("acris", "enumeration", host, app="acris enumeration")
     try:
         c.connect()
     except Exception as e:
-        raise SystemExit("the cloud is unreachable (%s) - the table cannot be counted" % lane.reason(e))
+        raise SystemExit("the cloud is unreachable (%s) - the table cannot be counted" % rulebook.reason(e))
     code = 5
     try:
         if args.probe:
@@ -783,7 +782,7 @@ def main():
         rep("stopped by hand")
         code = 0
     except Exception as e:
-        rep("CRASH %s: %s" % (type(e).__name__, lane.reason(e)))
+        rep("CRASH %s: %s" % (type(e).__name__, rulebook.reason(e)))
         import traceback
         traceback.print_exc()
         code = 5                                     # the process leaves with 5 (a raise made it exit 1)

@@ -23,7 +23,7 @@ The rules every richmond lane shares, as one module: `richmond.py`. The Richmond
 
 ## The grant rule
 
-A detail unlocks only after the SAME SESSION fetched the listing page the id appears on (2026-08-21). A cold GET answers HTTP 200 and a shell (4,212 bytes) or "INVALID REQUEST: UNAUTHORIZED SEARCH ACCESS" (2,180 bytes) - never a refusal, never an absence: our grant did not take. So a reader fetches the page, then the details of that page's ids, in that order, in one session; the walkers (synchronization, registration) are built on it. The image has no grant rule: its grant is the token (below).
+A detail unlocks only after the SAME SESSION fetched the listing page the id appears on (2026-08-21). A cold GET answers HTTP 200 and a shell (4,212 bytes) or "INVALID REQUEST: UNAUTHORIZED SEARCH ACCESS" (2,180 bytes) - never a refusal, never an absence: our grant did not take. So a reader fetches the page, then the details of that page's ids, in that order, in one session; the walkers (identification, registration) are built on it. The image has no grant rule: its grant is the token (below).
 
 ## The detail page - the one parser
 
@@ -57,15 +57,15 @@ Three outcomes, never two - login 2026-08-25: "we have the url, if it doesnt sho
 
 ## The access shape - and why the cycle is dormant here
 
-The county was measured under the DRUMROLL RULE (`Richmond Reproduction.md` §3): no pacer, no governor, latency is the only governor; 160 concurrent connections ran 26 hours clean; restarts are free; the only safety is stop-on-refusal. What it objects to is a handshake burst - 160 cold TLS opens in one instant answered SSLError across the board - so births are 0.4 s apart and keep-alive removes every later handshake. Synchronization keeps the census's polite 0.3 s between the pages of one window and registration keeps it between the details of one page (its pages fan out across the walkers) - measured over 2.4 million requests without a trip. The courts host hangs the library-default user-agent and serves the honest one.
+The county was measured under the DRUMROLL RULE (`Richmond Reproduction.md` §3): no pacer, no governor, latency is the only governor; 160 concurrent connections ran 26 hours clean; restarts are free; the only safety is stop-on-refusal. What it objects to is a handshake burst - 160 cold TLS opens in one instant answered SSLError across the board - so births are 0.4 s apart and keep-alive removes every later handshake. Identification keeps the census's polite 0.3 s between the pages of one window and registration keeps it between the details of one page (its pages fan out across the walkers) - measured over 2.4 million requests without a trip. The courts host hangs the library-default user-agent and serves the honest one.
 
-The lanes inherit the cycle from `lane.py` (login's acris design: one entry, staggered births, a hang-up when the whole width dies with nothing landing, a 60-s wait, one re-entry on a fresh batch). At this county it is DORMANT: no session close was ever measured here, so the hang-up fires only when the wire itself dies (wifi, a dead host) - the right thing then. The walkers drop their cut windows and pages at a hang-up and ask them again at the next heal or walk; documentation drops its claims and takes fresh ones. login 2026-09-04: "the way it works doesnt require this whole batch, enter, stagger, redial, exit, rebatch approach ... richmond can just enter and hammer" - the record agrees.
+The lanes inherit the cycle from `rulebook.py` (login's acris design: one entry, staggered births, a hang-up when the whole width dies with nothing landing, a 60-s wait, one re-entry on a fresh batch). At this county it is DORMANT: no session close was ever measured here, so the hang-up fires only when the wire itself dies (wifi, a dead host) - the right thing then. The walkers drop their cut windows and pages at a hang-up and ask them again at the next heal or walk; documentation drops its claims and takes fresh ones. login 2026-09-04: "the way it works doesnt require this whole batch, enter, stagger, redial, exit, rebatch approach ... richmond can just enter and hammer" - the record agrees.
 
 ## Who calls what
 
 | lane | from the module |
 |---|---|
-| synchronization | `BASE`, `UA`, `WINDOW_DAYS`, `CONTROL`, `windows`, `listing_url`, `parse_listing`, `page_count`, `doc_id`, `check_refused`, `IMAGE_LAG_DAYS` |
+| identification | `BASE`, `UA`, `WINDOW_DAYS`, `CONTROL`, `windows`, `listing_url`, `parse_listing`, `page_count`, `doc_id`, `check_refused`, `IMAGE_LAG_DAYS` |
 | enumeration | `UA`, `WINDOW_DAYS`, `START`, `CONTROL`, `windows`, `listing_url`, `parse_listing`, `page_count`, `doc_id`, `check_refused`, `Refused`, `ProbeBroken` |
 | registration | `BASE`, `UA`, `WINDOW_DAYS`, `CONTROL`, `windows`, `listing_url`, `parse_listing`, `page_count`, `doc_id`, `detail_url`, `parse_detail`, `premature`, `check_refused`, `IMAGE_LAG_DAYS` |
 | documentation | `BASE`, `UA`, `IAPPS`, `PULL_HEADERS`, `mint_url`, `mint_referer`, `classify_mint`, `is_pdf`, `fresh`, `canonical_path`, `check_refused`, `Refused`, `IMAGE_LAG_DAYS` |
@@ -80,7 +80,7 @@ None. The county's refusal shapes are not preserved as files yet: a refusal here
 
 ## History
 
-2026-09-05 — the review against the code: the 0.3-s pace is per page in synchronization and per detail in registration; the two spellings of the detail route named.
+2026-09-05 — the review against the code: the 0.3-s pace is per page in identification and per detail in registration; the two spellings of the detail route named.
 
 2026-09-03 - the module written with the repo, every rule carried from the lanes that ran before it with its measured date; the image section (two hosts, three outcomes, the honest user-agent at the courts host) added when the documentation lane was written. Moved into `rulebook/` with this authority beside it the same evening, on login's word: a source folder is `rulebook/`, `workflow/`, `update/` and nothing loose.
 

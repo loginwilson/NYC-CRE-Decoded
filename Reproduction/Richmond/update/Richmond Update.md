@@ -1,6 +1,6 @@
 # Richmond Update
 
-The board of the richmond reproduction, as one program: `Richmond Update.py`. It always runs and only reads: every minute it takes the counters that the lanes keep exact, subtracts them from its own readings a minute and five minutes back, and writes the two tabs in the cloud. Its database is the two tables `reproduction.richmond_update` (tab 1: the phase) and `reproduction.richmond_update_lanes` (tab 2: one row per lane). The shared rules live in `Reproduction/rulebook/board.py` - the same file the acris board runs on, so both boards say the same thing the same way; this file is the lane's own authority.
+The board of the richmond reproduction, as one program: `Richmond Update.py`. It always runs and only reads: every minute it takes the counters that the lanes keep exact, subtracts them from its own readings a minute and five minutes back, and writes rate, increase, eta, percentage, status and the as-of stamp back into `machinery.updates`. What a person opens is `reproduction.richmond_update`: three blocks of four rows (below). The shared rules live in `Reproduction/rulebook/rulebook.py` (its board part) - the same file the acris board runs on, so both boards say the same thing the same way; this file is the lane's own authority.
 
 ## Launch
 
@@ -11,18 +11,21 @@ The board of the richmond reproduction, as one program: `Richmond Update.py`. It
 
 One board per source, on one machine; its `as_of` stamp is its pulse, and a stale stamp is the signal the board died. `update.lock` refuses a second board on the same machine.
 
-## The two tabs
+## The board
 
-| tab | table | landed | needed |
+What a person opens is `reproduction.richmond_update` (0017): three blocks of four rows, a blank line before each workstation block.
+
+| block | rows | landed | needed |
 |---|---|---|---|
-| 1 the phase | `richmond_update` | rows with all three cells filled (identifier, registry, document) | rows in the table |
-| 2 the lanes | `richmond_update_lanes` | that lane's cells that are not empty (a fill, `pending` or `absent` - a determination counts) | rows in the table |
+| the totals | reproduction · identification · registration · documentation | reproduction: rows with all three cells filled (identifier, registry, document); a lane: that lane's cells that are not empty (a fill, `pending` or `absent` - a determination counts) | rows in the table |
+| workstation 1 | reproduction 1 · identification 1 · registration 1 · documentation 1 | what this workstation landed (its completions on the reproduction row); its number is the order of its first sight | the lane's |
+| workstation 2 | the same four, numbered 2 | the same; the block stands with its labels alone until the workstation first reports | the lane's |
 
-Both tabs carry the same metrics: `pct` (landed over needed), the minute kit (`rate_60s`, `increase_60s`, `pct_60s`, `eta_60s`), the window kit (`rate_5m`, `increase_5m`, `pct_5m`, `eta_5m`), `status`, `as_of`. Tab 2 adds the folded heartbeats: `hosts` ("HOST:width" of the workstations alive on the lane), `width` across them, `heartbeat_at` (the freshest), `last_event` (the freshest heartbeat's last word). Synchronization's landed equals needed by construction (its cell is the row itself), so its row reads complete while it runs; its hosts and heartbeat say it is alive.
+Columns, in reading order: `source`, `lane`, `status`, `as_of_et` (Eastern), the minute kit (`rate_60s`, `increase_60s`, `eta_60s`), the window kit (`rate_5m`, `increase_5m`, `eta_5m`), `landed`, `needed`, `pct`. A workstation row's percentage is its count over the lane's needed, its eta the lane's remaining at this workstation's rate, and it reads `complete` when the lane is level. The table behind the view, `machinery.updates`, also keeps each row's `workers`, `last_seen` and `last_word` (the lane's heartbeat); the board folds them into the status and never shows them.
 
 ## The rules
 
-The rules are `board.py`'s and are written in full in `../../Acris/update/Acris Update.md`: the counters are the lanes' (`land()` and `insert_ids()` move them by exactly what was new; the board never counts the table); one subtraction for rate and increase, from the board's own readings ring (`update.state.json`); every percentage over needed; four statuses, computed - complete, stalled (the lane's last word is a refusal or a wall; the phase when any lane's is), active (measured movement outranks every proxy), pending; eta follows status; never clamp (out of bounds publishes no metric and names `reconcile`); reconcile on demand only, never on the tick; a tick never kills the board; a lane is alive when its heartbeat is fresher than `--fresh` (180 s).
+The rules are `rulebook.py`'s (its board part) and are written in full in `../../Acris/update/Acris Update.md`: the counters are the lanes' (`land()` and `insert_ids()` move them by exactly what was new; the board never counts the table); one subtraction for rate and increase, from the board's own readings ring (`update.state.json`); every percentage over needed; four statuses, computed - complete, stalled (the lane's last word is a refusal or a wall; the phase when any lane's is), active (measured movement outranks every proxy), pending; eta follows status; never clamp (out of bounds publishes no metric and names `reconcile`); reconcile on demand only, never on the tick; a tick never kills the board; a lane is alive when its heartbeat is fresher than `--fresh` (180 s).
 
 What is richmond's own on the board: three small crews, so the rates are small numbers (a 1×8 pull measured about 28 docs/s at the courts host; the walkers land ids and registries by the listing page, in bursts every walk rather than a steady stream), and registration's `pending` cells (premature details) cycle back through the walk, so its landed can hold still while its pendings turn into registries.
 
@@ -35,8 +38,10 @@ Beside this file, never in git: `update.state.json` (the readings ring), `update
 2026-09-03 - the acris board's twin: `board.py` with the richmond source and lanes, nothing else. Proven by the board's own offline proof and its live-cloud simulation (run on the acris tables; the richmond tables are the same shape from the same migration) and by `show` against the empty richmond tabs. Not yet run beside real lanes: that waits for the data move.
 
 2026-09-06 — 0007: THE TWO TABS ARE ONE TABLE. login: "You have a database, and you have an updating table that shows you how
-you're progressing on filling in that database." `reproduction.updates`, source first: the phase row (`lane = reproduction`),
+you're progressing on filling in that database." `machinery.updates`, source first: the phase row (`lane = reproduction`),
 the three lane rows, and a row per workstation running a lane - its own landed count (moved by `land()` and `insert_ids`),
 its rate from the board's own subtraction, its workers, `last_seen` (the heartbeat; fresher than `--fresh` = alive) and its
 last word. The heartbeats table is gone into those rows; the claims moved out of sight into the schema `machinery`. The
 board reads and writes the one table; `show` prints every row.
+
+2026-09-07 13:18 — 0017: THE BOARD IN THREE BLOCKS, source before lane (login: "reproduction, identification, registration, documentation. Those four are in a total block, and after that, there is a space, and then it goes into the workstation 1 block and then the workstation 2 block ... all in the one table for each source"). The lane row is `identification`. This program's board part writes the workstation rows' percentage (over the lane's needed), eta (the lane's remaining at the workstation's rate) and `complete` when the lane is level; a workstation's reproduction row follows its lanes' last word as the total's does.

@@ -1,11 +1,14 @@
 """ACRIS UPDATE - the board, one program, always running, reading only.
 
-One table in the cloud, reproduction.updates (migration 0007), source first: a row for the phase (rows with all
-three cells filled against rows), a row per lane (that lane's cells filled against rows), and a row per
-workstation running a lane (its own landed count, rate, workers, last seen, last word).  Every minute this program reads the counters
-that land() and insert_ids() keep exact, subtracts them from its own readings a minute and five
-minutes back, and writes rate, increase, percentage, eta, status and the as-of stamp.  It never counts
-the workflow table.
+One table in the cloud, machinery.updates: a row per source for the phase (lane = reproduction: rows with all three
+cells filled against rows), a row per lane (that lane's cells filled against rows), and a row per workstation per
+lane (its own landed count, rate, workers, last seen, last word).  What a person opens is reproduction.acris_update
+(0017): three blocks of four rows - the totals (reproduction, identification, registration, documentation), then
+workstation 1's four, then workstation 2's four, a blank line before each workstation block; columns source, lane,
+status, as of (Eastern), the 60 s block (rate, increase, eta), the 5 min block, landed, needed, percentage.  Every
+minute this program reads the counters that land() and insert_ids() keep exact, subtracts them from its own readings
+a minute and five minutes back, and writes rate, increase, percentage, eta, status and the as-of stamp.  It never
+counts the workflow table.
 
     python "Acris Update.py"                 the board: a tick every 60 s until stopped
     python "Acris Update.py" --once          one tick, written
@@ -13,7 +16,7 @@ the workflow table.
     python "Acris Update.py" reconcile       recount landed and needed from the table's indexes and overwrite
                                              the counters: after the data move, after a hand edit - never on the tick
 
-This file's own authority is Acris Update.md beside it; the shared rules are in ../../board.py.
+This file's own authority is Acris Update.md beside it; the shared rules are in ../../rulebook.py.
 
 The status of a row is computed, never hand-set:  complete (landed >= needed) · stalled (the lane's
 last word is a refusal or a wall) · active (the counters moved in the window) · pending (everything
@@ -30,21 +33,21 @@ HERE = pathlib.Path(__file__).resolve().parent
 PHASE = HERE.parents[1]                       # update -> Acris -> Reproduction
 sys.path.insert(0, str(PHASE / "rulebook"))                # the phase's rulebook: lane, fleet, board, cloud, storage, rate manager
 
-import board                                                    # noqa: E402
+import rulebook  # noqa: E402
 
 SOURCE = "acris"
-LANES = ("synchronization", "registration", "documentation")
+LANES = ("identification", "registration", "documentation")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="acris update: the board - reads reproduction.updates, writes the rates, eta and status back")
+    ap = argparse.ArgumentParser(description="acris update: the board - reads machinery.updates, writes the rates, eta and status back")
     ap.add_argument("command", nargs="?", default="run", choices=["run", "show", "reconcile"])
     ap.add_argument("--every", type=int, default=60, help="seconds between ticks")
     ap.add_argument("--once", action="store_true", help="one tick, then exit")
     ap.add_argument("--fresh", type=int, default=180, help="a heartbeat older than this many seconds is not alive")
     ap.add_argument("--host", default="", help="this workstation's name (default: the machine name)")
     args = ap.parse_args()
-    b = board.Board(SOURCE, LANES, HERE, args)
+    b = rulebook.Board(SOURCE, LANES, HERE, args)
     if args.command == "show":
         sys.exit(b.show())
     if args.command == "reconcile":

@@ -3,7 +3,7 @@
 One project; one schema per phase (`reproduction` today, `construction` and `production` when those phases open); one
 table prefix per source; one cell per lane.  The database never computes the process: the workers on the workstations
 fill it and the boards read it.  Each phase defines its own schema as numbered SQL files in that phase's rulebook
-(`<Phase>/rulebook/schema/<version>_<name>.sql` - one file per dictated decision, applied once, never edited after);
+(`supabase/schema.sql` is the whole database as it stands; a change is `supabase/<version>_<name>.sql`, applied once, folded into schema.sql, removed);
 this program applies them and keeps the record of which are applied in the project's own ledger
 (`supabase_migrations.schema_migrations`, the table the Supabase CLI writes too, so either tool agrees).
 
@@ -22,6 +22,7 @@ NYC_CRE_DECODED_ENV - holding SUPABASE_DB_URL (Connect > Session pooler > URI) a
 prints a credential.  Every `sql` run is appended to `supabase.log` beside this file (kept out of git by `*.log`) so the
 schema has a written history of every hand statement that touched it; `push` needs no log - the ledger is its record.
 """
+import time
 import argparse, datetime, os, pathlib, re, sys, urllib.parse
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -29,6 +30,7 @@ ROOT = HERE.parent                                   # rulebook -> the repo: the
 LOG = HERE / "supabase.log"
 LEDGER = "supabase_migrations.schema_migrations"
 FILE = re.compile(r"^(\d{14})_(.+)\.sql$")
+BASELINE = "schema.sql"                                  # the whole database as it stands, written by `baseline`
 
 
 # ── the connection ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -86,20 +88,22 @@ def connect(app="supabase.py"):
 # ── the schema files and the ledger ───────────────────────────────────────────────────────────────────────────────────
 
 def phases():
-    """The phases that define a schema: the root's folders holding rulebook/schema/, alphabetical."""
-    return sorted(p for p in ROOT.iterdir() if p.is_dir() and (p / "rulebook" / "schema").is_dir())
+    """One folder holds the schema: this one (schema.sql, and a numbered change file while one is pending)."""
+    return [HERE]
 
 
 def sql_files():
     """Every phase's SQL files as (version, name, phase, path), in version order across the phases."""
     out = []
     for ph in phases():
-        for f in sorted((ph / "rulebook" / "schema").iterdir()):
+        for f in sorted(ph.iterdir()):
             if not f.is_file() or f.suffix != ".sql":
                 continue
+            if f.name == BASELINE:
+                continue                                          # the baseline: the whole schema as it stands, never a change
             m = FILE.match(f.name)
             if not m:
-                raise SystemExit("%s: a schema file is named <14-digit version>_<name>.sql" % f)
+                raise SystemExit("%s: a schema file is named <14-digit version>_<name>.sql (or %s, the baseline)" % (f, BASELINE))
             out.append((m.group(1), m.group(2), ph.name, f))
     out.sort()
     versions = [v for v, _, _, _ in out]
@@ -172,11 +176,15 @@ def check():
         print("the ledger (%s): %s" % (LEDGER, "%d applied" % len(done) if done is not None else "not created yet - the first push creates it"))
         for v, n, ph, f in files:
             state = "applied" if done and v in done else "PENDING"
-            print("  %-8s %s  %s/rulebook/schema/%s" % (state, v, ph, f.name))
+            print("  %-8s %s  supabase/%s" % (state, v, f.name))
         if not files:
-            print("  no schema files on disk (no <Phase>/rulebook/schema/ folder)")
+            print("  no change file on disk")
         extra = sorted(set(done or {}) - {v for v, _, _, _ in files})
-        if extra:
+        base = [ph / BASELINE for ph in phases() if (ph / BASELINE).exists()]
+        if base:
+            print("  baseline %s - the whole database as it stands (%d applied version%s folded into it)" % (
+                base[0].relative_to(ROOT), len(extra), "" if len(extra) == 1 else "s"))
+        elif extra:
             print("  applied in the project but without a file on disk: %s" % ", ".join(extra))
     finally:
         con.close()
@@ -195,13 +203,23 @@ def push(dry, rest=0):
                 con.commit()
                 done = {}
             done = done or {}
+        if not done and not dry:
+            for ph in phases():
+                b = ph / BASELINE
+                if b.exists():
+                    print("fresh project: applying the baseline %s first" % b.relative_to(ROOT))
+                    with con.cursor() as cur:
+                        cur.execute(b.read_text(encoding="utf-8"))
+                        cur.execute("insert into %s (version, statements, name) values (%%s, %%s, %%s)" % LEDGER, ("00000000000000", [], "schema"))
+                    con.commit()
+                    done["00000000000000"] = "schema"
         todo = [x for x in files if x[0] not in done]
         if not todo:
             print("nothing to apply - %d file(s) on disk, every one in the ledger" % len(files))
             return 0
         for v, n, ph, f in todo:
             text = f.read_text(encoding="utf-8")
-            print("%s %s  %s/rulebook/schema/%s  (%d lines)" % ("would apply" if dry else "applying", v, ph, f.name, text.count("\n")))
+            print("%s %s  supabase/%s  (%d lines)" % ("would apply" if dry else "applying", v, f.name, text.count("\n")))
             if dry:
                 continue
             if STATEMENT_BY_STATEMENT in text.splitlines()[0]:
@@ -225,6 +243,84 @@ def push(dry, rest=0):
 
 
 STATEMENT_BY_STATEMENT = "-- statement by statement"
+KEPT = ("reproduction", "machinery", "reading")          # the schemas that are the project's own
+
+
+def baseline():
+    """Write supabase/schema.sql: the whole database as it stands - the schemas in KEPT, their types, tables,
+    indexes, functions, views and materialized views - from the catalog, idempotent (if not exists / or replace).  The
+    numbered change files fold into it and leave the folder in the same commit."""
+    con = connect("supabase.py baseline")
+    out = ["-- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on %s ET."
+           % time.strftime("%Y-%m-%d %H:%M"),
+           "-- Idempotent: a fresh project builds from it (push applies it first); an existing project is unchanged by it.",
+           "-- A change is a numbered <version>_<name>.sql beside this file, applied once with `push`, folded in with `baseline`,",
+           "-- and removed in the same commit - so this folder holds one file between changes.", ""]
+    q = lambda t: "'" + t.replace("'", "''") + "'"
+    try:
+        with con.cursor() as cur:
+            for sch in KEPT:
+                cur.execute("select obj_description(oid, 'pg_namespace') from pg_namespace where nspname = %s", (sch,))
+                r = cur.fetchone()
+                out.append("create schema if not exists %s;" % sch)
+                if r and r[0]:
+                    out.append("comment on schema %s is %s;" % (sch, q(r[0])))
+            out.append("")
+            cur.execute("select n.nspname, t.typname, array_agg(e.enumlabel order by e.enumsortorder) from pg_type t"
+                        " join pg_namespace n on n.oid = t.typnamespace join pg_enum e on e.enumtypid = t.oid"
+                        " where n.nspname = any(%s) group by 1, 2 order by 1, 2", (list(KEPT),))
+            for sch, name, labels in cur.fetchall():
+                out.append("do $$ begin create type %s.%s as enum (%s); exception when duplicate_object then null; end $$;"
+                           % (sch, name, ", ".join(q(l) for l in labels)))
+            out.append("")
+            cur.execute("select n.nspname, c.relname, c.oid, obj_description(c.oid, 'pg_class') from pg_class c"
+                        " join pg_namespace n on n.oid = c.relnamespace where c.relkind = 'r' and n.nspname = any(%s) order by 1, 2", (list(KEPT),))
+            for sch, tbl, oid, tcomment in cur.fetchall():
+                cur.execute("select a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull, pg_get_expr(d.adbin, d.adrelid),"
+                            " col_description(a.attrelid, a.attnum) from pg_attribute a left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum"
+                            " where a.attrelid = %s and a.attnum > 0 and not a.attisdropped order by a.attnum", (oid,))
+                cols = cur.fetchall()
+                cur.execute("select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = %s"
+                            " order by case contype when 'p' then 0 when 'u' then 1 when 'f' then 2 else 3 end, conname", (oid,))
+                cons = cur.fetchall()
+                lines = ["  %-14s %s%s%s" % (c, t, " not null" if nn else "", (" default " + d) if d else "") for c, t, nn, d, _ in cols]
+                lines += ["  constraint %s %s" % (n, d) for n, d in cons]
+                out.append("create table if not exists %s.%s (\n%s\n);" % (sch, tbl, ",\n".join(lines)))
+                if tcomment:
+                    out.append("comment on table %s.%s is %s;" % (sch, tbl, q(tcomment)))
+                for c, _, _, _, cc in cols:
+                    if cc:
+                        out.append("comment on column %s.%s.%s is %s;" % (sch, tbl, c, q(cc)))
+                out.append("")
+            cur.execute("select i.schemaname, i.tablename, i.indexname, i.indexdef from pg_indexes i where i.schemaname = any(%s)"
+                        " and not exists (select 1 from pg_constraint c where c.conname = i.indexname) order by 1, 2, 3", (list(KEPT),))
+            for sch, tbl, name, d in cur.fetchall():
+                out.append(d.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ", 1).replace("CREATE UNIQUE INDEX ", "CREATE UNIQUE INDEX IF NOT EXISTS ", 1) + ";")
+            out.append("")
+            cur.execute("select n.nspname, p.proname, pg_get_functiondef(p.oid), pg_get_function_identity_arguments(p.oid), obj_description(p.oid, 'pg_proc')"
+                        " from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = any(%s) and p.prokind = 'f' order by 1, 2", (list(KEPT),))
+            for sch, fn, d, args, c in cur.fetchall():
+                out.append(d.rstrip().rstrip(";") + ";")
+                if c:
+                    out.append("comment on function %s.%s(%s) is %s;" % (sch, fn, args, q(c)))
+                out.append("")
+            cur.execute("select n.nspname, c.relname, pg_get_viewdef(c.oid, true), obj_description(c.oid, 'pg_class') from pg_class c"
+                        " join pg_namespace n on n.oid = c.relnamespace where c.relkind = 'v' and n.nspname = any(%s) order by 1, 2", (list(KEPT),))
+            for sch, v, d, c in cur.fetchall():
+                out.append("create or replace view %s.%s as\n%s;" % (sch, v, d.rstrip().rstrip(";")))
+                if c:
+                    out.append("comment on view %s.%s is %s;" % (sch, v, q(c)))
+                out.append("")
+            cur.execute("select schemaname, matviewname, definition from pg_matviews where schemaname = any(%s) order by 1, 2", (list(KEPT),))
+            for sch, m, d in cur.fetchall():
+                out.append("create materialized view if not exists %s.%s as\n%s;" % (sch, m, d.rstrip().rstrip(";")))
+                out.append("")
+    finally:
+        con.close()
+    target = phases()[0] / BASELINE
+    target.write_text("\n".join(out).rstrip("\n") + "\n", encoding="utf-8")
+    print("wrote %s (%d lines)" % (target.relative_to(ROOT), len(out)))
+    return 0
 
 
 def statements(text):
@@ -331,6 +427,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="the process's one database: check it, push the phases' schema files, run a statement")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check", help="server, schemas, tables; every schema file on disk against the ledger")
+    sub.add_parser("baseline", help="write schema/schema.sql: the whole database as it stands, from the catalog")
     p = sub.add_parser("push", help="apply the schema files not yet applied, in version order")
     p.add_argument("--dry", action="store_true", help="list what would be applied; run nothing")
     p.add_argument("--rest", type=int, default=0, help="statement by statement: seconds to rest after each statement that ran 10 s or longer (a small instance's disk budget)")
@@ -342,6 +439,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.cmd == "check":
         return check()
+    if a.cmd == "baseline":
+        return baseline()
     if a.cmd == "push":
         return push(a.dry, a.rest)
     sql = a.command if a.command else open(a.file, encoding="utf-8").read()
