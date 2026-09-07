@@ -13,13 +13,13 @@ One board per source, on one machine; its `as_of` stamp is its pulse, and a stal
 
 ## The board
 
-What a person opens is `reproduction.richmond_update` (0017): three blocks of four rows, a blank line before each workstation block.
+What a person opens is `reproduction.richmond_update` (0017, 0018): three blocks of four rows, a spacer row before each workstation block. The Table Editor does not show a view in the view's own order - it sorts by the first column - so every row, the spacers too, carries the source in that column and the order comes through as written (measured 2026-09-07 13:40).
 
 | block | rows | landed | needed |
 |---|---|---|---|
-| the totals | reproduction · identification · registration · documentation | reproduction: rows with all three cells filled (identifier, registry, document); a lane: that lane's cells that are not empty (a fill, `pending` or `absent` - a determination counts) | rows in the table |
+| the totals | reproduction total · identification total · registration total · documentation total | reproduction: rows with all three cells filled (identifier, registry, document); a lane: that lane's cells that are not empty (a fill, `pending` or `absent` - a determination counts) | rows in the table |
 | workstation 1 | reproduction 1 · identification 1 · registration 1 · documentation 1 | what this workstation landed (its completions on the reproduction row); its number is the order of its first sight | the lane's |
-| workstation 2 | the same four, numbered 2 | the same; the block stands with its labels alone until the workstation first reports | the lane's |
+| workstation 2 | the same four, numbered 2 | the same; until the workstation first reports the block reads `pending` with its labels alone (login: "might as well have the second one pending in case we ever had to") | the lane's |
 
 Columns, in reading order: `source`, `lane`, `status`, `as_of_et` (Eastern), the minute kit (`rate_60s`, `increase_60s`, `eta_60s`), the window kit (`rate_5m`, `increase_5m`, `eta_5m`), `landed`, `needed`, `pct`. A workstation row's percentage is its count over the lane's needed, its eta the lane's remaining at this workstation's rate, and it reads `complete` when the lane is level. The table behind the view, `machinery.updates`, also keeps each row's `workers`, `last_seen` and `last_word` (the lane's heartbeat); the board folds them into the status and never shows them.
 
@@ -45,3 +45,5 @@ last word. The heartbeats table is gone into those rows; the claims moved out of
 board reads and writes the one table; `show` prints every row.
 
 2026-09-07 13:18 — 0017: THE BOARD IN THREE BLOCKS, source before lane (login: "reproduction, identification, registration, documentation. Those four are in a total block, and after that, there is a space, and then it goes into the workstation 1 block and then the workstation 2 block ... all in the one table for each source"). The lane row is `identification`. This program's board part writes the workstation rows' percentage (over the lane's needed), eta (the lane's remaining at the workstation's rate) and `complete` when the lane is level; a workstation's reproduction row follows its lanes' last word as the total's does.
+
+2026-09-07 13:4x — 0018: the Table Editor sorts a view by its first column (login, seeing the rows scrambled: "That doesn't look good"); every row carries the source, the totals read `reproduction total` ... `documentation total`, an unclaimed workstation block reads `pending`.

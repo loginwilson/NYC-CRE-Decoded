@@ -1945,10 +1945,11 @@ def main(site, description, edge_type, edge_help, fresh_days_default):
 # ======================================================================================================================
 # BOARD: THE BOARD every source's update program shares: read machinery.updates once a minute - the phase and
 # the lanes' counters and every workstation's own - write rate, increase, eta, percentage, status and as-of back.
-# What a person opens is reproduction.<source>_update (0017): three blocks of four rows - the totals (reproduction,
-# identification, registration, documentation), then workstation 1's four, then workstation 2's four, a blank line
-# before each workstation block; columns source, lane, status, as of (Eastern), the 60 s block (rate, increase, eta),
-# the 5 min block, landed, needed, percentage.  A workstation's number is the order of its first sight.
+# What a person opens is reproduction.<source>_update (0017, 0018): three blocks of four rows - the totals (reproduction
+# total, identification total, registration total, documentation total), then workstation 1's four, then workstation
+# 2's four, a spacer row before each workstation block; columns source, lane, status, as of (Eastern), the 60 s block
+# (rate, increase, eta), the 5 min block, landed, needed, percentage.  A workstation's number is the order of its first
+# sight; an unclaimed block reads pending.  Every row carries the source: the Table Editor sorts a view by its first column.
 # ======================================================================================================================
 
 KEEP = 8 * 60                 # seconds of readings kept for the windows

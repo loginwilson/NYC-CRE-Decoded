@@ -1,4 +1,4 @@
--- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-07 13:19 ET.
+-- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-07 13:35 ET.
 -- Idempotent: a fresh project builds from it (push applies it first); an existing project is unchanged by it.
 -- A change is a numbered <version>_<name>.sql beside this file, applied once with `push`, folded in with `baseline`,
 -- and removed in the same commit - so this folder holds one file between changes.
@@ -537,7 +537,7 @@ create or replace view reproduction.acris_update as
          SELECT 0 AS block,
             l.ord,
             u.source,
-            u.lane,
+            u.lane || ' total'::text AS lane,
             u.status::text AS status,
             (u.as_of AT TIME ZONE 'America/New_York'::text) AS as_of_et,
             u.rate_60s,
@@ -554,7 +554,7 @@ create or replace view reproduction.acris_update as
         UNION ALL
          SELECT b.n,
             0,
-            ''::text AS text,
+            'acris'::text AS text,
             ''::text AS text,
             ''::text AS text,
             NULL::timestamp without time zone AS "timestamp",
@@ -573,7 +573,7 @@ create or replace view reproduction.acris_update as
             l.ord,
             'acris'::text AS text,
             (l.lane || ' '::text) || b.n,
-            u.status::text AS status,
+            COALESCE(u.status::text, 'pending'::text) AS "coalesce",
             (u.as_of AT TIME ZONE 'America/New_York'::text) AS timezone,
             u.rate_60s,
             u.increase_60s,
@@ -608,7 +608,7 @@ create or replace view reproduction.acris_update as
     pct
    FROM board
   ORDER BY block, ord;
-comment on view reproduction.acris_update is 'ACRIS UPDATE: three blocks of four rows - the totals (reproduction, identification, registration, documentation), a blank line, workstation 1''s four, a blank line, workstation 2''s four; source, lane, status, as of (Eastern), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage';
+comment on view reproduction.acris_update is 'ACRIS UPDATE: three blocks of four rows - the totals (reproduction total, identification total, registration total, documentation total), a spacer row, workstation 1''s four (reproduction 1 ...), a spacer row, workstation 2''s four; source, lane, status, as of (Eastern), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage. Every row carries the source so the Table Editor (which sorts a view by its first column) shows the rows in this order';
 
 create or replace view reproduction.richmond_update as
  WITH lanes(lane, ord) AS (
@@ -632,7 +632,7 @@ create or replace view reproduction.richmond_update as
          SELECT 0 AS block,
             l.ord,
             u.source,
-            u.lane,
+            u.lane || ' total'::text AS lane,
             u.status::text AS status,
             (u.as_of AT TIME ZONE 'America/New_York'::text) AS as_of_et,
             u.rate_60s,
@@ -649,7 +649,7 @@ create or replace view reproduction.richmond_update as
         UNION ALL
          SELECT b.n,
             0,
-            ''::text AS text,
+            'richmond'::text AS text,
             ''::text AS text,
             ''::text AS text,
             NULL::timestamp without time zone AS "timestamp",
@@ -668,7 +668,7 @@ create or replace view reproduction.richmond_update as
             l.ord,
             'richmond'::text AS text,
             (l.lane || ' '::text) || b.n,
-            u.status::text AS status,
+            COALESCE(u.status::text, 'pending'::text) AS "coalesce",
             (u.as_of AT TIME ZONE 'America/New_York'::text) AS timezone,
             u.rate_60s,
             u.increase_60s,
@@ -703,7 +703,7 @@ create or replace view reproduction.richmond_update as
     pct
    FROM board
   ORDER BY block, ord;
-comment on view reproduction.richmond_update is 'RICHMOND UPDATE: three blocks of four rows - the totals (reproduction, identification, registration, documentation), a blank line, workstation 1''s four, a blank line, workstation 2''s four; source, lane, status, as of (Eastern), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage';
+comment on view reproduction.richmond_update is 'RICHMOND UPDATE: three blocks of four rows - the totals (reproduction total, identification total, registration total, documentation total), a spacer row, workstation 1''s four (reproduction 1 ...), a spacer row, workstation 2''s four; source, lane, status, as of (Eastern), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage. Every row carries the source so the Table Editor (which sorts a view by its first column) shows the rows in this order';
 
 create materialized view if not exists reading.acris_keys as
  SELECT 'registry'::text AS level,
