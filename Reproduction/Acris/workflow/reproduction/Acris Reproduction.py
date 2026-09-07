@@ -61,9 +61,13 @@ WIDTHS = {"synchronization": 5, "registration": 5, "documentation": 5}
 # every five seconds ... the session manager is there to regulate and know when we need a reset."  The band is 4-5 docs/s
 # (the 09-04 band was 6-7 with a ceiling of 8), the width never above 40 (the 1x40; workstations scale, not the width),
 # the request ceiling stays the record's 60/s, the session ends at 1,000,000 requests and re-enters on a fresh batch.
-MANAGE = {"documentation": {"manage": 1, "ramp_to_rate": 1, "rate_floor": 4, "rate_ideal_lo": 4, "rate_ideal_hi": 5, "dps_ceiling": 5,
-                            "rps_ceiling": 60, "width_min": 10, "width_max": 40, "adjust_every": 120, "adjust_step": 5,
+MANAGE = {"documentation": {"manage": 1, "ramp_to_rate": 1, "rate_floor": 5, "rate_ideal_lo": 6, "rate_ideal_hi": 7, "dps_ceiling": 8,
+                            "rps_ceiling": 60, "width_min": 20, "width_max": 40, "adjust_every": 120, "adjust_step": 5,
                             "session_max_requests": 1000000}}
+# ^ THE GOLDEN BAND (login 2026-09-07 00:5x: "stay in that pocket ... stay at 1x40, stay at a reasonable speed, don't force
+#   things"): the 09-04 knobs the golden day and golden night ran on - floor 5, ideal 6-7, hard 8 docs/s, 60 req/s ceiling -
+#   with 40 as the CEILING, not the target (the fixed 1x40 of 00:04 ran 64 req/s on a fast exit = forcing it). One worker in,
+#   one more every --stagger until the band, hold, retreat on closes. The 4-5 band of 09-06 23:0x is retired.
 EDGE_HELP = "synchronization's first start: the last CRFN whose document the table holds"
 FRESH_DAYS = 30
 
