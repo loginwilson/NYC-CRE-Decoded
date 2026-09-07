@@ -61,9 +61,14 @@ WIDTHS = {"synchronization": 5, "registration": 5, "documentation": 5}
 # every five seconds ... the session manager is there to regulate and know when we need a reset."  The band is 4-5 docs/s
 # (the 09-04 band was 6-7 with a ceiling of 8), the width never above 40 (the 1x40; workstations scale, not the width),
 # the request ceiling stays the record's 60/s, the session ends at 1,000,000 requests and re-enters on a fresh batch.
-MANAGE = {"documentation": {"manage": 1, "ramp_to_rate": 1, "rate_floor": 5, "rate_ideal_lo": 6, "rate_ideal_hi": 7, "dps_ceiling": 8,
-                            "rps_ceiling": 60, "width_min": 20, "width_max": 40, "adjust_every": 120, "adjust_step": 5,
+MANAGE = {"documentation": {"manage": 1, "ramp_to_rate": 1, "rate_floor": 4, "rate_ideal_lo": 5, "rate_ideal_hi": 6, "dps_ceiling": 6,
+                            "rps_ceiling": 60, "width_min": 20, "width_max": 60, "adjust_every": 120, "adjust_step": 5,
                             "session_max_requests": 1000000}}
+# ^ login 2026-09-07 01:2x: "4 is the floor and 6 is the ceiling ... 5 is the goal" (docs/s): below 4 grow, hold in 5-6,
+#   above 6 retire.  Width cap 60, not 40: on a SLOW exit (89.106.14 gave 40 workers 35 req/s at ~10.5 requests per 2005-era
+#   document = 3.3-4.4 docs/s, the manager pinned at the cap wanting to grow) the goal needs ~53 req/s ≈ 60 workers; the 60 req/s
+#   ceiling still governs (no grow within 10% of it), so on a fast exit the manager settles well under 40.  The golden day's own
+#   answer to a slow exit was width (80-120 on Tirana under the same ceiling).
 # ^ THE GOLDEN BAND (login 2026-09-07 00:5x: "stay in that pocket ... stay at 1x40, stay at a reasonable speed, don't force
 #   things"): the 09-04 knobs the golden day and golden night ran on - floor 5, ideal 6-7, hard 8 docs/s, 60 req/s ceiling -
 #   with 40 as the CEILING, not the target (the fixed 1x40 of 00:04 ran 64 req/s on a fast exit = forcing it). One worker in,
