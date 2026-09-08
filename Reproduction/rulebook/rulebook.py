@@ -386,8 +386,15 @@ def env():
     return v
 
 
+POOLER_PORT = None      # --pooler transaction sets 6543: the TRANSACTION pooler.  The session pooler (5432, the URI's own port) allows
+                        # 15 clients in all - each crew is one, the boards ~6 - so a machine running one lane process per core hit
+                        # "cloud unreachable" at the ninth (2026-09-08 10:39).  The lane's use is autocommit, one statement at a time,
+                        # each a SQL function (claim / land / heartbeat): exactly what transaction mode serves.  The boards keep 5432.
+
+
 def dsn():
-    """The session-pooler URI with the password from SUPABASE_DB_PASSWORD, percent-encoded."""
+    """The pooler URI with the password from SUPABASE_DB_PASSWORD, percent-encoded (the session pooler, or the transaction
+    pooler under --pooler transaction: POOLER_PORT)."""
     v = env()
     m = re.match(r"^(postgres(?:ql)?://)([^:@/]+)(?::(.*))?@([^@]+)$", v["SUPABASE_DB_URL"], re.S)
     if not m:
@@ -397,6 +404,8 @@ def dsn():
     if not pw or "YOUR-PASSWORD" in pw:
         raise SystemExit("database password missing - add SUPABASE_DB_PASSWORD=<password> to %s" % env_path())
     url = "%s%s:%s@%s" % (scheme, user, urllib.parse.quote(pw, safe=""), rest)
+    if POOLER_PORT:
+        url = re.sub(r":\d+/", ":%d/" % POOLER_PORT, url, count=1)       # host:5432/db -> host:6543/db
     if "sslmode=" not in url:
         url += ("&" if "?" in url else "?") + "sslmode=require"
     return url
@@ -727,6 +736,9 @@ def add_common_args(ap):
     """The knobs every cycle lane shares; a lane file adds its own (documentation: --drive, --fresh-days)."""
     ap.add_argument("--width", type=int, default=40, help="workers = connections (default %(default)s)")
     ap.add_argument("--host", default="", help="this workstation's name in the cloud (default: the machine name)")
+    ap.add_argument("--pooler", default="session", choices=["session", "transaction"],
+                    help="which Supabase pooler this lane's crews connect through: session (5432, the URI's port; 15 clients in all)"
+                         " or transaction (6543; hundreds) - one lane process per core needs transaction (2026-09-08)")
     ap.add_argument("--slot", default="", metavar="N",
                     help="one lane process per core (2026-09-08): this process's number; its lock/control/parked files become <lane>.N.*,"
                          " pair it with --host <station>-N (its own cloud rows and claims) and its own --door set (disjoint across slots)")
@@ -1463,6 +1475,9 @@ def run(roles, args, here):
     """roles = [(role, width), ...]; the first is the lane's own."""
     here = pathlib.Path(here)
     host = args.host or socket.gethostname()
+    global POOLER_PORT
+    if getattr(args, "pooler", "session") == "transaction":
+        POOLER_PORT = 6543                                   # every Cloud.connect() in this process goes through the transaction pooler
     ctx = Context(here, host, args)
     parked = here / ("%s.parked" % lane_tag(args))
     if parked.exists() and not args.unpark:
