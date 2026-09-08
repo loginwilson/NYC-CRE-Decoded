@@ -924,8 +924,9 @@ class Crew:
         self.wall_streak = 0
         self.last_success = time.time()
         self.cloud = Cloud(role.source, role.lane, lane_ctx.host, app="%s %s" % (role.source, role.lane))
-        self.outbox = Outbox(lane_ctx.here / ("%s.outbox.jsonl" % role.lane))
-        self.fails = lane_ctx.here / ("%s.fails.jsonl" % role.lane)
+        tag = lane_tag(lane_ctx.args) if role.lane == lane_ctx.args.lane else role.lane   # a slot's own files (09-08)
+        self.outbox = Outbox(lane_ctx.here / ("%s.outbox.jsonl" % tag))
+        self.fails = lane_ctx.here / ("%s.fails.jsonl" % tag)
         self.held = set()                 # claimed, not yet landed
         self.tries = 0                    # redials in the current incident
         self.wait_s = None                # the backoff state: set from --redial-wait at the first hang-up; x2 per refused re-entry, /2 per served one
