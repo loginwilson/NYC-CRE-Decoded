@@ -911,6 +911,7 @@ class Crew:
         self.entries = 0                  # entries made in the life of the process: the first, then every re-entry
         self.ramp = None                  # the births thread of the current entry
         self.ramp_end = 0.0               # when the last ramp completed: the next crew enters --entry-gap after it
+        self.entered_at = 0.0             # when this crew last started its ramp: doors enter --entry-gap apart, then ramp CONCURRENTLY
         self.born = 0                     # workers born in the current entry
         self.idle_until = 0.0             # when the to-do list came back empty, do not ask again before this
         self.progress_at = time.time()    # when the last PROGRESS line was printed (the rate divides by real time)
@@ -1020,6 +1021,7 @@ class Crew:
         self.transport_streak = 0
         self.wall_streak = 0
         self.last_success = time.time()
+        self.entered_at = time.time()     # the ramp starts now; other doors may enter --entry-gap after this, ramping alongside
         self.reqs_at_entry = self.stats["reqs"]
         a = self.ctx.args
         if getattr(a, "manage", 0) and getattr(a, "ramp_to_rate", 1):
@@ -1387,9 +1389,15 @@ def _await_entry(ctx, crews, c):
     now = time.time()
     if now < c.reentry_at or ctx.stopping.is_set():
         return
-    if any(o is not c and o.ramping() for o in crews):
-        return                                              # one ramp at a time: three doors, never one moment
-    if now - max([o.ramp_end for o in crews] + [0.0]) < ctx.args.entry_gap:
+    # a burst of handshakes on ONE address is the ban condition, so never two crews ramping on the SAME door at once;
+    # DIFFERENT doors are different addresses and ramp CONCURRENTLY (login 2026-09-08: "why wait for door 1 to reach
+    # perfection before launching door 2 ... each door ramps to its max and sprints to its allowance before a new one
+    # comes in").  Crews with no door (door="") share the machine's own line and still serialize, as before.
+    if any(o is not c and o.door == c.door and o.ramping() for o in crews):
+        return
+    # space ENTRIES so the doors do not all draw their pool and handshake in the same instant: a door enters --entry-gap
+    # after the last door started ramping (not after it finished), so eight doors are all ramping within ~8*entry_gap.
+    if now - max([o.entered_at for o in crews] + [0.0]) < ctx.args.entry_gap:
         return
     if not net_up():
         c.reentry_at = now + 60
