@@ -727,6 +727,11 @@ def add_common_args(ap):
     ap.add_argument("--redial-wait", type=int, default=60, help="seconds of silence after the session closes before the fresh-batch re-entry; a refused re-entry doubles the next wait (cap 4,800 s), a served one halves it back to this base")
     ap.add_argument("--tries", type=int, default=4, help="re-entries per incident before parking (the wait doubles each time: 1, 2, 4, 8 minutes at the base)")
     ap.add_argument("--no-pool-check", action="store_true", help="skip the exit-pool check at entry (tests only)")
+    ap.add_argument("--door", action="append", default=[], metavar="URL",
+                    help="a door: a proxy this crew's lines go through, e.g. socks5h://127.0.0.1:1080 (an `ssh -N -D 1080` tunnel to a rented address);"
+                         " repeatable - one crew per door, each with its own exit check, session and rate manager; `direct` = the machine's own line"
+                         " (the VPN's exit). Default: the machine's own line only. A notice on one door retires that door's crew; the lane parks when"
+                         " every door has been refused (2026-09-07: a door is a block, ACRIS keeps its standing per address range)")
     ap.add_argument("--entry-gap", type=float, default=20.0, help="seconds between one crew's entry and the next (--also)")
     ap.add_argument("--also", action="append", default=[], metavar="LANE:WIDTH", help="host another lane's crew too, e.g. registration:40")
     ap.add_argument("--one-batch", action="store_true",
@@ -818,16 +823,20 @@ SERVED_LANDINGS, SERVED_S = 300, 300        # a re-entry that landed this many, 
 MAX_WIDTH = 128          # the pool's ceiling; a connection is opened only when a worker first asks
 
 
-def exit_pool(draws=5, pause=1.0):
+def exit_pool(draws=5, pause=1.0, proxy=""):
     """Five fresh-connection draws of the public exit (never the source).  The lane has no IP: the VPN
     hands EACH connection an exit from a pool, so one draw is one draw; five in one /24 = the pool is
-    settled, five spanning blocks = the VPN app is mid-switch and no entry goes out."""
+    settled, five spanning blocks = the VPN app is mid-switch and no entry goes out.  Through a door
+    (proxy) the draws go through the tunnel and answer the rented address, one block by construction."""
     seen = []
+    hdr = {"User-Agent": "nyc-cre-decoded lane (exit check)", "Connection": "close"}
     for i in range(draws):
         try:
-            r = urllib.request.urlopen(urllib.request.Request("https://api.ipify.org", headers={
-                "User-Agent": "nyc-cre-decoded lane (exit check)", "Connection": "close"}), timeout=15)
-            seen.append(r.read().decode().strip())
+            if proxy:
+                seen.append(requests.get("https://api.ipify.org", headers=hdr, proxies={"http": proxy, "https": proxy}, timeout=15).text.strip())
+            else:
+                r = urllib.request.urlopen(urllib.request.Request("https://api.ipify.org", headers=hdr), timeout=15)
+                seen.append(r.read().decode().strip())
         except Exception as e:
             seen.append("fail:" + type(e).__name__)
         if i < draws - 1:
@@ -841,11 +850,11 @@ def wait_for_pool(ctx, c):
     if getattr(ctx.args, "no_pool_check", False):
         return
     while not ctx.stopping.is_set():
-        seen, blocks = exit_pool()
+        seen, blocks = exit_pool(proxy=c.door)
         if len(blocks) == 1 and all(x[:1].isdigit() for x in seen):
-            _log(ctx, "%s: exit pool %s - one block %s, entering" % (c.role.lane, ", ".join(seen), blocks[0]))
+            _log(ctx, "%s: exit pool %s - one block %s, entering" % (c.name, ", ".join(seen), blocks[0]))
             return
-        _log(ctx, "%s: exit pool %s - %s; waiting 30 s, no entry" % (c.role.lane, ", ".join(seen),
+        _log(ctx, "%s: exit pool %s - %s; waiting 30 s, no entry" % (c.name, ", ".join(seen),
              "SPANS BLOCKS %s (the VPN app is mid-switch)" % blocks if len(blocks) > 1 else "no answer"))
         try:
             c.cloud.heartbeat(0, "waiting for a settled exit pool")
@@ -854,12 +863,15 @@ def wait_for_pool(ctx, c):
         time.sleep(30)
 
 
-def make_session(width, ua):
+def make_session(width, ua, proxy=""):
     """One pooled session for a crew.  `width` is the crew's width at birth and is not used for sizing: the pool is
     MAX_WIDTH + 4 whatever the width, so a resize (the control file, the rate manager) never needs a new session.  The
-    parameter stays because the enumeration and richmond registration programs pass it too."""
+    parameter stays because the enumeration and richmond registration programs pass it too.  `proxy` is the crew's
+    door (--door): every line of the session leaves through it."""
     s = requests.Session()
     s.headers.update({"User-Agent": ua})
+    if proxy:
+        s.proxies.update({"http": proxy, "https": proxy})
     s.mount("https://", requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=MAX_WIDTH + 4,
                                                       max_retries=0, pool_block=True))
     return s
@@ -868,8 +880,11 @@ def make_session(width, ua):
 class Crew:
     """One role, one session, N workers, its own queue, results, counters and detectors."""
 
-    def __init__(self, role, width, lane_ctx):
+    def __init__(self, role, width, lane_ctx, door="", index=0):
         self.role, self.width, self.ctx = role, width, lane_ctx
+        self.door = "" if door in ("", "direct") else door        # --door: the proxy this crew's lines go through; "" = the machine's own line
+        self.name = role.lane if not self.door else "%s@door%d" % (role.lane, index)    # how the log names this crew
+        self.retired = False              # a notice on this crew's door: it leaves alone while the other doors go on
         self.session = None
         self.workers = []
         self.stop = threading.Event()
@@ -947,7 +962,7 @@ class Crew:
                     self.wall_streak = 0
                     self.last_success = time.time()
             except Refused as e:
-                self.ctx.park("REFUSED at %s %s - %s" % (doc_id, time.strftime("%Y-%m-%d %H:%M"), e), code=2)
+                self.ctx.refused(self, "REFUSED at %s %s - %s" % (doc_id, time.strftime("%Y-%m-%d %H:%M"), e))
                 return
             except HTTPStatus as e:
                 with self.lock:
@@ -997,7 +1012,7 @@ class Crew:
         landing while the ramp runs (a 40-wide ramp is about 200 s)."""
         self.stop = threading.Event()
         self.transport_hits = []
-        self.session = make_session(self.width, self.role.ua)
+        self.session = make_session(self.width, self.role.ua, self.door)
         self.workers = []
         self.born = 0
         self.entries += 1
@@ -1055,6 +1070,18 @@ class Context:
         self.exit_code = None
         self.exit_reason = None
         self.stopping = threading.Event()
+        self.crews = []                   # set by run(): every crew of the process, one per role per door
+
+    def refused(self, crew, why):
+        """The notice on one crew's door.  With other doors open that crew alone retires (its lines close, the main loop
+        lands what it holds, its claims expire); the last open door parks the lane as before (exit 2, a person decides)."""
+        others = [c for c in self.crews if c is not crew and not c.retired]
+        if not others or self.stopping.is_set():
+            self.park(why, code=2)
+            return
+        crew.retired = True
+        crew.stop.set()
+        _log(self, "%s: %s - this door is spent: its crew retires, %d door%s open" % (crew.name, why, len(others), "" if len(others) == 1 else "s"))
 
     def park(self, why, code):
         """Stop the whole process with a written reason; the lane refuses to start again until
@@ -1101,13 +1128,13 @@ def _control(ctx, crews):
         if "=" in l:
             k, v = [x.strip() for x in l.split("=", 1)]
             for c in crews:
-                if (k == "width" and c is crews[0]) or k == c.role.lane:
+                if (k == "width" and c.role.lane == crews[0].role.lane) or k == c.role.lane:      # every door of that lane
                     try:
                         n = min(int(v), MAX_WIDTH)
                     except ValueError:
                         continue
                     if n != c.width and n > 0:
-                        _log(ctx, "%s width %d -> %d (control file)" % (c.role.lane, c.width, n))
+                        _log(ctx, "%s width %d -> %d (control file)" % (c.name, c.width, n))
                         c.resize(n, ctx.args.stagger)
 
 
@@ -1126,7 +1153,7 @@ def _feed(ctx, c):
         ids = c.cloud.claim(ctx.args.claim or 12 * batch, ctx.args.ttl)
         regs = c.cloud.registries(ids) if getattr(c.role, "needs_registry", True) else {}
     except Exception as e:
-        _log(ctx, "%s: claim failed (%s) - will retry" % (c.role.lane, reason(e)))
+        _log(ctx, "%s: claim failed (%s) - will retry" % (c.name, reason(e)))
         c.idle_until = time.time() + 30
         return
     if not ids:
@@ -1151,7 +1178,7 @@ def _land(ctx, c):
     if c.outbox.path.exists() and c.outbox.path.stat().st_size > 0:
         landed, left = c.outbox.drain(lambda rows: c.cloud.land(rows, ctx.args.pending_age))
         if left:
-            _log(ctx, "%s: cloud did not take %d landings (kept in %s)" % (c.role.lane, left, c.outbox.path.name))
+            _log(ctx, "%s: cloud did not take %d landings (kept in %s)" % (c.name, left, c.outbox.path.name))
 
 
 def _progress(ctx, c, t0, last):
@@ -1162,7 +1189,7 @@ def _progress(ctx, c, t0, last):
     c.progress_at = now
     fmt = ("PROGRESS %dm %s - reqs %s (%.1f/s) - %s " + getattr(c.role, "noun", "filled")
            + " - %s absent - %s pending - short %d - fail %d - reask %d - width %d/%d - held %d - outbox %d - %.2f docs/s")
-    line = fmt % (el / 60, c.role.lane, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["filled"]),
+    line = fmt % (el / 60, c.name, "{:,}".format(s["reqs"]), s["reqs"] / el, "{:,}".format(s["filled"]),
                   "{:,}".format(s["absent"]), "{:,}".format(s["pending"]), s["short"], s["fail"], s["reask"],
                   c.alive(), c.width, len(c.held), c.outbox.count(), docs)
     if c.reentry_at is not None:
@@ -1241,15 +1268,15 @@ def _hangup(ctx, c, why, planned=False):
     elif c.tries:
         c.wait_s = min(c.wait_s * 2, 4800)   # the last re-entry was REFUSED at the door (cut inside its ramp): the next wait doubles
     if c.tries >= ctx.args.tries:
-        ctx.park("PARKED: %d re-entries in a row refused (%s) at %s" % (c.tries, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=3)
+        ctx.park("PARKED: %d re-entries in a row refused (%s) at %s" % (c.tries, c.name, time.strftime("%Y-%m-%d %H:%M")), code=3)
         return
-    _log(ctx, "%s: %s - hanging up" % (c.role.lane, why))
+    _log(ctx, "%s: %s - hanging up" % (c.name, why))
     c.leave()
     _land(ctx, c)                                       # what the crew had already fetched lands now
     dropped = _rebatch(ctx, c)
     c.reentry_at = time.time() + c.wait_s
     _log(ctx, "%s: %d of the cut batch dropped (their claims expire on their own) - re-entry %d/%d on a fresh batch in %ds, no line open"
-         % (c.role.lane, dropped, c.tries + 1, ctx.args.tries, c.wait_s))
+         % (c.name, dropped, c.tries + 1, ctx.args.tries, c.wait_s))
     try:
         c.cloud.heartbeat(0, "hang-up: re-entry %d/%d at %s" % (c.tries + 1, ctx.args.tries, time.strftime("%H:%M", time.localtime(c.reentry_at))))
     except Exception:
@@ -1309,7 +1336,7 @@ def _await_entry(ctx, crews, c):
         return
     if not net_up():
         c.reentry_at = now + 60
-        _log(ctx, "%s: network is DOWN - waiting a minute, no try spent" % c.role.lane)      # wifi is not a block
+        _log(ctx, "%s: network is DOWN - waiting a minute, no try spent" % c.name)      # wifi is not a block
         return
     if c.pool_thread is None:
         # the exit-pool check draws and waits on its own thread: a crew waiting for the VPN never stalls the others' feeding and landing
@@ -1346,13 +1373,13 @@ def _await_entry(ctx, crews, c):
                                  ramp=bool(a.ramp_to_rate), stagger=a.stagger, ramp_window=getattr(a, "ramp_window", 60.0))
         c.governor.start()
         _log(ctx, "%s: %s - %s; RATE MANAGER on: %sfloor %.1f, ideal %.1f-%.1f docs/s, hard %.1f, request ceiling %.0f/s, width %d..%d, step %d every %ds;"
-                  " SESSION knob: %s" % (c.role.lane, "entered" if c.entries == 1 else "re-entered (%d/%d)" % (c.tries, a.tries),
+                  " SESSION knob: %s" % (c.name, "entered" if c.entries == 1 else "re-entered (%d/%d)" % (c.tries, a.tries),
                   "one worker in, one more every %.0fs until the band" % a.stagger if a.ramp_to_rate else "%d workers, births %.0fs apart" % (c.width, a.stagger),
                   "RAMP TO RATE - " if a.ramp_to_rate else "", a.rate_floor, a.rate_ideal_lo, a.rate_ideal_hi, a.dps_ceiling, a.rps_ceiling,
                   a.width_min, a.width_max, a.adjust_step, a.adjust_every,
                   ("{:,} requests, then a fresh batch".format(a.session_max_requests)) if a.session_max_requests else "no request cap"))
     else:
-        _log(ctx, "%s: %s - %d workers, births %.0fs apart, one entry" % (c.role.lane, "entered" if c.entries == 1 else "re-entered (%d/%d)" % (c.tries, ctx.args.tries), c.width, ctx.args.stagger))
+        _log(ctx, "%s: %s - %d workers, births %.0fs apart, one entry" % (c.name, "entered" if c.entries == 1 else "re-entered (%d/%d)" % (c.tries, ctx.args.tries), c.width, ctx.args.stagger))
 
 
 def run(roles, args, here):
@@ -1389,14 +1416,20 @@ def run(roles, args, here):
             except Exception:
                 pass
 
-    crews = [Crew(role, width, ctx) for role, width in roles]
+    doors = list(getattr(args, "door", None) or []) or [""]
+    if len(doors) > 1 and getattr(args, "one_batch", False):
+        raise SystemExit("--door with --one-batch: a batch is one entry and doors are separate entries - launch the doors without --one-batch")
+    crews = [Crew(role, width, ctx, door, i + 1) for role, width in roles for i, door in enumerate(doors)]
+    ctx.crews = crews
+    if len(doors) > 1:
+        _log(ctx, "%s: %d doors - %s" % (args.lane, len(doors), ", ".join("door%d = %s" % (i + 1, d or "the machine's own line") for i, d in enumerate(doors))))
     if _one_batch(ctx, crews):
         _log(ctx, "%s up on %s - %s - ONE BATCH of %d: the crews ride one entry (%s first, each crew's births right after the previous"
                   " crew's ramp, %.0f s apart), one hang-up and one re-entry for all, no rate manager; a pooled session per crew, keep-alive after"
              % (args.lane, host, ", ".join("%s x%d" % (c.role.lane, c.width) for c in crews), sum(c.width for c in crews), crews[0].role.lane, args.stagger))
     else:
         _log(ctx, "%s up on %s - %s - one pooled session per crew, staggered births, keep-alive after, no pacer"
-             % (args.lane, host, ", ".join("%s x%d" % (c.role.lane, c.width) for c in crews)))
+             % (args.lane, host, ", ".join("%s x%d" % (c.name, c.width) for c in crews)))
     for c in crews:
         try:
             c.cloud.connect()
@@ -1407,13 +1440,23 @@ def run(roles, args, here):
         _feed(ctx, c)
         c.reentry_at = time.time()                     # every crew starts waiting to enter: the loop enters them one ramp at a time, --entry-gap apart
     t0 = time.time()
-    last = {c.role.lane: dict(c.stats) for c in crews}
+    last = {c.name: dict(c.stats) for c in crews}
     tick = time.time()
-    quiet = {c.role.lane: 0 for c in crews}
+    quiet = {c.name: 0 for c in crews}
     try:
         while not ctx.stopping.is_set():
             time.sleep(1)
             for c in crews:
+                if c.retired:
+                    if c.session is not None:                   # once: the retired door's lines close and what it fetched lands
+                        c.leave()
+                        _land(ctx, c)
+                        c.session = None
+                        try:
+                            c.cloud.heartbeat(0, "door refused at %s - retired; %d open" % (time.strftime("%H:%M"), sum(1 for o in crews if not o.retired)))
+                        except Exception:
+                            pass
+                    continue
                 if c.reentry_at is not None:
                     _await_entry(ctx, crews, c)             # the first entry, or a re-entry after a hang-up: one ramp at a time
                     continue                                # no feed, no detectors while the crew has no line open
@@ -1425,7 +1468,7 @@ def run(roles, args, here):
                 # detectors
                 if c.wall_streak >= 40:
                     ctx.park("wall: %d consecutive 503/429 on %s at %s - not retrying, not rotating"
-                             % (c.wall_streak, c.role.lane, time.strftime("%Y-%m-%d %H:%M")), code=4)
+                             % (c.wall_streak, c.name, time.strftime("%Y-%m-%d %H:%M")), code=4)
                 if c.hung_up():                               # at once on a close: no re-handshake storm, the wait, ONE entry on a fresh batch
                     _hangup_batch(ctx, crews, c, "the session closed (every worker hit the wire inside %ds, nothing landed for %ds)"
                                   % (HANGUP_WINDOW_S, int(time.time() - c.last_success)))
@@ -1439,10 +1482,12 @@ def run(roles, args, here):
                 tick = time.time()
                 _control(ctx, crews)
                 for c in crews:
+                    if c.retired:
+                        continue
                     if hasattr(c.role, "check"):
                         c.role.check(ctx)                         # e.g. the drive is still there
                     _land(ctx, c)
-                    s = _progress(ctx, c, t0, last[c.role.lane])
+                    s = _progress(ctx, c, t0, last[c.name])
                     cap = getattr(args, "session_max_requests", 0) if getattr(args, "manage", 0) else 0
                     one = _one_batch(ctx, crews)
                     reqs_now = sum(o.stats["reqs"] - o.reqs_at_entry for o in crews if o.reentry_at is None) if one else s["reqs"] - c.reqs_at_entry
@@ -1451,19 +1496,19 @@ def run(roles, args, here):
                         # limit is reached and tell the batch manager to repeat"): a planned close, lines alive; the cycle re-enters on a fresh batch
                         _hangup_batch(ctx, crews, c, "SESSION RESET: %s requests this session, the knob is %s - ending on purpose, a fresh batch after the wait"
                                       % ("{:,}".format(reqs_now), "{:,}".format(cap)), planned=True)
-                        last[c.role.lane] = s
+                        last[c.name] = s
                         continue
-                    asked = s["reqs"] - last[c.role.lane]["reqs"]
-                    moved = s["ok"] - last[c.role.lane]["ok"]
-                    quiet[c.role.lane] = quiet[c.role.lane] + 1 if (asked > 0 and moved == 0) else 0
-                    if quiet[c.role.lane] >= 5 and c.reentry_at is None:      # five minutes asking, nothing landing = our wire
-                        quiet[c.role.lane] = 0
+                    asked = s["reqs"] - last[c.name]["reqs"]
+                    moved = s["ok"] - last[c.name]["ok"]
+                    quiet[c.name] = quiet[c.name] + 1 if (asked > 0 and moved == 0) else 0
+                    if quiet[c.name] >= 5 and c.reentry_at is None:      # five minutes asking, nothing landing = our wire
+                        quiet[c.name] = 0
                         _hangup_batch(ctx, crews, c, "five minutes asking, nothing landing (our wire)")
-                    last[c.role.lane] = s
+                    last[c.name] = s
                     try:
-                        c.cloud.heartbeat(c.alive(), None)
+                        c.cloud.heartbeat(sum(o.alive() for o in crews if o.role.lane == c.role.lane and not o.retired), None)   # the lane's row: every door's workers
                     except Exception as e:
-                        _log(ctx, "%s: heartbeat failed (%s)" % (c.role.lane, reason(e)))
+                        _log(ctx, "%s: heartbeat failed (%s)" % (c.name, reason(e)))
     except KeyboardInterrupt:
         ctx.exit_code, ctx.exit_reason = 0, "stopped by hand (Ctrl+C) at %s" % time.strftime("%H:%M")
         ctx.stopping.set()
@@ -1595,6 +1640,8 @@ class Fleet:
             argv.append("--unpark")
         if getattr(a, "no_pool_check", False):
             argv.append("--no-pool-check")
+        for d in getattr(a, "door", None) or []:
+            argv += ["--door", d]                         # the doors: one crew per door in the lane's process
         if getattr(a, "trust_registry_pages", False) and name == "documentation":
             argv.append("--trust-registry-pages")         # only the documentation lane knows the flag
         if not batch:                                     # ONE BATCH runs fixed widths, no manager (login 2026-09-06); a lane alone keeps its managers
@@ -1945,6 +1992,9 @@ def build_parser(site, description, edge_type, edge_help, fresh_days_default):
     ap.add_argument("--limit", type=int, default=0, help="each lane stops after this many documents (a test run)")
     ap.add_argument("--unpark", action="store_true", help="start parked lanes too (a person has decided)")
     ap.add_argument("--no-pool-check", action="store_true", help="the lanes skip the exit-pool check at entry (tests only)")
+    ap.add_argument("--door", action="append", default=[], metavar="URL",
+                    help="a door for every lane launched: a proxy its lines go through (socks5h://127.0.0.1:1080, an ssh tunnel to a rented address);"
+                         " repeatable - one crew per door; `direct` = the machine's own line; not with ONE BATCH")
     ap.add_argument("--trust-registry-pages", action="store_true",
                     help="documentation: skip the viewer fetch, the page count from the registry (PROPOSED 2026-09-07; A/B first)")
     ap.add_argument("--relaunch-wait", type=int, default=0, help="seconds before relaunching a crashed lane (0 = the fleet's own 60 s)")

@@ -51,6 +51,7 @@ The fleet's own flags (`build_parser` in the fleet part of `rulebook.py`, writte
 | `--limit` | 0 | each lane stops after this many documents (a test run) |
 | `--unpark` | off | start parked lanes too (a person has decided) |
 | `--no-pool-check` | off | the lanes skip the exit-pool check at entry (tests only) |
+| `--door` | none: the machine's own line | a door for every lane launched: a proxy its lines go through (`socks5h://127.0.0.1:1080`, an `ssh -N -D 1080` tunnel to a rented address); repeatable, one crew per door, each its own exit check, session and rate manager; `direct` = the machine's own line; not with ONE BATCH (2026-09-07 21:5x: a door is a block, and a station holds several at once) |
 | `--trust-registry-pages` | off | documentation: skip the viewer fetch, the page count from the registry (PROPOSED 2026-09-07; A/B first); passed to a documentation lane launched alone (`--lanes documentation:N`) - in ONE BATCH the launched lane is identification and the flag is not passed on |
 | `--relaunch-wait` | 0 (= the fleet's own 60 s) | seconds before relaunching a crashed lane |
 | `--relaunch-cap` | 3 | relaunches per lane per hour before the fleet parks it |
