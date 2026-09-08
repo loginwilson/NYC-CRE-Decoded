@@ -883,7 +883,8 @@ class Crew:
     def __init__(self, role, width, lane_ctx, door="", index=0):
         self.role, self.width, self.ctx = role, width, lane_ctx
         self.door = "" if door in ("", "direct") else door        # --door: the proxy this crew's lines go through; "" = the machine's own line
-        self.name = role.lane if not self.door else "%s@door%d" % (role.lane, index)    # how the log names this crew
+        self.door_index = index           # the door's number in this process (a door added later takes the next number)
+        self.name = role.lane if (not self.door and index <= 1) else "%s@door%d" % (role.lane, index)    # how the log names this crew
         self.retired = False              # a notice on this crew's door: it leaves alone while the other doors go on
         self.session = None
         self.workers = []
@@ -1108,7 +1109,8 @@ def _log(ctx, msg):
 
 
 def _control(ctx, crews):
-    """<lane>.control: `width=N` / `<lane>=N` per crew, `stop` to stop.  Read once a minute."""
+    """<lane>.control: `width=N` / `<lane>=N` per crew, `door=URL` (or `door=direct`) to open one more door on the running lane
+    (acted on once), `stop` to stop.  Read once a minute."""
     p = ctx.here / ("%s.control" % ctx.args.lane)
     if not p.exists():
         return
@@ -1116,6 +1118,7 @@ def _control(ctx, crews):
         lines = [l.strip() for l in p.read_text(encoding="utf-8").splitlines()]
     except OSError:
         return
+    consumed = []
     for l in lines:
         if l.lower() == "stop":
             ctx.exit_code, ctx.exit_reason = 0, "stopped by %s at %s" % (p.name, time.strftime("%H:%M"))
@@ -1127,6 +1130,10 @@ def _control(ctx, crews):
             return
         if "=" in l:
             k, v = [x.strip() for x in l.split("=", 1)]
+            if k == "door":
+                _add_door(ctx, crews, v)
+                consumed.append(l)                            # acted on once: a stale `door=` never re-enters a door spent since
+                continue
             for c in crews:
                 if (k == "width" and c.role.lane == crews[0].role.lane) or k == c.role.lane:      # every door of that lane
                     try:
@@ -1136,6 +1143,56 @@ def _control(ctx, crews):
                     if n != c.width and n > 0:
                         _log(ctx, "%s width %d -> %d (control file)" % (c.name, c.width, n))
                         c.resize(n, ctx.args.stagger)
+    if consumed:
+        try:
+            p.write_text("".join(x + "\n" for x in lines if x not in consumed), encoding="utf-8")
+        except OSError:
+            pass
+
+
+def _add_door(ctx, crews, door):
+    """HOT-ADD A DOOR (login 2026-09-08 08:0x: "go ahead and write the hot-add door change"): `door=URL` or `door=direct` in the
+    control file gives the RUNNING lane one more crew per role on that door, born the way a launched crew is born (its cloud
+    row, the outbox landed, a batch claimed, then the ordinary entry: wire up, exit pool settled, one ramp, its own rate
+    manager) - so the VPN walk swaps blocks and rented addresses join without a relaunch that would re-enter the other doors.
+    A door already open is not opened twice.  A retired door is not re-entered here: the walk moves the VPN to a served block
+    first, then writes `door=direct` again, and the new crew takes the next door number.  ONE BATCH takes no doors."""
+    d = "" if door in ("", "direct") else door
+    shown = door or "direct"
+    if _one_batch(ctx, crews):
+        _log(ctx, "%s: door=%s ignored - ONE BATCH takes no doors" % (ctx.args.lane, shown))
+        return
+    for c in crews:
+        if c.door == d and not c.retired:
+            _log(ctx, "%s: door=%s is already open as %s - nothing added" % (ctx.args.lane, shown, c.name))
+            return
+    roles = []
+    for c in crews:
+        if all(c.role is not r for r in roles):
+            roles.append(c.role)
+    index = 1 + max(getattr(o, "door_index", 1) for o in crews)
+    added = []
+    for role in roles:
+        width = next((o.width for o in crews if o.role is role), getattr(ctx.args, "width", 1)) or 1
+        c = Crew(role, width, ctx, d, index)
+        try:
+            c.cloud.connect()
+            c.cloud.heartbeat(c.width, "door%d added 1x%d at %s" % (index, c.width, time.strftime("%Y-%m-%d %H:%M")))
+        except Exception as e:
+            _log(ctx, "%s: door=%s not added - the cloud table is unreachable (%s); the word is dropped, write it again" % (ctx.args.lane, shown, reason(e)))
+            try:
+                c.cloud.close()
+            except Exception:
+                pass
+            return
+        _land(ctx, c)
+        _feed(ctx, c)
+        c.reentry_at = time.time()                        # it enters like any crew: the loop takes it one ramp at a time, --entry-gap apart
+        crews.append(c)
+        added.append(c)
+    _log(ctx, "%s: door%d = %s added by the control file - %s waiting to enter; %d door%s open" % (
+        ctx.args.lane, index, shown, ", ".join(c.name for c in added),
+        len({o.door for o in crews if not o.retired}), "" if len({o.door for o in crews if not o.retired}) == 1 else "s"))
 
 
 def _feed(ctx, c):
@@ -1487,7 +1544,7 @@ def run(roles, args, here):
                     if hasattr(c.role, "check"):
                         c.role.check(ctx)                         # e.g. the drive is still there
                     _land(ctx, c)
-                    s = _progress(ctx, c, t0, last[c.name])
+                    s = _progress(ctx, c, t0, last.setdefault(c.name, dict(c.stats)))     # a door added by the control file starts its own count here
                     cap = getattr(args, "session_max_requests", 0) if getattr(args, "manage", 0) else 0
                     one = _one_batch(ctx, crews)
                     reqs_now = sum(o.stats["reqs"] - o.reqs_at_entry for o in crews if o.reentry_at is None) if one else s["reqs"] - c.reqs_at_entry
@@ -1500,7 +1557,7 @@ def run(roles, args, here):
                         continue
                     asked = s["reqs"] - last[c.name]["reqs"]
                     moved = s["ok"] - last[c.name]["ok"]
-                    quiet[c.name] = quiet[c.name] + 1 if (asked > 0 and moved == 0) else 0
+                    quiet[c.name] = quiet.get(c.name, 0) + 1 if (asked > 0 and moved == 0) else 0
                     if quiet[c.name] >= 5 and c.reentry_at is None:      # five minutes asking, nothing landing = our wire
                         quiet[c.name] = 0
                         _hangup_batch(ctx, crews, c, "five minutes asking, nothing landing (our wire)")
@@ -1974,10 +2031,25 @@ def width(site, args):
     return 0
 
 
+def door(site, args):
+    """`door LANE=URL` (or LANE=direct): one more door for the RUNNING lane - `door=URL` into its control file, read within a minute
+    (_add_door): the crew is born and enters on its own ramp; nothing else is relaunched."""
+    name, _, url = (args.target or "").partition("=")
+    name, url = name.strip().lower(), url.strip()
+    if name not in site.lanes or not url:
+        raise SystemExit("door takes LANE=URL, e.g. documentation=socks5h://127.0.0.1:1080, or LANE=direct for the machine's own line")
+    if url != "direct" and "://" not in url:
+        raise SystemExit("a door is a proxy URL (socks5h://host:port) or the word direct")
+    by = host_of(site, args, name)
+    p = write_control(site, by, "door=%s" % url)
+    print("door=%s written to %s - %s reads it within a minute%s" % (url, p.name, by, "" if lock_pid(site, by) else " (it is not running now: the word waits for the next start)"))
+    return 0
+
+
 def build_parser(site, description, edge_type, edge_help, fresh_days_default):
     ap = argparse.ArgumentParser(description=description)
-    ap.add_argument("command", nargs="?", default="run", choices=["run", "status", "stop", "width"])
-    ap.add_argument("target", nargs="?", default="", help="stop: a lane name; width: LANE=N")
+    ap.add_argument("command", nargs="?", default="run", choices=["run", "status", "stop", "width", "door"])
+    ap.add_argument("target", nargs="?", default="", help="stop: a lane name; width: LANE=N; door: LANE=URL or LANE=direct (one more door for the running lane)")
     ap.add_argument("--lanes", default="", help="LANE:WIDTH,... in launch order (default: %s)" % ",".join("%s:%d" % (n, site.widths[n]) for n in site.lanes))
     ap.add_argument("--mega", action="store_true", help="every crew in one process through the first lane's --also%s" % (" (this site's default: ONE BATCH)" if site.mega_default else ""))
     ap.add_argument("--separate", action="store_true", help="one process per lane even on a ONE BATCH site (tests only)")
@@ -2013,6 +2085,8 @@ def main(site, description, edge_type, edge_help, fresh_days_default):
         return stop(site, args)
     if args.command == "width":
         return width(site, args)
+    if args.command == "door":
+        return door(site, args)
     return Fleet(site, args).run()
 
 

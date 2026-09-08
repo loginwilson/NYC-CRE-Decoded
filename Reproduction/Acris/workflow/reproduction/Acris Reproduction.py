@@ -66,10 +66,20 @@ WIDTHS = {"identification": 5, "registration": 5, "documentation": 5}
 # force things"): the 09-04 knobs the golden day and golden night ran on - floor 5, ideal 6-7, hard 8 docs/s, 60 req/s ceiling -
 # with 40 as the CEILING, not the target (the fixed 1x40 of 00:04 ran 64 req/s on a fast exit = forcing it); one worker in, one
 # more every --stagger until the band, hold, retreat on closes.  Superseded at 01:2x by the knobs below.
+# login 2026-09-07 22:0x, THE SPRINT (the door trial: "if it closes a door because of speed we shouldn't increase, but if it's just
+# an allowance, we may as well not waste our time going slow to hit that ceiling and should just sprint and then on to the next
+# door" ... "when the vpn door blocks, sprint on droplet 1"): one run, 22:35-23:58 through a rented address (--door, DigitalOcean
+# 159.223.139.255) with the request ceiling OFF (0), a band the door could not meet (floor 8, ideal 12-16, hard 20 docs/s) and
+# width 20..60, i.e. {"rate_floor": 8, "rate_ideal_lo": 12, "rate_ideal_hi": 16, "dps_ceiling": 20, "rps_ceiling": 0,
+# "session_max_requests": 5000000}.  WHAT IT SAID: the source serves ONE ADDRESS at ~62-67 requests/s whatever the width (the ramp
+# read 65 at 20 workers, 78-80 at 30-40, 71 at 60; steady 62-67 at 40 and at 60 alike; the manager's own door-curve rule undid its
+# grow 40 -> 45 as "bought nothing") - the ceiling of 60 was already the wall, not a brake, and speed is not a lever; the door took
+# its notice at ~307,400 requests (two sessions, a USB drop between) against the VPN block's ~368,800 at 63/s the same night, the
+# same size.  The golden band below stands; doors, not speed, multiply a station.
 MANAGE = {"documentation": {"manage": 1, "ramp_to_rate": 1, "rate_floor": 4, "rate_ideal_lo": 5, "rate_ideal_hi": 6, "dps_ceiling": 6,
                             "rps_ceiling": 60, "width_min": 20, "width_max": 60, "adjust_every": 120, "adjust_step": 5,
                             "session_max_requests": 1000000}}
-# ^ THE KNOBS THAT RUN (login 2026-09-07 01:2x: "4 is the floor and 6 is the ceiling ... 5 is the goal", docs/s): below 4 grow,
+# ^ THE GOLDEN BAND (login 2026-09-07 01:2x: "4 is the floor and 6 is the ceiling ... 5 is the goal", docs/s): below 4 grow,
 #   hold in 5-6, above 6 retire; the request ceiling 60/s; width 20..60, a step of 5 every 120 s; the session ends at 1,000,000
 #   requests.  Width cap 60, not 40: on a SLOW exit (89.106.14 gave 40 workers 35 req/s at ~10.5 requests per 2005-era document
 #   = 3.3-4.4 docs/s, the manager pinned at the cap wanting to grow) the goal needs ~53 req/s ≈ 60 workers; the 60 req/s ceiling

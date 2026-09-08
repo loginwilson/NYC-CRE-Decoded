@@ -32,6 +32,10 @@ never relaunches what a person must decide.
     python "Acris Reproduction.py" status                               this machine's lanes, and every workstation's heartbeats in the cloud
     python "Acris Reproduction.py" stop [lane]                          `stop` into the control file(s), a 180 s grace, then force
     python "Acris Reproduction.py" width documentation=60               into the lane's control file (read within a minute)
+    python "Acris Reproduction.py" door documentation=socks5h://127.0.0.1:1081
+                                                                       one more door for the RUNNING lane (or documentation=direct after the VPN moved to a served
+                                                                       block): `door=...` into the control file, the crew born and entered on its own ramp within a
+                                                                       minute, nothing relaunched (2026-09-08)
 
 The fleet's own flags (`build_parser` in the fleet part of `rulebook.py`, written from its help text, 2026-09-07); the lanes' shared flags are the table in `../../../rulebook/Rulebook.md`:
 
