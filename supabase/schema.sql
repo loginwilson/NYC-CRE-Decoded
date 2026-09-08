@@ -1,4 +1,4 @@
--- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-07 14:24 ET.
+-- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-08 18:20 ET.
 -- Idempotent: a fresh project builds from it (push applies it first); an existing project is unchanged by it.
 -- In building order: schemas, the extension, types, functions, tables, views, materialized views, indexes.
 -- A change is a numbered <version>_<name>.sql beside this file, applied once with `push`, folded in with `baseline`,
@@ -557,24 +557,24 @@ create or replace view reproduction.acris_update as
          SELECT b.n,
             0,
             'acris'::text AS text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text
            FROM blocks b
         UNION ALL
          SELECT b.n,
             l.ord,
             'acris'::text AS text,
-            (l.lane || ' '::text) || b.n,
+            (l.lane || ' '::text) || COALESCE(s.workstation, b.n::text),
             COALESCE(u.status::text, 'pending'::text) AS "coalesce",
             to_char((u.as_of AT TIME ZONE 'America/New_York'::text), 'YYYY-MM-DD HH24:MI:SS'::text) AS to_char,
             u.rate_60s::text AS rate_60s,
@@ -612,7 +612,7 @@ create or replace view reproduction.acris_update as
   ORDER BY block, ord;
 comment on view reproduction.acris_update is 'ACRIS UPDATE: three blocks of four rows - the totals (reproduction total, identification total, registration total, documentation total), a blank spacer row, workstation 1''s four (reproduction 1 ...), a blank spacer row, workstation 2''s four (pending until it first reports); source, lane, status, as of (Eastern, to the second), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage. Every column is text and a blank is one space, so the Table Editor shows a spacer as nothing; every row carries the source because the Editor sorts a view by its first column';
 comment on column reproduction.acris_update.source is 'acris, on every row';
-comment on column reproduction.acris_update.lane is 'reproduction total, identification total, registration total, documentation total; then reproduction 1 .. documentation 1 (workstation 1), reproduction 2 .. documentation 2 (workstation 2); blank on a spacer row';
+comment on column reproduction.acris_update.lane is 'reproduction total, identification total, registration total, documentation total; then one block per station, each row named <lane> <station> - the provider''s own name (DigitalOcean, Vultr, ExpressVPN); a block no station has claimed yet keeps its number';
 comment on column reproduction.acris_update.status is 'active / pending / stalled / complete, computed by the board; pending on a workstation block nobody has claimed';
 comment on column reproduction.acris_update.as_of_et is 'the board''s last tick, Eastern, to the second; stale = the board is not running';
 comment on column reproduction.acris_update.rate_60s is 'documents a second over the last minute';
@@ -665,24 +665,24 @@ create or replace view reproduction.richmond_update as
          SELECT b.n,
             0,
             'richmond'::text AS text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text,
-            ' '::text
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text,
+            ' '::text AS text
            FROM blocks b
         UNION ALL
          SELECT b.n,
             l.ord,
             'richmond'::text AS text,
-            (l.lane || ' '::text) || b.n,
+            (l.lane || ' '::text) || COALESCE(s.workstation, b.n::text),
             COALESCE(u.status::text, 'pending'::text) AS "coalesce",
             to_char((u.as_of AT TIME ZONE 'America/New_York'::text), 'YYYY-MM-DD HH24:MI:SS'::text) AS to_char,
             u.rate_60s::text AS rate_60s,
@@ -720,7 +720,7 @@ create or replace view reproduction.richmond_update as
   ORDER BY block, ord;
 comment on view reproduction.richmond_update is 'RICHMOND UPDATE: three blocks of four rows - the totals (reproduction total, identification total, registration total, documentation total), a blank spacer row, workstation 1''s four (reproduction 1 ...), a blank spacer row, workstation 2''s four (pending until it first reports); source, lane, status, as of (Eastern, to the second), the 60-second block (rate, increase, eta), the 5-minute block, landed, needed, percentage. Every column is text and a blank is one space, so the Table Editor shows a spacer as nothing; every row carries the source because the Editor sorts a view by its first column';
 comment on column reproduction.richmond_update.source is 'richmond, on every row';
-comment on column reproduction.richmond_update.lane is 'reproduction total, identification total, registration total, documentation total; then reproduction 1 .. documentation 1 (workstation 1), reproduction 2 .. documentation 2 (workstation 2); blank on a spacer row';
+comment on column reproduction.richmond_update.lane is 'reproduction total, identification total, registration total, documentation total; then one block per station, each row named <lane> <station> - the provider''s own name; a block no station has claimed yet keeps its number';
 comment on column reproduction.richmond_update.status is 'active / pending / stalled / complete, computed by the board; pending on a workstation block nobody has claimed';
 comment on column reproduction.richmond_update.as_of_et is 'the board''s last tick, Eastern, to the second; stale = the board is not running';
 comment on column reproduction.richmond_update.rate_60s is 'documents a second over the last minute';

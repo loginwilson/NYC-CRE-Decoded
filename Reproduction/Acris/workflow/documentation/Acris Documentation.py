@@ -49,8 +49,10 @@ the outbox; the drive by label and the One Touch layout), ../../rulebook/acris.p
 minted from the id, the one user-agent, the refusal detector, where a document files).
 """
 import argparse
+import json
 import os
 import pathlib
+import requests
 import sys
 import time
 
@@ -80,10 +82,11 @@ class Documentation:
     noun = "pdfs"                 # the PROGRESS line's word for a filled cell
     needs_registry = True         # the registry places the file and judges freshness
 
-    def __init__(self, drive_root, fresh_days, trust_registry_pages=False):
+    def __init__(self, drive_root, fresh_days, trust_registry_pages=False, box=0):
         self.root = drive_root
         self.fresh_days = fresh_days
         self.trust_registry_pages = bool(trust_registry_pages)   # --trust-registry-pages: skip the viewer fetch (see fetch)
+        self.box = int(box or 0)          # --box PORT: the on-box fetch through a door's droplet (BoxPrefetch below); 0 = from here
 
     @property
     def lane(self):
@@ -114,10 +117,17 @@ class Documentation:
         #    authority for "no image" (TotalPages <= 0).  The one unknown the A/B decides: whether GetImage serves
         #    without a preceding viewer fetch on the same session (a cookie it might set).
         total = registry_pages(registry) if self.trust_registry_pages else None
+        # THE ON-BOX FETCH (2026-09-08, --box; login: "Try the workers on the droplets"): through a door whose droplet runs
+        # box_fetch.py, ONE call brings the viewer page and every page image, fetched ON the box in parallel (ACRIS takes
+        # ~11 s per image whoever asks; the box waits, not this machine's RAM).  The walk below then reads them through
+        # the same get(url, referer) it reads ACRIS with, so every verdict - the notice, the count, the end marker, TIFF,
+        # short - is made HERE exactly as before, and the cell lands only once the pdf is on the drive.  A re-ask or a
+        # page the box did not bring goes to ACRIS through the door as before.  No door (the machine's own line): as before.
+        getter = BoxPrefetch(crew, self.box, doc_id, total) if (self.box and crew.door) else crew
         for attempt in range(3):
             if total is not None:
                 break
-            body, ct = crew.get(acris.viewer_url(doc_id), acris.detail_url(doc_id))
+            body, ct = getter.get(acris.viewer_url(doc_id), acris.detail_url(doc_id))
             acris.check_refused(body, ct, doc_id)
             total = acris.total_pages(body)
             if total is not None:
@@ -134,7 +144,7 @@ class Documentation:
         # 2. every page, in order; the placeholder is the end marker, anything not a TIFF ends the walk
         frames, why = [], ""
         for p in range(1, total + 1):
-            data, ct = crew.get(acris.image_url(doc_id, p), acris.viewer_url(doc_id))
+            data, ct = getter.get(acris.image_url(doc_id, p), acris.viewer_url(doc_id))
             acris.check_refused(data, ct, "%s p%d" % (doc_id, p))
             if acris.is_placeholder(data):
                 why = "placeholder (end marker) at page %d" % p
@@ -159,11 +169,61 @@ class Documentation:
         return canon
 
 
+class BoxPrefetch:
+    """The on-box fetch (2026-09-08).  One call to the door's droplet - GET /doc/<id> on box_fetch.py, reached on the box's
+    own loopback THROUGH the door's socks tunnel - brings the viewer page and every page image as ACRIS served them (status,
+    content-type, bytes; a transport error as words).  get(url, referer) then answers fetch()'s asks from what was brought,
+    ONCE each (a second ask for the same url - a re-ask - goes to ACRIS itself through the door, as before), and anything
+    not brought goes to ACRIS the same way.  A transport error on the box is a Transport here, an HTTP error an HTTPStatus,
+    exactly as crew.get raises them, so the crew's breakers read the box like the wire.  The requests the box made count
+    on the crew (the PROGRESS line and the board stay true)."""
+
+    def __init__(self, crew, port, doc_id, total):
+        self.crew, self.have = crew, {}
+        url = "http://127.0.0.1:%d/doc/%s" % (port, doc_id) + ("?total=%d" % total if total else "")
+        with crew.lock:
+            crew.stats["reqs"] += 1
+        try:
+            r = crew.session.get(url, timeout=420)            # a document under a deep gate on the box takes minutes, not a fault
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                requests.exceptions.ChunkedEncodingError) as e:
+            raise rulebook.Transport("box: %s: %s" % (type(e).__name__, rulebook.reason(e)))
+        try:
+            if r.status_code >= 400:
+                raise rulebook.HTTPStatus(r.status_code, url)
+            body = r.content
+        finally:
+            r.close()
+        try:
+            nl = body.index(b"\n")
+            head = json.loads(body[:nl].decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as e:
+            raise rulebook.Transport("box: unreadable answer (%s, %d bytes)" % (type(e).__name__, len(body)))
+        pos = nl + 1
+        with crew.lock:
+            crew.stats["reqs"] += int(head.get("reqs", 0))
+        for it in head.get("items", []):
+            n = int(it["n"])
+            self.have[it["u"]] = (int(it["s"]), it.get("ct", ""), body[pos:pos + n], it.get("e", ""))
+            pos += n
+
+    def get(self, url, referer, timeout=90):
+        it = self.have.pop(url, None)
+        if it is None:
+            return self.crew.get(url, referer, timeout)
+        st, ct, data, err = it
+        if st == 0:
+            raise rulebook.Transport("box: %s" % (err or "no answer from ACRIS"))
+        if st >= 400:
+            raise rulebook.HTTPStatus(st, url)
+        return data, ct
+
+
 def role(drive_root, args):
     """This lane's role, for a sibling lane hosting it with --also documentation:N."""
     if not drive_root:
         raise SystemExit("documentation needs --drive <label>: the drive its files are written to")
-    return Documentation(drive_root, getattr(args, "fresh_days", 30), getattr(args, "trust_registry_pages", False))
+    return Documentation(drive_root, getattr(args, "fresh_days", 30), getattr(args, "trust_registry_pages", False), getattr(args, "box", 0))
 
 
 def main():
@@ -173,13 +233,16 @@ def main():
     ap.add_argument("--trust-registry-pages", action="store_true",
                     help="skip the viewer fetch: the page count comes from the registry, one request fewer per document"
                          " (PROPOSED 2026-09-07 - A/B on a good exit before trusting; off = the proven walk)")
+    ap.add_argument("--box", type=int, default=0, metavar="PORT",
+                    help="the on-box fetch (2026-09-08): through each --door, ask the droplet's box_fetch.py on this port for a"
+                         " document's viewer page and every page image, fetched on the box in parallel; 0 = fetch from here")
     rulebook.add_common_args(ap)
     args = ap.parse_args()
     args.lane = "documentation"
 
     drive_root = rulebook.find_drive(args.drive)
     rulebook.documents_root(drive_root)
-    roles = rulebook.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days, args.trust_registry_pages))
+    roles = rulebook.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days, args.trust_registry_pages, args.box))
     print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, rulebook.documents_root(drive_root), rulebook.CANON_ROOT), flush=True)
     sys.exit(rulebook.run(roles, args, HERE))
 
