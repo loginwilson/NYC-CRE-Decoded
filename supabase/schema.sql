@@ -1,4 +1,4 @@
--- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-08 18:32 ET.
+-- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-08 18:53 ET.
 -- Idempotent: a fresh project builds from it (push applies it first); an existing project is unchanged by it.
 -- In building order: schemas, the extension, types, functions, tables, views, materialized views, indexes.
 -- A change is a numbered <version>_<name>.sql beside this file, applied once with `push`, folded in with `baseline`,
@@ -524,14 +524,14 @@ create or replace view reproduction.acris_update as
          SELECT updates.workstation,
             row_number() OVER (ORDER BY (
                 CASE updates.workstation
-                    WHEN 'ExpressVPN'::text THEN 1
-                    WHEN 'DigitalOcean'::text THEN 2
-                    WHEN 'Vultr'::text THEN 3
-                    WHEN 'Linode'::text THEN 4
+                    WHEN 'DigitalOcean'::text THEN 1
+                    WHEN 'Vultr'::text THEN 2
+                    WHEN 'Linode'::text THEN 3
+                    WHEN 'Hetzner'::text THEN 4
                     ELSE 9
                 END), (min(updates.first_seen)), updates.workstation) AS n
            FROM machinery.updates
-          WHERE updates.source = 'acris'::text AND updates.workstation <> ''::text
+          WHERE updates.source = 'acris'::text AND updates.workstation <> ''::text AND updates.workstation <> 'ExpressVPN'::text
           GROUP BY updates.workstation
         ), blocks AS (
          SELECT n.n
@@ -639,14 +639,14 @@ create or replace view reproduction.richmond_update as
          SELECT updates.workstation,
             row_number() OVER (ORDER BY (
                 CASE updates.workstation
-                    WHEN 'ExpressVPN'::text THEN 1
-                    WHEN 'DigitalOcean'::text THEN 2
-                    WHEN 'Vultr'::text THEN 3
-                    WHEN 'Linode'::text THEN 4
+                    WHEN 'DigitalOcean'::text THEN 1
+                    WHEN 'Vultr'::text THEN 2
+                    WHEN 'Linode'::text THEN 3
+                    WHEN 'Hetzner'::text THEN 4
                     ELSE 9
                 END), (min(updates.first_seen)), updates.workstation) AS n
            FROM machinery.updates
-          WHERE updates.source = 'richmond'::text AND updates.workstation <> ''::text
+          WHERE updates.source = 'richmond'::text AND updates.workstation <> ''::text AND updates.workstation <> 'ExpressVPN'::text
           GROUP BY updates.workstation
         ), blocks AS (
          SELECT n.n
