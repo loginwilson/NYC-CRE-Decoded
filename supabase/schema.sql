@@ -1,4 +1,4 @@
--- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-08 18:20 ET.
+-- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-08 18:32 ET.
 -- Idempotent: a fresh project builds from it (push applies it first); an existing project is unchanged by it.
 -- In building order: schemas, the extension, types, functions, tables, views, materialized views, indexes.
 -- A change is a numbered <version>_<name>.sql beside this file, applied once with `push`, folded in with `baseline`,
@@ -522,7 +522,14 @@ create or replace view reproduction.acris_update as
          VALUES ('reproduction'::text,1), ('identification'::text,2), ('registration'::text,3), ('documentation'::text,4)
         ), stations AS (
          SELECT updates.workstation,
-            row_number() OVER (ORDER BY (min(updates.first_seen)), updates.workstation) AS n
+            row_number() OVER (ORDER BY (
+                CASE updates.workstation
+                    WHEN 'ExpressVPN'::text THEN 1
+                    WHEN 'DigitalOcean'::text THEN 2
+                    WHEN 'Vultr'::text THEN 3
+                    WHEN 'Linode'::text THEN 4
+                    ELSE 9
+                END), (min(updates.first_seen)), updates.workstation) AS n
            FROM machinery.updates
           WHERE updates.source = 'acris'::text AND updates.workstation <> ''::text
           GROUP BY updates.workstation
@@ -630,7 +637,14 @@ create or replace view reproduction.richmond_update as
          VALUES ('reproduction'::text,1), ('identification'::text,2), ('registration'::text,3), ('documentation'::text,4)
         ), stations AS (
          SELECT updates.workstation,
-            row_number() OVER (ORDER BY (min(updates.first_seen)), updates.workstation) AS n
+            row_number() OVER (ORDER BY (
+                CASE updates.workstation
+                    WHEN 'ExpressVPN'::text THEN 1
+                    WHEN 'DigitalOcean'::text THEN 2
+                    WHEN 'Vultr'::text THEN 3
+                    WHEN 'Linode'::text THEN 4
+                    ELSE 9
+                END), (min(updates.first_seen)), updates.workstation) AS n
            FROM machinery.updates
           WHERE updates.source = 'richmond'::text AND updates.workstation <> ''::text
           GROUP BY updates.workstation
