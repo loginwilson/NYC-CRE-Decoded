@@ -695,9 +695,18 @@ def pid_alive(pid):
         return True
 
 
+def lane_tag(args):
+    """The name this PROCESS's files carry: `<lane>`, or `<lane>.<slot>` under --slot.  One lane process pushes ~100 requests/s
+    through its interpreter lock whatever its door count (measured 2026-09-08 10:06: eight doors in one process = one door's
+    throughput, the process at 98% of one core), so a machine runs one lane process per core - each its own --slot, its own
+    --host (the station name in the cloud, e.g. LoginSurface-3), its own doors, and its own lock/control/parked files here."""
+    slot = getattr(args, "slot", "") or ""
+    return "%s.%s" % (args.lane, slot) if slot else args.lane
+
+
 def take_lock(path):
-    """One process per lane per machine.  Fail closed: if we cannot prove we are the only door, we
-    do not open one."""
+    """One process per lane per machine - per SLOT since 2026-09-08 (lane_tag): two processes on one lane with DISJOINT doors are
+    not two doors at the source.  Fail closed: if we cannot prove we are the only door, we do not open one."""
     try:
         if path.exists():
             old = int((path.read_text(encoding="utf-8").strip() or "0"))
@@ -718,6 +727,9 @@ def add_common_args(ap):
     """The knobs every cycle lane shares; a lane file adds its own (documentation: --drive, --fresh-days)."""
     ap.add_argument("--width", type=int, default=40, help="workers = connections (default %(default)s)")
     ap.add_argument("--host", default="", help="this workstation's name in the cloud (default: the machine name)")
+    ap.add_argument("--slot", default="", metavar="N",
+                    help="one lane process per core (2026-09-08): this process's number; its lock/control/parked files become <lane>.N.*,"
+                         " pair it with --host <station>-N (its own cloud rows and claims) and its own --door set (disjoint across slots)")
     ap.add_argument("--stagger", type=float, default=5.0, help="seconds between worker births (default %(default)s; the richmond lanes set 0.4): a ramp of about 200 s at width 40 (2026-09-04: 0.5-s entries were cut, 5-s and 20-s entries served on the same door)")
     ap.add_argument("--claim", type=int, default=0, help="documents taken per claim (default 12 x width)")
     ap.add_argument("--ttl", default="20 minutes", help="how long a claim is ours before it goes back on the list")
@@ -1094,7 +1106,7 @@ class Context:
         self.exit_code, self.exit_reason = code, why
         self.stopping.set()
         try:
-            (self.here / ("%s.parked" % self.args.lane)).write_text(why + "\n", encoding="utf-8")
+            (self.here / ("%s.parked" % lane_tag(self.args))).write_text(why + "\n", encoding="utf-8")
         except OSError:
             pass
 
@@ -1113,7 +1125,7 @@ def _log(ctx, msg):
 def _control(ctx, crews):
     """<lane>.control: `width=N` / `<lane>=N` per crew, `door=URL` (or `door=direct`) to open one more door on the running lane
     (acted on once), `stop` to stop.  Read once a minute."""
-    p = ctx.here / ("%s.control" % ctx.args.lane)
+    p = ctx.here / ("%s.control" % lane_tag(ctx.args))
     if not p.exists():
         return
     try:
@@ -1452,7 +1464,7 @@ def run(roles, args, here):
     here = pathlib.Path(here)
     host = args.host or socket.gethostname()
     ctx = Context(here, host, args)
-    parked = here / ("%s.parked" % args.lane)
+    parked = here / ("%s.parked" % lane_tag(args))
     if parked.exists() and not args.unpark:
         raise SystemExit("this lane is PARKED: %s\n  start it again with --unpark once a person has decided."
                          % parked.read_text(encoding="utf-8").strip())
@@ -1461,9 +1473,9 @@ def run(roles, args, here):
     for role, width in roles:
         if width <= 0 or width > MAX_WIDTH:
             raise SystemExit("%s: width %d - a crew has 1 to %d workers; a zero-worker floor does not exist" % (role.lane, width, MAX_WIDTH))
-    lock = here / ("%s.lock" % args.lane)
+    lock = here / ("%s.lock" % lane_tag(args))
     take_lock(lock)
-    ctl = here / ("%s.control" % args.lane)
+    ctl = here / ("%s.control" % lane_tag(args))
     try:
         if ctl.exists() and any(l.strip().lower() == "stop" for l in ctl.read_text(encoding="utf-8").splitlines()):
             ctl.write_text("", encoding="utf-8")
