@@ -1,4 +1,4 @@
--- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-08 18:53 ET.
+-- THE SCHEMA as it stands, written from the project itself by `python supabase/supabase.py baseline` on 2026-09-08 19:22 ET.
 -- Idempotent: a fresh project builds from it (push applies it first); an existing project is unchanged by it.
 -- In building order: schemas, the extension, types, functions, tables, views, materialized views, indexes.
 -- A change is a numbered <version>_<name>.sql beside this file, applied once with `push`, folded in with `baseline`,
@@ -590,12 +590,9 @@ create or replace view reproduction.acris_update as
             u.rate_5m::text AS rate_5m,
             u.increase_5m::text AS increase_5m,
             u.eta_5m,
-            u.landed::text AS landed,
-                CASE
-                    WHEN s.workstation IS NOT NULL THEN t.needed
-                    ELSE NULL::bigint
-                END::text AS text,
-            u.pct::text AS pct
+            ' '::text AS landed,
+            ' '::text AS needed,
+            ' '::text AS pct
            FROM blocks b
              CROSS JOIN lanes l
              LEFT JOIN stations s ON s.n = b.n
