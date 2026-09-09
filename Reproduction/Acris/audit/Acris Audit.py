@@ -290,6 +290,7 @@ def cmd_scan(a, where):
     con, cur = connect()
     since = datetime.datetime.strptime(a.since, "%Y-%m-%d %H:%M")
     era, last, seen, recent, gone = where / "paths_by_write_time.jsonl", "", 0, 0, 0
+    missing = []
     started = datetime.datetime.now()
     with era.open("w", encoding="utf-8") as f:
         while True:
@@ -304,7 +305,11 @@ def cmd_scan(a, where):
                 try:
                     when = datetime.datetime.fromtimestamp(pathlib.Path(doc).stat().st_mtime)
                 except OSError:
-                    gone += 1                   # the cell names a file that is not on the drive
+                    # THE CELL NAMES A FILE THAT IS NOT ON THE DRIVE.  Count it AND keep it: a count says the table
+                    # and the drive disagree, which is worth nothing on its own - the identifier is what lets anyone
+                    # ask why.  The first run of this counted two and could not name either.
+                    gone += 1
+                    missing.append({"identifier": ident, "path": doc})
                     continue
                 if when >= since:
                     f.write(json.dumps({"identifier": ident, "path": doc,
@@ -316,6 +321,12 @@ def cmd_scan(a, where):
                   flush=True)
     print("\nSCAN    %s paths; %s written since %s recorded in %s; %s name a file that is not there"
           % ("{:,}".format(seen), "{:,}".format(recent), a.since, era, "{:,}".format(gone)))
+    if missing:
+        f = where / "wrong.missing_files.json"
+        f.write_text(json.dumps(missing, indent=1), encoding="utf-8")
+        print("        written to %s - the cell claims a document we do not hold" % f)
+        for m in missing[:10]:
+            print("        %-20s %s" % (m["identifier"], m["path"]))
 
 
 # ── fingerprint: which source drove the page count, read off the pdfs themselves ────────────────
