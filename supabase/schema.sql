@@ -35,6 +35,38 @@ AS $function$
 $function$;
 comment on function reproduction.block_key(borough text, block integer) is 'a person''s helper: borough + block as the block key block_keys() writes, for a containment filter on acris_blocks / richmond_blocks';
 
+CREATE OR REPLACE FUNCTION reproduction.parcel_bbls(r jsonb)
+ RETURNS text[]
+ LANGUAGE plpgsql
+ IMMUTABLE PARALLEL SAFE STRICT
+AS $function$
+declare
+  bbls text[] := '{}';
+  p jsonb;
+  b text;
+begin
+  if jsonb_typeof(r->'parcels') <> 'array' then
+    return bbls;
+  end if;
+  for p in select * from jsonb_array_elements(r->'parcels') loop
+    b := p->>'bbl';
+    if b is not null and length(b) = 10 and translate(b, '0123456789', '') = '' then
+      bbls := array_append(bbls, b);
+    end if;
+  end loop;
+  return bbls;
+end $function$;
+comment on function reproduction.parcel_bbls(r jsonb) is 'a registry''s parcels as WHOLE ten-digit bbls - the text array behind acris_bbls. block_keys() gives borough+block only, so a filter written against a full bbl matches nothing there (2026-09-09: a ten-digit bbl queried against acris_blocks returned zero rows); this is the index a parcel search wants.';
+
+CREATE OR REPLACE FUNCTION reproduction.borough_name(r jsonb)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE STRICT
+AS $function$
+  select nullif(upper(btrim(replace(replace(r->>'borough', '&nbsp;', ' '), chr(160), ' '))), '')
+$function$;
+comment on function reproduction.borough_name(r jsonb) is 'the borough with ACRIS''s HTML padding removed. The scrape stored a second, padded spelling of every borough ("MANHATTAN &nbsp;&nbsp;..."), so `registry->>''borough'' = ''MANHATTAN''` silently drops every row carrying the padded form; this normalises both to one value and is what acris_borough_name indexes. Fixes the defect at the query layer without rewriting 21.6M rows.';
+
 CREATE OR REPLACE FUNCTION reproduction.block_keys(r jsonb)
  RETURNS text[]
  LANGUAGE plpgsql
