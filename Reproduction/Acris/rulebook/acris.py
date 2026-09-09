@@ -144,12 +144,21 @@ def canonical_path(doc_id, registry):
 
 
 def fresh(registry, days):
-    """Recorded within the last `days`: a document without an image yet is pending, not absent."""
+    """Recorded within the last `days`: a document without an image yet is pending, not absent.
+
+    AN UNREADABLE RECORDING DATE IS ALWAYS INSIDE THE LAG.  Absence is meaningless without a clock - 'absent' claims
+    the document was recorded long enough ago to have been scanned by now, and with no date there is nothing to say
+    that against.  Guessing wrong here records a scanned document as having no scan FOREVER, because claim() re-checks
+    only pendings and never revisits an absent; staying pending costs one re-ask.  Richmond has held this rule since
+    2026-08-26 (richmond.fresh: "an unreadable date is always inside the lag") and acris had the opposite, returning
+    False and so writing 'absent' - the same non-answer-becomes-a-verdict fault that cost the table on 09-09.  It has
+    never fired (every one of the 21.6M rows carries a readable date today) and it must not be the thing that does.
+    """
     if not isinstance(registry, dict):
-        return False
+        return True
     m = _DATE.match(str(registry.get("recorded", "")).strip())
     if not m:
-        return False
+        return True
     try:
         rec = time.mktime(time.strptime("%s/%s/%s" % m.groups(), "%m/%d/%Y"))
     except (ValueError, OverflowError):
