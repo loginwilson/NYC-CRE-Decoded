@@ -55,8 +55,16 @@ Drain the allowance, delete, replace. An underperforming door still beats the em
 4. **The end marker** — a 310×320 greyscale TIFF of exactly **13,684 bytes**, ACRIS's end-of-document placeholder, served as a normal page image.
 
 `DocumentImageView` (the viewer page) is also how ACRIS refuses a cloud block: it 404s while `GetImage` still serves.
-The lane therefore runs with `--trust-registry-pages`, taking the page count from registration and keeping the viewer
-URL only as a Referer header. Measured on one line, two minutes each: **64 documents with the flag, 20 without.**
+RETRACTED 2026-09-09. The answer to that was `--trust-registry-pages` — take the page count from registration, keep
+the viewer URL only as a Referer — and measured on one line it looked like a win: **64 documents with the flag, 20
+without.** It was landing SHORT PDFS. Registration undercounts (it misses covers and riders), the lane writes exactly
+`total` pages or nothing, so the files landed whole and incomplete, and looked complete: 9 of 142 held four pages where
+there are seven, three where there are seven, five where there are eleven. 39,360 pdfs were deleted. The flag is gone
+from the code and cannot be passed.
+
+**A 404 on the viewer means the door is refused. Destroy the door.** It is not a reason to take the page count from
+somewhere else — the viewer is the only authority on how many pages a document has, and a lane that cannot reach it
+is a lane that must not write.
 
 ## Regions — spread, never walk
 
