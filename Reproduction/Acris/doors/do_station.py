@@ -41,14 +41,14 @@ STATE = HERE / (_base + ".json")
 LOG = HERE / (_base + ".log")
 STOP = HERE / (_base + ".stop")
 MANAGER_ENV = dict(os.environ, DOORS_PROVIDER=PROVIDER)
-# --trust-registry-pages: THE VIEWER PAGE IS HOW ACRIS REFUSES A CLOUD BLOCK.  01:20, every failure in every lane
-# read "HTTP 404 at .../DocumentImageView" while the same doors' probes were pulling 2.8-3.7 REAL PAGES a document:
-# ACRIS 404s the viewer for a refused block and keeps serving GetImage.  The lane needed the viewer only for the
-# page count, and registration already recorded it, so the count comes from the registry and the viewer URL stays
-# on as a Referer header - which is all GetImage ever wanted (verified from home 00:59: pages fetched with no
-# preceding viewer request returned real scans, 69,058 / 40,636 / 83,828 bytes).  It also saves one request per
-# document, 10-25% of a block's allowance.  A row with no recorded count still falls back to the viewer.
-BAND = ["--trust-registry-pages", "--pooler", "transaction", "--entry-gap", "8", "--pending-age", "1 day", "--stagger", "5", "--drive", "OneTouch",
+# THE BAND THAT LANDED 4,284,337 DOCUMENTS, restored exactly - rate manager on, ramping to rate, the same floors and
+# ceilings, the same 5-second worker births, and the viewer page as the page-count authority.
+#
+# Every knob I turned on 2026-09-09 was a change to code that already worked, made to compensate for bad DOORS:
+# --trust-registry-pages (registration undercounts, so a pdf can land with its tail missing), --manage off, 12
+# workers where the proven door ran 120, no ramp.  The door is the only variable here.  The lane is not tuned around
+# it: a door whose lane cannot land documents is destroyed, and the lane is left alone.
+BAND = ["--pooler", "transaction", "--entry-gap", "8", "--pending-age", "1 day", "--stagger", "5", "--drive", "OneTouch",
         "--fresh-days", "30", "--unpark", "--manage", "1", "--ramp-to-rate", "1", "--adjust-every", "60", "--adjust-step", "5",
         "--rate-floor", "6", "--rate-ideal-lo", "7", "--rate-ideal-hi", "10", "--dps-ceiling", "20", "--rps-ceiling", "0",
         "--session-max-requests", "1000000"]
@@ -450,19 +450,13 @@ def launch_missing(a, st):
 
 
 def tick(a, st):
-    if site_closed():
-        if not SHUT["said"]:
-            SHUT["said"] = True
-            log("HOLD: ACRIS is shut to every client - nothing burned, recycled, relaunched or created until it reopens")
-        return
-    if SHUT["said"]:
-        SHUT["said"] = False
-        now = time.strftime("%H:%M:%S")
-        for rec in st.values():                                # a refusal written during the outage is not a verdict
-            rec["launched_at"] = now
-            rec["relaunches"] = 0
-        state_write(st)
-        log("ACRIS is answering again - the hold is lifted, %d slot(s) re-stamped, nothing was burned for the outage" % len(st))
+    # NOTHING HOLDS THE HUNT.  This tick used to stop dead on site_closed(), and at 08:52 that deadlocked all four
+    # stations at zero doors: the check asks whether any of OUR lanes is landing documents, and with every door just
+    # destroyed none was, so it fell back to the home line - refused after days of fetching - and concluded ACRIS was
+    # shut.  No doors, therefore no lanes, therefore no doors.  The hold existed to stop a real maintenance window
+    # from burning nine good doors at once; but a door is burned only on a REFUSAL or a notice now, a door costs about
+    # four cents, and the lane settles the question in twenty seconds.  So the station always creates, always tests,
+    # always deletes what is blocked.  Nothing in between.
     kept = ledger()
     by_port = {row["port"]: row for row in kept}
     live = live_slots()
@@ -535,12 +529,24 @@ def tick(a, st):
             # 25,000 requests waiting for a six-minute verdict.  A refused address is answered with a constant stub
             # image that scores as a success on the box and is rejected at home as short, so the question goes to the
             # LANE, the only thing that knows a document reached the drive.
-            # ONLY A BLOCK BURNS A DOOR (login 2026-09-09: "you only delete when you get blocked").  Everything that
-            # stood here judged a door by its RATE - under 0.5 docs/s, or 1,500 requests with nothing landed, or
-            # under --min-rate requests a second - and each of them burned doors that were still producing, leaving
-            # an empty slot that produced nothing at all.  ACRIS says plainly when a block is spent: the lane writes
-            # REFUSED with its Bandwidth Notice, and the door's own box sees the same notice.  Both are handled
-            # above, and they are now the only two ways a door dies.  A slow door keeps its slot.
+            # A LANE THAT IS NOT RECEIVING DOCUMENTS IS A BLOCKED DOOR.  login 2026-09-09: "If you are receiving the
+            # documents, good.  If you are not receiving the documents, then that tells you that it has an error.  It's
+            # probably blocked."  That is the whole test, and it is not a rate gate - a door landing ONE document an
+            # hour keeps its slot.  Zero is the number that means blocked.
+            #
+            # ACRIS refuses a cloud block by 404-ing DocumentImageView while GetImage still serves, so a bad door does
+            # not announce itself with a notice: its lane simply fails every document on the viewer fetch.  The lane
+            # code is the same code that has landed 4,284,337 documents and is not to be altered for this - the 404
+            # storm IS the signal, and the answer to it is to destroy the door, not to change how documents are pulled.
+            landed, asked = lane_landed(slot, rec.get("launched_at", "00:00:00"))
+            if landed is not None and landed == 0 and asked >= 400:
+                log("slot %d door %d (%s): %s requests and NOT ONE document - the door is blocked, burning"
+                    % (slot, port, by_port[port]["ip"], "{:,}".format(asked)))
+                kill_pid(live[slot][0])
+                doors_cmd("burn", str(port), timeout=300)
+                st.pop(port_s, None)
+                state_write(st)
+                continue
             continue
     st = launch_missing(a, st)
 

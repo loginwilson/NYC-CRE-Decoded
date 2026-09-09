@@ -58,23 +58,33 @@ PARENT = {}                         # pid -> parent pid, filled by running()
 # ONE DOOR A PROVIDER until all four are proven producing together (login 2026-09-09: "Get the code right first,
 # and see if you can get it all working before you try adding more doors").  40 creations an hour so the cycle -
 # create, run the lane, delete on a block, create again - never sits waiting for budget.
-STATION_ARGS = "run --max 1 --every 40 --creations-per-hour 40 --min-rate 0 --box 9000"
+# NO CAPS.  Every door a provider will give us, every worker a lane will run, until ACRIS blocks the door and it is
+# destroyed.  The caps I put on all morning were the whole problem: 12 workers a lane where yesterday ONE door at 99
+# workers did 9.84 documents a second, a rate manager that stopped ramping the moment a lane reached 7 docs/s, one
+# door per provider, and a creation budget that left three providers idle.  A door has a short life and a finite
+# allowance; the job is to spend it as fast as ACRIS allows and replace it.  --max is set to what each provider
+# actually permits.  The one guard left is MEM_FLOOR_MB in do_station.py, which refuses to launch a lane when this
+# machine is out of memory - that protects the workstation, it does not cap the hunt.
+STATION_ARGS = "run --every 40 --creations-per-hour 240 --min-rate 0 --box 9000"
+# 128 workers is the LANE'S OWN hard ceiling per crew ("a crew has 1 to 128 workers"), not a throttle of mine -
+# asking for 200 made every lane refuse to start, which is why fourteen doors sat with no lane on any of them.
+MAX_DOORS = {"digitalocean": 10, "vultr": 20, "linode": 20, "hetzner": 5}   # each provider's own ceiling
 
 # name: (match this in the command line, argv to start it, working directory, stop file that means "leave it down")
 JOBS = {
     # (must contain, must NOT contain): DigitalOcean's supervisor is the one with no --provider, and matching it on
     # spacing would be a duplicate-spawn loop the moment the guard restarts it with its own argv (one space, not two).
     "station digitalocean": (("do_station.py", "--provider"),
-                             [PY, "-u", str(HERE / "do_station.py")] + STATION_ARGS.split() + ["--width", "12", "--lines", "1", "--stagger", "0.6"],
+                             [PY, "-u", str(HERE / "do_station.py")] + STATION_ARGS.split() + ["--max", str(MAX_DOORS["digitalocean"])] + ["--width", "120", "--lines", "1", "--stagger", "0.6"],
                              HERE, "do_station.stop"),
     "station vultr":        ("do_station.py --provider vultr",
-                             [PY, "-u", str(HERE / "do_station.py"), "--provider", "vultr"] + STATION_ARGS.split() + ["--width", "12", "--lines", "1", "--stagger", "0.6"],
+                             [PY, "-u", str(HERE / "do_station.py"), "--provider", "vultr"] + STATION_ARGS.split() + ["--max", str(MAX_DOORS["vultr"])] + ["--width", "120", "--lines", "1", "--stagger", "0.6"],
                              HERE, "do_station.vultr.stop"),
     "station linode":       ("do_station.py --provider linode",
-                             [PY, "-u", str(HERE / "do_station.py"), "--provider", "linode"] + STATION_ARGS.split() + ["--width", "12", "--lines", "1", "--stagger", "0.6"],
+                             [PY, "-u", str(HERE / "do_station.py"), "--provider", "linode"] + STATION_ARGS.split() + ["--max", str(MAX_DOORS["linode"])] + ["--width", "120", "--lines", "1", "--stagger", "0.6"],
                              HERE, "do_station.linode.stop"),
     "station hetzner":      ("do_station.py --provider hetzner",
-                             [PY, "-u", str(HERE / "do_station.py"), "--provider", "hetzner"] + STATION_ARGS.split() + ["--width", "12", "--lines", "1", "--stagger", "0.6"],
+                             [PY, "-u", str(HERE / "do_station.py"), "--provider", "hetzner"] + STATION_ARGS.split() + ["--max", str(MAX_DOORS["hetzner"])] + ["--width", "120", "--lines", "1", "--stagger", "0.6"],
                              HERE, "do_station.hetzner.stop"),
     # THE BOARD LIVES IN update/, NOT documentation/.  It was only up tonight because it had been started by
     # hand from the right folder; had it died, the guard would have relaunched it where no such file exists
@@ -87,7 +97,11 @@ JOBS = {
     # hand-tested has no row yet.  It was deleting doors that were never blocked, which is the one thing that must
     # not happen.  Orphans are handled by the stations themselves now (a fill that finds the account full adopts).
     "spend watchdog":       ("spend.py watch",
-                             [PY, "-u", str(HERE / "spend.py"), "watch", "--budget", "50", "--max-alive", "24", "--every", "300"],
+                             [PY, "-u", str(HERE / "spend.py"), "watch", "--budget", "200", "--max-alive", "80", "--every", "300"],
+                             # 24 alive was a HALT, not a warning: at 09:03 it wrote a stop file for all four
+                             # stations and the fleet sat at zero with twenty doors already paid for.  The ceiling
+                             # is now above what the four providers can even hand out (10+20+20+5), so it only
+                             # fires on a genuine runaway.
                              HERE, ""),
 }
 

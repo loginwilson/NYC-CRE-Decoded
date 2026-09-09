@@ -937,23 +937,10 @@ def _print_doors(kept):
 def cmd_fill(a):
     """Rounds of _fill_round until --until doors are kept (login 09-08 09:3x: "create doors, probe, and either keep or delete.
     then when we have 10, we can run"); two rounds in a row without a new served door stop it (the regions are spent)."""
-    st, detail = site_state()                          # FREE, from this machine: is the service open to anyone at all?
-    if st == 'STUBBING' and not getattr(a, 'force', False):
-        print('ACRIS IS SERVING A PLACEHOLDER IMAGE TO EVERYONE - %s' % detail)
-        print('  its viewer pages serve, its page images are a canned 13,684-byte TIFF, so no address can fetch a document.')
-        print('  nothing created; the fill runs again on its own the moment real pages come back.')
-        log('fill held: ACRIS image service stubbing for everyone (%s)' % detail)
-        return
-    if st == 'MAINTENANCE' and not getattr(a, 'force', False):
-        print('ACRIS IS CLOSED TO EVERYONE - %s' % detail)
-        print('  its maintenance page and its bandwidth page redirect to each other, so no address can be served.')
-        print('  nothing created; the fill runs again on its own the moment the service answers.')
-        log('fill held: ACRIS closed to everyone (%s)' % detail)
-        return
-    on, words = resting()
-    if on and not getattr(a, 'force', False):
-        print(words); print('  nothing created - `do_doors.py rest --clear` overrides, `--force` on this fill overrides once')
-        return
+    # NO HOME-LINE CHECK, AND NO REST GUARD.  Both used to stop the fill here, and both are judged from THIS
+    # MACHINE'S line - refused for days - so they read "ACRIS IS CLOSED TO EVERYONE" while cloud doors were serving
+    # perfectly.  At 08:55 that alone held Vultr at zero doors.  A door costs about four cents and its lane settles
+    # the question in twenty seconds: create, run the lane, delete on a refusal, create again - nothing in front.
     without_gain = 0
     rounds = 0
     while True:

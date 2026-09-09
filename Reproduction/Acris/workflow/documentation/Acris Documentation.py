@@ -66,15 +66,6 @@ import acris                                                    # noqa: E402
 import rulebook  # noqa: E402
 
 
-def registry_pages(registry):
-    """The page count registration recorded, as a positive int - or None (missing, non-numeric, zero): the viewer decides."""
-    try:
-        n = int(str(registry.get("pages", "")).strip())
-    except (ValueError, TypeError, AttributeError):
-        return None
-    return n if n > 0 else None
-
-
 class Documentation:
     """What one worker does with one document."""
     source, lane_name = "acris", "documentation"
@@ -82,10 +73,9 @@ class Documentation:
     noun = "pdfs"                 # the PROGRESS line's word for a filled cell
     needs_registry = True         # the registry places the file and judges freshness
 
-    def __init__(self, drive_root, fresh_days, trust_registry_pages=False, box=0):
+    def __init__(self, drive_root, fresh_days, box=0):
         self.root = drive_root
         self.fresh_days = fresh_days
-        self.trust_registry_pages = bool(trust_registry_pages)   # --trust-registry-pages: skip the viewer fetch (see fetch)
         self.box = int(box or 0)          # --box PORT: the on-box fetch through a door's droplet (BoxPrefetch below); 0 = from here
 
     @property
@@ -110,13 +100,18 @@ class Documentation:
             return canon                                     # already on this drive: no request spent
 
         # 1. the page count, from the viewer page (Referer chain as a browser walks it: detail -> viewer -> image).
-        #    --trust-registry-pages (2026-09-07, PROPOSED - A/B on a good exit before trusting): registration recorded
-        #    `pages` for every row, so the viewer fetch - one request per document, 10-25% of a document's requests -
-        #    can be skipped: `total` comes from the registry and GetImage keeps the viewer URL as its Referer (a header,
-        #    not a fetch).  Only a positive count is trusted; anything else falls back to the viewer, which stays the
-        #    authority for "no image" (TotalPages <= 0).  The one unknown the A/B decides: whether GetImage serves
-        #    without a preceding viewer fetch on the same session (a cookie it might set).
-        total = registry_pages(registry) if self.trust_registry_pages else None
+        #
+        #    THE VIEWER IS THE ONLY AUTHORITY ON HOW MANY PAGES A DOCUMENT HAS.  Nothing else may set `total`.  This is
+        #    not a preference; it was measured on 2026-09-09 after --trust-registry-pages took the count from
+        #    registration instead:
+        #      - registration UNDERCOUNTS.  It counts the instrument and misses title pages, covers and riders, so a
+        #        nine-page document registers as seven and a pdf lands with its tail missing (login).
+        #      - registration also OVERCOUNTS, which we did not expect.  2003012101793002 registers as 39 pages; the
+        #        viewer says 3, our pdf holds 3, and page 4 is the end marker.  Ten such documents, all complete.
+        #      - the viewer has never been wrong when tested: 475 pdfs across twelve years, every count matched.
+        #    Registration is the clerk's record of what was FILED.  It is not a record of what ACRIS imaged, and it is
+        #    unreliable in BOTH directions.  The flag that trusted it is gone and must not come back.
+        total = None
         # THE ON-BOX FETCH (2026-09-08, --box; login: "Try the workers on the droplets"): through a door whose droplet runs
         # box_fetch.py, ONE call brings the viewer page and every page image, fetched ON the box in parallel (ACRIS takes
         # ~11 s per image whoever asks; the box waits, not this machine's RAM).  The walk below then reads them through
@@ -136,9 +131,17 @@ class Documentation:
                 crew.stats["reask"] += 1
             if attempt < 2:
                 time.sleep(0.6 * (attempt + 1))          # 0.6 s, then 1.2 s; no wait after the last miss
+        # A NON-ANSWER IS NEVER A VERDICT.  If the viewer did not say a number - a 404, a refusal, a page we could not
+        # read - the only lawful outcome is Retry, and the cell stays as it was.  On 2026-09-09 a change of mine turned
+        # "the viewer 404'd" into pending and absent, and it wrote 64,698 pending cells (every one recorded ~19 years
+        # ago) and cost the 2006 stretch about 70,000 documents ACRIS holds and hands over on request.  A refused door
+        # must be structurally incapable of emptying a cell, and this line is what makes that true.  Only a POSITIVE
+        # statement from the viewer - TotalPages <= 0, meaning ACRIS says it has no image - may become a verdict.
         if total is None:
             raise rulebook.Retry("viewer page did not identify itself after 3 asks (%d bytes, ct=%s)" % (len(body), ct))
         if total <= 0:
+            # and which of the two is decided by the RECORDING DATE IN ACRIS (registry['recorded']), never by the date
+            # we happened to look: inside the lag it is still being scanned, outside it there is nothing to scan.
             return "pending" if acris.fresh(registry, self.fresh_days) else "absent"
 
         # 2. every page, in order; the placeholder is the end marker, anything not a TIFF ends the walk
@@ -223,16 +226,13 @@ def role(drive_root, args):
     """This lane's role, for a sibling lane hosting it with --also documentation:N."""
     if not drive_root:
         raise SystemExit("documentation needs --drive <label>: the drive its files are written to")
-    return Documentation(drive_root, getattr(args, "fresh_days", 30), getattr(args, "trust_registry_pages", False), getattr(args, "box", 0))
+    return Documentation(drive_root, getattr(args, "fresh_days", 30), getattr(args, "box", 0))
 
 
 def main():
     ap = argparse.ArgumentParser(description="acris documentation: one entry, N workers, the cloud table as the to-do list")
     ap.add_argument("--drive", required=True, help="label of the drive to write to (the volume label: OneTouch at home, workstation 2's own)")
     ap.add_argument("--fresh-days", type=int, default=30, help="a document recorded within this many days with no image is pending, not absent")
-    ap.add_argument("--trust-registry-pages", action="store_true",
-                    help="skip the viewer fetch: the page count comes from the registry, one request fewer per document"
-                         " (PROPOSED 2026-09-07 - A/B on a good exit before trusting; off = the proven walk)")
     ap.add_argument("--box", type=int, default=0, metavar="PORT",
                     help="the on-box fetch (2026-09-08): through each --door, ask the droplet's box_fetch.py on this port for a"
                          " document's viewer page and every page image, fetched on the box in parallel; 0 = fetch from here")
@@ -242,7 +242,7 @@ def main():
 
     drive_root = rulebook.find_drive(args.drive)
     rulebook.documents_root(drive_root)
-    roles = rulebook.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days, args.trust_registry_pages, args.box))
+    roles = rulebook.roles_for("Acris", args, HERE, drive_root, Documentation(drive_root, args.fresh_days, args.box))
     print("drive %r -> %s ; documents under %s ; cell records %s..." % (args.drive, drive_root, rulebook.documents_root(drive_root), rulebook.CANON_ROOT), flush=True)
     sys.exit(rulebook.run(roles, args, HERE))
 
