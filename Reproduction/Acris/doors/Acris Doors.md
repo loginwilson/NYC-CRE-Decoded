@@ -26,6 +26,23 @@ The lane settles it in about twenty seconds, cannot be fooled, and is the thing 
 run end 0.3 min - REFUSED at 2006060800799001 - ACRIS served its Bandwidth Notice (5/5 signals, 25103 bytes)
 ```
 
+**A door can be blocked without saying so** (2026-09-09). The gate above asks whether the lane landed *any*
+documents — binary, zero or not — and a half-dead door passes it easily: ten pdfs beside five hundred `absent`
+verdicts reads as alive. That is what ran through the night of 09-09. Nothing failed, nothing was logged as an
+error, every counter said the lane was working, and ~70,000 cells were marked absent for documents ACRIS hands over
+the moment you ask. The logs that would have named the door had rotated away before the audit found it.
+
+So `lane_landed()` now returns the `absent` count beside the pdf count — both were already on the PROGRESS line the
+lane writes every minute, they were simply never read — and a door whose absent share runs far above the corpus is
+burned. Across 4,437,404 decisions before the reset, `absent` was **6.0%**. The default fires at **35% over at least
+200 decisions**: high enough that a genuine run of imageless documents cannot burn a good door, low enough that the
+night's doors would have gone in their first minutes. `--absent-share` and `--absent-min` move it.
+
+This is not a rate gate and does not contradict the law above — a door being served readable pages that say "no
+image" for documents that have one **is** blocked, in the one way that costs us the table rather than the clock.
+UNTESTED against a live door: it is built from the arithmetic of a night already measured, not from a door watched
+burning by it.
+
 So: **a door is deleted when, and only when, it is blocked.** Not when it is slow. Every block has a finite
 allowance (~6,000 requests); a fast door and a slow door both end at the same wall, so grading them buys nothing.
 Drain the allowance, delete, replace. An underperforming door still beats the empty slot that replaces it.
