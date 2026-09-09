@@ -316,6 +316,35 @@ SHUT = {"at": 0.0, "closed": False, "said": False}
 SHUT_TTL = 90.0
 
 
+def lanes_landing_now(window=120):
+    """True if ANY lane on this station wrote a PROGRESS line with documents landed in the last `window` seconds.
+
+    This is the cheapest and most direct evidence that ACRIS is serving: our own drive."""
+    now = time.localtime()
+    now_s = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
+    for f in DOC.glob("documentation.*.log"):
+        if ".prev." in f.name:
+            continue
+        try:
+            rows = f.read_text(encoding="utf-8", errors="replace").splitlines()[-40:]
+        except OSError:
+            continue
+        for l in reversed(rows):
+            if "PROGRESS" not in l:
+                continue
+            try:
+                age = now_s - (int(l[0:2]) * 3600 + int(l[3:5]) * 60 + int(l[6:8]))
+            except ValueError:
+                break
+            if age < 0:
+                age += 86400
+            m = re.search(r"- ([\d,]+) pdfs", l)
+            if age <= window and m and int(m.group(1).replace(",", "")) > 0:
+                return True
+            break
+    return False
+
+
 def site_closed():
     """Is ACRIS shut to EVERY client right now?  Asked for free from this machine (do_doors.py `reference` follows the
     307 chain; no droplet, no allowance).  Cached SHUT_TTL seconds.
@@ -327,6 +356,13 @@ def site_closed():
     created, and every slot's verdict clock is re-stamped when it reopens."""
     if time.time() - SHUT["at"] < SHUT_TTL:
         return SHUT["closed"]
+    # OUR OWN DOORS ANSWER FIRST.  The reference check asks THIS MACHINE'S line, which is refused after days of
+    # fetching - and a refused home line is no evidence at all about a fresh cloud block.  At 08:27 it held Hetzner and
+    # Linode at zero doors while three providers were producing 5.67 documents a second between them.  A lane that has
+    # landed a document in the last two minutes proves ACRIS is open, for free, and outranks anything home says.
+    if lanes_landing_now():
+        SHUT.update(at=time.time(), closed=False)
+        return False
     try:
         out = doors_cmd("reference", timeout=240) or ""
     except Exception as e:
