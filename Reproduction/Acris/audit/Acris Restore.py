@@ -73,7 +73,10 @@ def main():
     con = psycopg2.connect(rulebook.dsn())
     con.autocommit = True
     cur = con.cursor()
-    cur.execute("set statement_timeout='120s'")
+    # 600 s, not the project's two-minute default: a batch that has to wait behind another writer on the same table
+    # still finishes rather than cancelling.  RUN THE SETS ONE AT A TIME - two of these at once contend on the same
+    # rows and the second one cancelled after a single batch on 2026-09-09.
+    cur.execute("set statement_timeout='600s'")
 
     where = pathlib.Path(a.dir)
     where.mkdir(parents=True, exist_ok=True)

@@ -140,6 +140,27 @@ class Documentation:
         if total is None:
             raise rulebook.Retry("viewer page did not identify itself after 3 asks (%d bytes, ct=%s)" % (len(body), ct))
         if total <= 0:
+            # CORROBORATION (2026-09-09, login: "yes make the change").  The viewer saying zero is not enough to empty
+            # a cell.  The guard above catches a NON-answer; it cannot catch a FALSE one, and a false one is what the
+            # table suggests we have been getting: 69 of 100 cells in the 2006 stretch marked absent hand over a real
+            # page 1 when asked today, while 2004 and 2005 are clean at 0 of 200.  Something answered the viewer with a
+            # readable TotalPages=0 for documents ACRIS holds - most likely a throttled block, which returns a page
+            # rather than the notice - and 'absent' followed it honestly.
+            #
+            # So ACRIS must say it twice, through two different endpoints, before we believe it.  ONE extra request,
+            # and only on this path (a few percent of documents); nothing changes for a document that has pages.
+            try:
+                data, ct = getter.get(acris.image_url(doc_id, 1), acris.viewer_url(doc_id))
+            except rulebook.HTTPStatus as e:
+                if e.code != 404:
+                    raise                        # a real transport/status problem is not a verdict either
+                data, ct = b"", ""               # 404: there is no page 1.  Absence confirmed.
+            else:
+                acris.check_refused(data, ct, "%s p1" % doc_id)
+                # the end marker IS a TIFF, so it must be ruled out before the TIFF test
+                if data and not acris.is_placeholder(data) and acris.is_tiff(data):
+                    raise rulebook.Retry(
+                        "viewer said %d pages but GetImage served a real page 1 (%d bytes): NOT absent" % (total, len(data)))
             # and which of the two is decided by the RECORDING DATE IN ACRIS (registry['recorded']), never by the date
             # we happened to look: inside the lag it is still being scanned, outside it there is nothing to scan.
             return "pending" if acris.fresh(registry, self.fresh_days) else "absent"
