@@ -215,6 +215,25 @@ begin
     using p_rows;
   get diagnostics n = row_count;
 
+  -- THE VIEWER'S PAGE COUNT, kept beside registration's (login 2026-09-09).  Registration's `pages`
+  -- counts ACRIS's Recording and Endorsement Cover Page, which carries its own "PAGE 1 OF 2", so it
+  -- is not a count of imaged pages: 2003030401018003 and 2003030200011004 both register 2 where the
+  -- viewer says 1 and GetImage page 2 is the end marker.  The documentation lane knows the viewer's
+  -- number at fetch time and it was being thrown away; `imaged` keeps it.
+  --   MERGE, NEVER REPLACE.  registry belongs to the registration lane; documentation only adds this
+  -- one key, so `||` is the whole point - an assignment here would erase a registration.
+  if p_lane = 'documentation' then
+    execute format($q$
+        update reproduction.%1$I w
+           set registry = w.registry || jsonb_build_object('imaged', r.imaged)
+          from jsonb_to_recordset($1) as r(identifier text, imaged int)
+         where w.identifier = r.identifier
+           and r.imaged is not null
+           and jsonb_typeof(w.registry) = 'object'
+      $q$, p_source)
+      using p_rows;
+  end if;
+
   execute format($q$
       delete from machinery.claims c using jsonb_to_recordset($1) as r(identifier text, value %1$s)
       where c.source = $4 and c.identifier = r.identifier and c.lane = $2 and c.workstation = $3 and not (%2$s)

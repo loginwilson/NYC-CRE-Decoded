@@ -196,7 +196,11 @@ class Documentation:
             if not os.path.isdir(self.root):
                 self.check(crew.ctx)
             raise rulebook.Retry("could not write the file (%s: %s)" % (type(e).__name__, str(e)[:100]))
-        return canon
+        # THE VIEWER'S COUNT, KEPT.  `total` came from DocumentImageView and the pdf holds exactly that
+        # many pages; until now it was discarded at the end of the fetch, leaving registration's `pages`
+        # as the only page number in the table - and that one counts the cover sheet, not the images.
+        # reproduction.land merges it into registry as `imaged`, beside registration's own key.
+        return canon, {"imaged": total}
 
 
 class BoxPrefetch:

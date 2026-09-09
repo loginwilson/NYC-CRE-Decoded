@@ -980,9 +980,15 @@ class Crew:
                 continue
             try:
                 value = self.role.fetch(self, doc_id, registry)
+                # A role may return the cell alone, as every lane did until 2026-09-09, or (cell, extra)
+                # where extra is a dict of further columns for reproduction.land - the documentation lane
+                # uses it to carry the viewer's page count, which it already holds and used to discard.
+                extra = {}
+                if isinstance(value, tuple):
+                    value, extra = value
                 classify = getattr(self.role, "classify", None)
                 with self.lock:
-                    self.results.append({"identifier": doc_id, "value": value})
+                    self.results.append(dict({"identifier": doc_id, "value": value}, **extra))
                     self.stats["ok"] += 1
                     self.stats[classify(value) if classify else ("filled" if value not in ("pending", "absent") else value)] += 1
                     self.transport_streak = 0
