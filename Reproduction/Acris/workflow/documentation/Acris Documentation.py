@@ -109,6 +109,12 @@ class Documentation:
         #      - registration also OVERCOUNTS, which we did not expect.  2003012101793002 registers as 39 pages; the
         #        viewer says 3, our pdf holds 3, and page 4 is the end marker.  Ten such documents, all complete.
         #      - the viewer has never been wrong when tested: 475 pdfs across twelve years, every count matched.
+        #      - WHY registration overcounts, measured through a door 2026-09-09: it counts ACRIS's Recording and
+        #        Endorsement Cover Page, which is itself one or two pages and prints its own "PAGE 1 OF 2".  For
+        #        2003030401018003 registration says 2, the viewer says 1 of 1, and GetImage page 2 returns the
+        #        13,684-byte end marker - ACRIS holds one page.  A cover sheet's pagination is not a page count.
+        #        ACRIS's own viewer reads pages from this same endpoint (Acordex VTU is configured with
+        #        baseURL "/DS/DocumentSearch/GetImage?doc_id="), so the end marker is its answer to a browser too.
         #    Registration is the clerk's record of what was FILED.  It is not a record of what ACRIS imaged, and it is
         #    unreliable in BOTH directions.  The flag that trusted it is gone and must not come back.
         total = None

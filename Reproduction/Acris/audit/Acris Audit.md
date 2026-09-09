@@ -80,6 +80,34 @@ produced nothing, twice. Walk the primary key with keyset pagination, or take an
                  ten minutes."  The August fix covered a page with NO token; a page carrying a ZERO still passed until
                  the corroboration guard.
 
+## Registration counts the COVER SHEET, 2026-09-09 (asked of ACRIS through a door)
+
+`2003030401018003` reads registry `pages: 2` and our pdf holds 1 page, which looked like a lost page: the pdf's own
+first page is ACRIS's Recording and Endorsement Cover Page and it prints "PAGE 1 OF 2" with "Additional Parties Listed
+on Continuation Page". Three readings through a serving door settled it:
+
+    viewer (DocumentImageView)     1 of 1
+    GetImage page 1                a real TIFF, 56,101 bytes, 2544x3328
+    GetImage page 2 and 3          the 13,684-byte END MARKER - ACRIS has no such page
+
+So the cover sheet's own pagination is what registration counts, and ACRIS imaged one page. The viewer was right, the
+lane followed it, and the pdf is complete. THE "PAGE 1 OF n" PRINTED ON A COVER SHEET IS NOT A COUNT OF IMAGED PAGES.
+
+This is the same overcount already recorded above for 2003012101793002 (registers 39, viewer says 3), and it explains
+the whole short class: sampling 200 pdfs a year over 2003-2025, 4,600 in all, every one of the 78 shorts (1.7%) was
+exactly `pdf 1 vs registry 2`, written across 08-17, 08-18, 08-19 and 09-04 - spread over weeks, so not a window and
+not a defect. The healthy class is the other side of the same coin: 2,062 of 4,600 (44.8%) hold MORE pages than
+registration, which is only possible when the viewer set the count.
+
+**The lane fetches through ACRIS's own endpoint.** The official viewer is Acordex VTU, and the page it is configured
+from names the source: `vtOptions.baseURL = "/DS/DocumentSearch/GetImage?doc_id="`. Every page image the browser draws
+comes from the same GetImage the lane calls, so the end marker is ACRIS's answer to the browser too, not an artefact
+of how we ask.
+
+*(Aside, for anyone mirroring ACRIS to look at a page: vtu.js hashes `location.host`, and blanks its licence when the
+host is not the licensed one - "License invalid", and nothing renders. It gates DRAWING only, in the browser; it
+cannot touch what ACRIS serves or what the lane fetches. Read a page by pulling the TIFF from GetImage instead.)*
+
 ## What the audit changed in the lane
 
 Nothing about how a document is fetched. Three repairs, all deletions or guards:
