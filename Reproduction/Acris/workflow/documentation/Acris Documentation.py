@@ -169,7 +169,11 @@ class Documentation:
                         "viewer said %d pages but GetImage served a real page 1 (%d bytes): NOT absent" % (total, len(data)))
             # and which of the two is decided by the RECORDING DATE IN ACRIS (registry['recorded']), never by the date
             # we happened to look: inside the lag it is still being scanned, outside it there is nothing to scan.
-            return "pending" if acris.fresh(registry, self.fresh_days) else "absent"
+            # imaged 0 = ACRIS POSITIVELY SAID IT HAS NO IMAGE, which is a different fact from a row we
+            # have never asked about (no `imaged` key at all).  Keeping them apart is the whole lesson of
+            # 09-09: a non-answer read as a verdict is what emptied 267,289 cells.  `imaged < 1` finds the
+            # imageless, `not (registry ? 'imaged')` finds the unasked.
+            return ("pending" if acris.fresh(registry, self.fresh_days) else "absent"), {"imaged": 0}
 
         # 2. every page, in order; the placeholder is the end marker, anything not a TIFF ends the walk
         frames, why = [], ""
