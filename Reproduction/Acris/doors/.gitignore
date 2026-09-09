@@ -1,0 +1,5 @@
+*.env
+*.log
+*.json
+!package.json
+logs.archive/
