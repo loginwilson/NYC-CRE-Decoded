@@ -232,7 +232,7 @@ def lane_now(slot, since="00:00:00"):
 
 
 def lane_landed(slot, since="00:00:00"):
-    """(pdfs landed, requests made) off PROGRESS lines THIS RUN wrote - one per crew, summed.
+    """(pdfs landed, absent written, requests made) off PROGRESS lines THIS RUN wrote - one per crew, summed.
 
     THE ONLY MEASURE THAT MATTERS.  A door's request rate can be superb while it lands nothing: ACRIS answers a refused
     address with a constant stub image (HTTP 200, image/tiff, the same 13,684 bytes for every page of every document),
@@ -245,17 +245,18 @@ def lane_landed(slot, since="00:00:00"):
         tail = p.read_text(encoding="utf-8", errors="replace").splitlines()[-300:]
     except OSError:
         return None, 0
-    seen, pdfs, reqs = set(), 0, 0
+    seen, pdfs, absent, reqs = set(), 0, 0, 0
     for l in reversed(tail):
         if "PROGRESS" not in l or l[:8] < since:
             continue                       # the previous run's line, on the previous door - not this door's verdict
-        m = re.search(r"documentation@(\S+) - reqs ([\d,]+).*?- ([\d,]+) pdfs", l)
+        m = re.search(r"documentation@(\S+) - reqs ([\d,]+).*?- ([\d,]+) pdfs - ([\d,]+) absent", l)
         if not m or m.group(1) in seen:
             continue
         seen.add(m.group(1))
         reqs += int(m.group(2).replace(",", ""))
         pdfs += int(m.group(3).replace(",", ""))
-    return (pdfs if seen else None), reqs
+        absent += int(m.group(4).replace(",", ""))
+    return (pdfs if seen else None), absent, reqs
 
 
 def kill_pid(pid):
@@ -538,10 +539,30 @@ def tick(a, st):
             # not announce itself with a notice: its lane simply fails every document on the viewer fetch.  The lane
             # code is the same code that has landed 4,284,337 documents and is not to be altered for this - the 404
             # storm IS the signal, and the answer to it is to destroy the door, not to change how documents are pulled.
-            landed, asked = lane_landed(slot, rec.get("launched_at", "00:00:00"))
+            landed, absent, asked = lane_landed(slot, rec.get("launched_at", "00:00:00"))
             if landed is not None and landed == 0 and asked >= 400:
                 log("slot %d door %d (%s): %s requests and NOT ONE document - the door is blocked, burning"
                     % (slot, port, by_port[port]["ip"], "{:,}".format(asked)))
+                kill_pid(live[slot][0])
+                doors_cmd("burn", str(port), timeout=300)
+                st.pop(port_s, None)
+                state_write(st)
+                continue
+            # A DOOR THAT LANDS SOMETHING CAN STILL BE POISONING THE TABLE.  The gate above is binary - zero documents
+            # or not - and a half-dead door passes it easily: ten pdfs and five hundred 'absent' verdicts reads as
+            # alive.  That is what ran through the night of 09-09, and the cost was ~70,000 cells marked absent for
+            # documents ACRIS hands over on request; nothing failed, nothing was logged as an error, and it took an
+            # audit the next day to find it.
+            #
+            # Across the whole corpus 'absent' is 6.0% of decisions (267,289 of 4,437,404 before the reset).  A door
+            # running many times that is not finding imageless documents, it is being lied to - so it is burned on the
+            # same evidence as any other bad door, while it is running rather than in an audit next week.
+            decided = (landed or 0) + absent
+            if decided >= a.absent_min and absent / float(decided) >= a.absent_share:
+                log("slot %d door %d (%s): %s of %s decisions were 'absent' (%.0f%%, corpus runs 6%%) - the door is "
+                    "being refused with readable pages, burning before it writes more"
+                    % (slot, port, by_port[port]["ip"], "{:,}".format(absent), "{:,}".format(decided),
+                       100.0 * absent / decided))
                 kill_pid(live[slot][0])
                 doors_cmd("burn", str(port), timeout=300)
                 st.pop(port_s, None)
@@ -628,6 +649,12 @@ p = sub.add_parser("run"); p.add_argument("--max", type=int, default=10); p.add_
 p.add_argument("--every", type=int, default=60)
 p.add_argument("--creations-per-hour", type=int, default=10, help="the churn budget: droplets created per hour (each ~$0.006, a one-hour minimum); 10/h = ~$1.40/day")
 p.add_argument("--min-rate", type=float, default=20.0, help="requests/s a door must reach at full width (12 min after launch) or be recycled; 0 = never recycle")
+p.add_argument("--absent-share", type=float, default=0.35,
+               help="burn a door whose 'absent' verdicts are this share of its decisions (corpus runs 0.06; a door far"
+                    " above that is being served readable pages that say no image for documents ACRIS holds)")
+p.add_argument("--absent-min", type=int, default=200,
+               help="decisions a door must have made before --absent-share is applied (a short run of genuinely"
+                    " imageless documents must not burn a good door)")
 p.add_argument("--box", type=int, default=0, help="the on-box fetch: launch every lane with --box PORT (box_fetch.py on each droplet, deployed by do_doors.py box); 0 = the tunnel fetch")
 p.add_argument("--stagger", type=float, default=None, help="seconds between worker births in this station's lanes (default: the band's 5). On the box path a worker connects to the DROPLET, not to ACRIS, so a smaller number reaches the door's real rate minutes sooner")
 p.add_argument("--lines", type=int, default=3, help="tunnels per door (one TCP connection each; the lane runs one crew per line); --width is the door's total")
