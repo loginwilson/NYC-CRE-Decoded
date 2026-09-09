@@ -291,13 +291,17 @@ begin
   execute format('select count(*) from reproduction.%I where registry is null and document is null', p_source) into n_both;
   n_either := n_reg + n_doc - n_both;
 
-  update machinery.updates u
-     set landed = case u.lane when 'reproduction' then n_rows - n_either
-                              when 'identification' then n_rows
-                              when 'registration' then n_rows - n_reg
-                              else n_rows - n_doc end,
-         needed = n_rows
-   where u.source = p_source and u.workstation = '';
+  -- an UPDATE silently writes nothing when the totals row is absent, and this function still returns the
+  -- numbers it computed, so the caller cannot tell.  2026-09-09: a delete took the four acris totals rows,
+  -- reconcile was run to rebuild them, it printed the right four lines and left the board empty.  Upsert.
+  insert into machinery.updates as u (source, lane, workstation, landed, needed)
+  select p_source, v.lane, '', v.landed, n_rows
+    from (values ('reproduction',   n_rows - n_either),
+                 ('identification', n_rows),
+                 ('registration',   n_rows - n_reg),
+                 ('documentation',  n_rows - n_doc)) as v(lane, landed)
+      on conflict (source, lane, workstation)
+      do update set landed = excluded.landed, needed = excluded.needed;
 
   return query select 'phase'::text, n_rows - n_either, n_rows
     union all select 'identification', n_rows, n_rows
