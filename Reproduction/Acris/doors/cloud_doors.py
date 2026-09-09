@@ -244,7 +244,9 @@ def P_get(i):
 
 def P_destroy(i):
     if PROVIDER == "digitalocean":
-        P_destroy(i)
+        # 2026-09-09: this read `P_destroy(i)` - it called itself and every destroy on DigitalOcean
+        # died of RecursionError, so burn/destroy/replace could not stop a droplet billing.
+        api("DELETE", "droplets/%s" % i)
     elif PROVIDER == "vultr":
         api("DELETE", "instances/%s" % i)
     elif PROVIDER == "hetzner":
