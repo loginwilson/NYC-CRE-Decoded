@@ -44,7 +44,11 @@ PROVIDER = os.environ.get("DOORS_PROVIDER", "digitalocean").lower()
 PROVIDERS = {
     # name: (token key, api base, ledger, log, keeper port base, probe port base, default regions, station name)
     "digitalocean": ("DIGITALOCEAN_TOKEN", "https://api.digitalocean.com/v2/", "cloud_doors.json", "do_doors.log", 1080, 1100,
-                     "syd1,lon1,ams3,tor1,nyc1,nyc3,sfo3", "DigitalOcean"),
+                     # ALL SIXTEEN, nearest to ACRIS first.  This table said seven for a while: the nine it dropped
+                     # included atl1, which on 2026-09-10 was producing three of the ten live doors and the fastest
+                     # of them.  A region missing from the rotation looks exactly like a region that never wins -
+                     # neither ever appears in an acceptance table - so the loss is invisible from inside the numbers.
+                     "nyc1,nyc3,nyc2,ric1,tor1,atl1,mem1,mkc1,sfo2,sfo3,lon1,ams3,fra1,blr1,sgp1,syd1", "DigitalOcean"),
     "vultr":        ("VULTR_TOKEN", "https://api.vultr.com/v2/", "cloud_doors.vultr.json", "cloud_doors.vultr.log", 1200, 1400,
                      "syd,mel,sgp,nrt,itm,icn,bom,del,blr,ams,fra,lhr,cdg,mad,sto,waw,tlv,man,jnb,scl,sao,mex,ewr,yto,ord,atl,mia,dfw,sea,lax,sjc", "Vultr"),
     "linode":       ("LINODE_TOKEN", "https://api.linode.com/v4/", "cloud_doors.linode.json", "cloud_doors.linode.log", 1300, 1500,
@@ -1305,6 +1309,55 @@ def cmd_status(a):
     for row in kept:
         if row["name"] not in alive:
             print("  !!", row["name"], "is in the ledger but not on the account - burn it to clear the row")
+
+
+REGION_CACHE = os.path.join(OFFICE, "regions.%s.json" % PROVIDER)   # the office: a cache is running state, not code
+REGION_TTL = 6 * 3600
+
+
+def live_regions(default):
+    """EVERY REGION THE PROVIDER ACTUALLY OFFERS US - asked, never only hand-written.
+
+    login 2026-09-10: "you need to know the regions available on vultr too so you don't miss potential door
+    locations."  It had already cost us twice in one day.  DigitalOcean offers this account 16 regions and the
+    table named 7; the four US ones being skipped are the CLOSEST addresses to ACRIS we can buy, and Atlanta went
+    on to give the best door of the afternoon.  Vultr offers 33 and the table names 31 - hnl and mxp would never
+    have been tried.  A region absent from the rotation is indistinguishable from a region that never wins, so
+    this gap cannot be seen from the acceptance numbers; it has to be asked for.
+
+    ORDER IS KEPT.  The table's order is hand-tuned nearest-to-ACRIS first and that ordering is worth real
+    throughput, so the table leads (minus anything the provider has stopped offering) and whatever the provider
+    knows that the table does not is appended.  Cached REGION_TTL (this changes about once a year); on any failure
+    the table stands alone, because a stale rotation beats no rotation.
+    """
+    table = [r.strip() for r in default.split(",") if r.strip()]
+    got = []
+    try:
+        raw = json.load(open(REGION_CACHE, encoding="utf-8"))
+        if time.time() - raw.get("at", 0) < REGION_TTL and raw.get("regions"):
+            got = raw["regions"]
+    except Exception:
+        pass
+    if not got:
+        try:
+            rows = api("GET", "regions?per_page=500")
+            rows = rows.get("regions", rows.get("data", []))
+            got = [x for x in ((r.get("slug") or r.get("id") or r.get("name")) for r in rows
+                               if r.get("available", True)) if x]
+            if not got:
+                raise ValueError("no regions in the answer")
+            json.dump({"at": time.time(), "regions": got}, open(REGION_CACHE, "w", encoding="utf-8"))
+        except Exception as exc:
+            log("could not ask %s for its regions (%s) - the table's %d stand alone"
+                % (PROVIDER, type(exc).__name__, len(table)))
+            return default
+    offered = set(got)
+    keep = [r for r in table if r in offered]            # the tuned order, minus anything withdrawn
+    extra = sorted(r for r in got if r not in set(table))  # everything the table never knew about
+    return ",".join(keep + extra)
+
+
+REGIONS = live_regions(REGIONS_DEFAULT)
 
 
 ap = argparse.ArgumentParser()
