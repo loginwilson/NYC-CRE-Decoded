@@ -67,7 +67,12 @@ TOKEN_KEY, API_BASE, _LEDGER, _LOG, PORT_BASE, _PROBE_BASE, REGIONS_DEFAULT, STA
 IMAGE = "ubuntu-24-04-x64"
 SIZE = "s-1vcpu-512mb-10gb"   # $4/mo = $0.006/h (login 14:5x: the $6 size had been selected; a door runs sshd + tunnels, 512 MB is plenty)
 TAG = "credoor"
-LOG = os.path.join(HERE, _LOG)
+# THE OFFICE HOLDS THE STATE, THE REPO HOLDS THE CODE.  These resolved to HERE - the folder this file sits in -
+# so a station launched from the repo wrote its ledger into the repo while do_station.py and night_status.py both
+# read the office.  DigitalOcean never showed it because its manager runs from the office copy, where HERE and the
+# office are the same folder by accident; asked from the repo on 2026-09-10 this file reported "the doors (0)"
+# with ten doors live.  Vultr would have hit it on its first station: a ledger nothing else could see.
+LOG = os.path.join(OFFICE, _LOG)
 STRIKES = 15                                       # fresh blocks refused at request 1, in a row, before resting.  15, not 3:
                                                    # a refused FRESH block is ordinary hunting - ACRIS keeps a standing per address
                                                    # range and most ranges are refused - and resting the station for an hour over
@@ -76,7 +81,7 @@ STRIKES = 15                                       # fresh blocks refused at req
                                                    # what the ladder was really protecting against.
 REST_BASE_MIN = 5                                  # the first rest; doubled per rest, capped at REST_MAX_MIN
 REST_MAX_MIN = 60
-LEDGER = os.path.join(HERE, _LEDGER)     # the kept doors: name, id, region, ip, block (/24), keeper port, kept_at
+LEDGER = os.path.join(OFFICE, _LEDGER)   # the kept doors: name, id, region, ip, block (/24), keeper port, kept_at
 SPENT = os.path.splitext(LEDGER)[0] + ".spent.json"  # blocks this station has burned: never probed or entered again
 SPENT_HOURS = 3                                    # ...for this long; a standing can reset, so the memory expires
 REST = os.path.splitext(LEDGER)[0] + ".rest.json"   # THE GUARD IS PER PROVIDER: a wall in one provider's address

@@ -17,17 +17,28 @@ import argparse, json, os, pathlib, re, subprocess, sys, time
 import requests
 
 HERE = pathlib.Path(__file__).resolve().parent
+# THE CODE IS THE REPOSITORY'S; THE STATE IS THE MACHINE'S.  Both used to resolve to HERE, the folder this file
+# happens to sit in - so the same supervisor behaved differently depending on which COPY was launched, and a copy
+# in the office could drift from the copy in git with nothing to say so.  Naming them apart makes either copy
+# behave identically: managers come from the repo, ledgers/state/logs/stop files from the office.
+OFFICE = pathlib.Path(os.environ.get("CRE_OFFICE", "C:/dev/cre-office"))
+REPO_DOORS = pathlib.Path(os.environ.get("CRE_REPO_DOORS", "C:/dev/nyc-cre-decoded/Reproduction/Acris/doors"))
 NOWIN = 0x08000000          # CREATE_NO_WINDOW: a helper (powershell, do_doors.py) never pops a console on login's screen
 PY = sys.executable
 DOC = pathlib.Path(r"C:\dev\nyc-cre-decoded\Reproduction\Acris\workflow\documentation")
 # ONE SUPERVISOR PER PROVIDER (login 14:3x: "2 more stations doing cloud ... 36 maybe"): --provider digitalocean|vultr|linode
-# (pre-scanned from argv so the file names are right before anything runs).  DigitalOcean keeps do_doors.py and its files;
-# the others run cloud_doors.py (derived, provider-generic) with DOORS_PROVIDER set, their own ledger/state/log/stop, their own
-# station name on the board and their own slot range (slots key the lane's lock/log files, so ranges never overlap).
+# (pre-scanned from argv so the file names are right before anything runs).  EVERY provider runs the SAME manager,
+# cloud_doors.py, with DOORS_PROVIDER set - each with its own ledger/state/log/stop, its own station name on the
+# board and its own slot range (slots key the lane's lock/log files, so ranges never overlap).
+# 2026-09-10: DigitalOcean ran do_doors.py while the other three ran cloud_doors.py.  Two managers meant the ONE
+# provider that actually runs never exercised the generic path, so provider-generic bugs reached production
+# unexercised - three of the five differences found standing up the first Vultr door were exactly that.
+# cloud_doors.py is a strict superset of do_doors.py (identical subcommands, every function, plus the provider
+# abstraction) and was verified against the live ten-door DigitalOcean fleet before this changed.
 PROVIDER = os.environ.get("DOORS_PROVIDER", "digitalocean").lower()
 if "--provider" in sys.argv:
     PROVIDER = sys.argv[sys.argv.index("--provider") + 1].lower()
-_P = {"digitalocean": ("cloud_doors.json", "do_station", "DigitalOcean", "do_doors.py", "do_doors.log", 2),
+_P = {"digitalocean": ("cloud_doors.json", "do_station", "DigitalOcean", "cloud_doors.py", "do_doors.log", 2),
       "vultr":        ("cloud_doors.vultr.json", "do_station.vultr", "Vultr", "cloud_doors.py", "cloud_doors.vultr.log", 20),
       "linode":       ("cloud_doors.linode.json", "do_station.linode", "Linode", "cloud_doors.py", "cloud_doors.linode.log", 40),
       "hetzner":      ("cloud_doors.hetzner.json", "do_station.hetzner", "Hetzner", "cloud_doors.py", "cloud_doors.hetzner.log", 60)}
@@ -36,10 +47,10 @@ _P = {"digitalocean": ("cloud_doors.json", "do_station", "DigitalOcean", "do_doo
 if PROVIDER not in _P:
     raise SystemExit("--provider must be one of %s" % ", ".join(_P))
 _ledger, _base, STATION, MANAGER, MANAGER_LOG, SLOT_BASE = _P[PROVIDER]
-LEDGER = HERE / _ledger
-STATE = HERE / (_base + ".json")
-LOG = HERE / (_base + ".log")
-STOP = HERE / (_base + ".stop")
+LEDGER = OFFICE / _ledger
+STATE = OFFICE / (_base + ".json")
+LOG = OFFICE / (_base + ".log")
+STOP = OFFICE / (_base + ".stop")
 MANAGER_ENV = dict(os.environ, DOORS_PROVIDER=PROVIDER)
 # THE BAND THAT LANDED 4,284,337 DOCUMENTS, restored exactly - rate manager on, ramping to rate, the same floors and
 # ceilings, the same 5-second worker births, and the viewer page as the page-count authority.
@@ -89,7 +100,7 @@ def live_slots():
 
 
 def doors_cmd(*args, timeout=1500):
-    r = subprocess.run([PY, str(HERE / MANAGER), *args], capture_output=True, creationflags=NOWIN, text=True, timeout=timeout, cwd=str(HERE), env=MANAGER_ENV)
+    r = subprocess.run([PY, str(REPO_DOORS / MANAGER), *args], capture_output=True, creationflags=NOWIN, text=True, timeout=timeout, cwd=str(OFFICE), env=MANAGER_ENV)
     return (r.stdout + r.stderr).strip()
 
 
