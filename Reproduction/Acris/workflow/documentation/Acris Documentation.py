@@ -52,6 +52,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import requests
 import sys
 import time
@@ -64,6 +65,41 @@ sys.path.insert(0, str(PHASE / "Acris" / "rulebook"))
 import img2pdf                                                  # noqa: E402
 import acris                                                    # noqa: E402
 import rulebook  # noqa: E402
+
+_COUNT = re.compile(rb"/Count\s+(\d+)")
+_TAIL = 32768
+
+
+def pdf_pages(path):
+    """How many pages a pdf ON OUR DRIVE holds, or None if it cannot be read.
+
+    Only for files WE wrote: img2pdf emits an uncompressed page tree, so `/Count n` sits in the file
+    as plain bytes, and it writes the images first and the tree last - so the answer is in the tail.
+    Measured cold on the One Touch, 500 files at a time:
+
+        fitz.open            20 pdf/s     parses the xref, several seeks a file
+        whole file + regex  147 pdf/s
+        tail 32K  + regex  ~200 pdf/s     one seek, one small read
+
+    and the tail agreed with fitz on 500 of 500.  A miss falls back to the whole file rather than
+    guessing; unreadable returns None, never 0.  `imaged` 0 means ACRIS SAID there is no image, and
+    inventing that from a bad read is the mistake that cost 267,289 cells on 09-09.
+    """
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            fh.seek(max(0, size - _TAIL))
+            found = _COUNT.findall(fh.read())
+            if not found:
+                fh.seek(0)
+                found = _COUNT.findall(fh.read())
+        if not found:
+            return None
+        n = max(int(x) for x in found)
+        return n if n > 0 else None
+    except OSError:
+        return None
 
 
 class Documentation:
@@ -97,7 +133,19 @@ class Documentation:
         canon = acris.canonical_path(doc_id, registry)
         path = rulebook.local(self.root, canon)
         if path.is_file() and path.stat().st_size > 0:
-            return canon                                     # already on this drive: no request spent
+            # ALREADY ON THIS DRIVE: no request spent - but the page count still has to be recorded.
+            #
+            # 2026-09-09: this branch returned the path alone, so a re-linked cell landed with
+            # `imaged` empty.  It is not a rare path: the audit reset 331,987 cells to NULL while
+            # their pdfs stayed on the drive, so the lane meets thousands of them and files every one
+            # without a count - measured, 5,282 of 5,282 landed rows in one stretch had imaged null,
+            # and every file was written 2026-08-25, 377 hours before the run that "landed" it.
+            #
+            # The count is in the file, and img2pdf (which wrote it) leaves `/Count n` in the page
+            # tree as plain bytes near the END.  Reading the tail is ~200 pdf/s against fitz's 20 and
+            # agrees with it on 500 of 500 files checked.  A file we cannot read returns the path
+            # alone, exactly as before: an unreadable pdf is not a page count of zero.
+            return canon, ({"imaged": n} if (n := pdf_pages(path)) else {})
 
         # 1. the page count, from the viewer page (Referer chain as a browser walks it: detail -> viewer -> image).
         #
@@ -125,14 +173,28 @@ class Documentation:
         # short - is made HERE exactly as before, and the cell lands only once the pdf is on the drive.  A re-ask or a
         # page the box did not bring goes to ACRIS through the door as before.  No door (the machine's own line): as before.
         getter = BoxPrefetch(crew, self.box, doc_id, total) if (self.box and crew.door) else crew
+        saw_404 = False          # the viewer refused to identify itself at least once for this document
+        body, ct = b"", ""       # so the message below is safe if every ask raised
         for attempt in range(3):
             if total is not None:
                 break
-            body, ct = getter.get(acris.viewer_url(doc_id), acris.detail_url(doc_id))
-            acris.check_refused(body, ct, doc_id)
-            total = acris.total_pages(body)
-            if total is not None:
-                break
+            try:
+                body, ct = getter.get(acris.viewer_url(doc_id), acris.detail_url(doc_id))
+            except rulebook.HTTPStatus as e:
+                # A VIEWER 404 IS A NON-ANSWER, NOT A FATAL ERROR (2026-09-09).  get() raises on any
+                # status >= 400, so a 404 escaped this loop entirely and went straight to note_fail -
+                # meaning the three asks that exist for "the viewer did not identify itself" never ran
+                # for the commonest case of exactly that.  The tell: `reask` stood at 0 on all ten
+                # doors across 250,000 requests while 101 of 145 failures were viewer 404s.
+                if e.code != 404:
+                    raise                        # a real transport/status problem is not a non-answer
+                saw_404 = True
+                body, ct = b"", ""
+            else:
+                acris.check_refused(body, ct, doc_id)
+                total = acris.total_pages(body)
+                if total is not None:
+                    break
             with crew.lock:
                 crew.stats["reask"] += 1
             if attempt < 2:
@@ -155,6 +217,7 @@ class Documentation:
             #
             # So ACRIS must say it twice, through two different endpoints, before we believe it.  ONE extra request,
             # and only on this path (a few percent of documents); nothing changes for a document that has pages.
+            marker = False                   # did ACRIS POSITIVELY serve its end-of-document TIFF?
             try:
                 data, ct = getter.get(acris.image_url(doc_id, 1), acris.viewer_url(doc_id))
             except rulebook.HTTPStatus as e:
@@ -167,6 +230,20 @@ class Documentation:
                 if data and not acris.is_placeholder(data) and acris.is_tiff(data):
                     raise rulebook.Retry(
                         "viewer said %d pages but GetImage served a real page 1 (%d bytes): NOT absent" % (total, len(data)))
+                marker = acris.is_placeholder(data)
+            if saw_404 and not marker:
+                # NEVER CONFIDENTLY LET AN ERROR THROUGH - THAT IS HOW THE DB POISONS (login 2026-09-09).
+                # A throttled block answers with a readable TotalPages=0 for documents ACRIS HOLDS; that
+                # is what emptied 267,289 cells on 09-09, and tonight's 404 bursts land on the fastest
+                # doors, which is a throttle's shape.  So when the viewer 404'd BEFORE it said zero, a
+                # silence on page 1 - a 404, a notice, anything that is merely the absence of a
+                # statement - is not enough to empty a cell.  Only the END MARKER will do: is_placeholder
+                # is an exact MD5 of ACRIS's own end-of-document TIFF, an artifact no throttle can
+                # manufacture.  Measured on 24 of tonight's viewer-404 documents: 24 of 24 served it.
+                # Without it the cell is left exactly as it was, which is always the safe direction.
+                raise rulebook.Retry(
+                    "viewer 404'd then said %d pages, and page 1 gave no end marker (%d bytes) - not trusted as absence"
+                    % (total, len(data)))
             # and which of the two is decided by the RECORDING DATE IN ACRIS (registry['recorded']), never by the date
             # we happened to look: inside the lag it is still being scanned, outside it there is nothing to scan.
             # imaged 0 = ACRIS POSITIVELY SAID IT HAS NO IMAGE, which is a different fact from a row we
