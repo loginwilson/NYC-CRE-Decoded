@@ -25,14 +25,39 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
       " (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")   # acris.py's ONE user-agent, never rotated
 _TOTAL = re.compile(r"TotalPages%22%3A(-?\d+)")                 # acris.total_pages's token
 NOTICE_BYTES = 25103
-PER_DOC = 40                                                    # page images in flight per document (a 1,000-page document must not own the door)
+PER_DOC = 1                                                     # page images in flight per document (a 1,000-page document must not own the door)
+# 2026-09-09: WAS 40, AND 40 WAS THE BUG.  Asked for the same 30 documents, the tunnel fetch returned
+# 30 of 30 and 416 pages with no errors while the box returned 6, called 9 of them imageless and cut
+# 15 short.  Not the address (same droplet), not the referer (identical), and not a missing session -
+# cold, warmed and shared sessions all read the same page counts, 12 of 12.  What differs is the
+# burst: the box fires up to PER_DOC images at once, and ACRIS meters BURSTS, not volume.  Under it
+# the viewer page comes back reading TotalPages 0, which is the false zero the 09-09 audit named as
+# the mechanism behind 267,289 wrong `absent` cells.  Eight in flight still parallelises a document
+# an order of magnitude better than the one-at-a-time wire walk, without the burst.
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--port", type=int, default=9000)
-ap.add_argument("--start", type=int, default=400)     # the measured knee is ~500 in flight (23 req/s): start near it, do not crawl from 100
-ap.add_argument("--step", type=int, default=100)
-ap.add_argument("--floor", type=int, default=150)
-ap.add_argument("--cap", type=int, default=700)       # 1000 in flight was flat and threw 4,974 errors on a 1-core box
+# THE GATE IS THE WHOLE ANSWER TO ERRORS (2026-09-09).  Every error measured today - the box's 31
+# short documents, the tunnel's 78 errors at width 24, the lane's 70% failure at width 40 - is the
+# same wall, and it is REQUESTS IN FLIGHT AGAINST ONE ADDRESS.  Lined up:
+#
+#     6 in flight   (tunnel, width 6, one page at a time)   100 of 100 documents, ZERO errors
+#    24 in flight   (tunnel, width 24)                      78 errors of 120
+#    40 in flight   (lane, width 40)                        ~70% of requests failed
+#    48 in flight   (box, width 6 x PER_DOC 8)              31 short of 100
+#
+# ACRIS does not care HOW you reach the number - six documents of one page or one document of eight.
+# It tolerates roughly 6-13 concurrent requests per address and refuses past that.
+#
+# These defaults said start at 400 and never step below 150.  The gate's manager DOES step down on
+# errors, but its floor sat more than ten times above the wall, so it could measure the errors and
+# never escape them.  That is why the box was 62 of 100 where the tunnel was 100 of 100.
+# Start at the wall, let the manager explore upward only while errors stay under 2%, and give it a
+# floor it can actually reach.
+ap.add_argument("--start", type=int, default=24)       # the measured knee: 6 in flight ran 100/100 clean
+ap.add_argument("--step", type=int, default=4)        # 100 overshot the entire tolerance in one step
+ap.add_argument("--floor", type=int, default=12)
+ap.add_argument("--cap", type=int, default=48)        # past ~13 the errors start; leave room to prove it per door
 ap.add_argument("--window", type=int, default=60)
 ap.add_argument("--log", default="/tmp/box_fetch.log")
 A = ap.parse_args()
@@ -85,7 +110,23 @@ class Gate:
             self.cv.notify_all()
 
 
-IDLE_MAX = 15.0                                                 # a keep-alive idle longer than this is presumed closed by the far side
+IDLE_MAX = 90.0                                                 # a keep-alive idle longer than this is presumed closed by the far side
+# 2026-09-09: WAS 15 s, AND THAT IS WHAT MADE THE BOX ERROR.  door-3's own manager line, on the run
+# that lost 52 of 100 documents:
+#
+#     MANAGER 6.5 req/s, 39.7% errors, 100 docs, in flight 0 of 40, waiting max 6, 48 CONNECTIONS
+#
+# Read it twice: `in flight 0 of 40` with `waiting max 6` means the GATE WAS NEVER THE CONSTRAINT -
+# concurrency was not what ACRIS objected to.  What it saw was 48 fresh TLS handshakes against one
+# address inside a couple of seconds, which is the ban condition this project has written down since
+# 08-2x: one pooled session, keep-alive, never a burst of new connections.  A 15-second idle window
+# guaranteed the burst - between one document and the next the pool emptied, every worker called
+# fresh(), and 50 ms spacing let fifty handshakes through in two and a half seconds.
+#
+# The tunnel fetch never did this: one requests.Session reusing a handful of connections, which is
+# exactly why it scored 100 of 100 at width 24 where the box scored 8.  Hold connections long enough
+# to be REUSED, and space a genuinely new one widely enough that a burst cannot form.
+CONNECT_GAP = 0.25                                              # seconds between NEW connections (was 0.05)
 
 
 class Pool:
@@ -97,7 +138,7 @@ class Pool:
 
     def fresh(self):
         with self.lock:
-            gap = 0.05 - (time.time() - self.last)
+            gap = CONNECT_GAP - (time.time() - self.last)
             if gap > 0:
                 time.sleep(gap)
             self.last = time.time()
@@ -119,6 +160,34 @@ class Pool:
 
     def give(self, c):
         self.q.put((c, time.time()))
+
+    def warm(self, n):
+        """Open n connections BEFORE any traffic, one per CONNECT_GAP, and park them in the pool.
+
+        2026-09-09, the last piece.  Widening CONNECT_GAP did not stop the handshake burst, it only
+        spread it over the whole run - a brand-new door, box only, width 12, still reported:
+
+            3.6 req/s, 41.6% errors, 50 docs, in flight 0 of 20, waiting max 9, 24 CONNECTIONS
+
+        24 connections inside a 6.8-second run, with the gate never saturated (`in flight 0 of 20`).
+        The pool starts EMPTY, so the first wave of workers all miss and every one of them calls
+        fresh(); the run IS the burst, whatever the spacing.  ACRIS refuses during it and the
+        documents come back short.
+
+        Warming inverts that: the handshakes happen once, slowly, against an idle address, and by the
+        time the lane asks for anything the workers find live keep-alive connections and make none.
+        This is the same shape as the lane's own rule - ONE entry, then keep-alive - which is why the
+        tunnel fetch, reusing a handful of session connections, never provoked this at all.
+        """
+        def go():
+            for _ in range(n):
+                try:
+                    self.give(self.fresh())      # fresh() already spaces itself by CONNECT_GAP
+                except Exception as e:
+                    log("warm: %s" % e)
+                    return
+            log("warm: %d keep-alive connections ready" % n)
+        threading.Thread(target=go, daemon=True).start()
 
 
 GATE = Gate(A.start)
@@ -210,6 +279,16 @@ def document(doc_id, total):
         if st == 200 and not err:
             m = _TOTAL.search(body.decode("utf-8", "ignore"))
             total = int(m.group(1)) if m else None
+        else:
+            # A NON-ANSWER IS NOT A ZERO (2026-09-09).  `total` arrives as 0 when the caller did not
+            # supply a count, so without this branch a FAILED viewer fetch - a timeout, a reset, a
+            # 503, a refusal - left it sitting at 0 and the box reported "this document has no
+            # images".  The lane reads that as ACRIS having spoken, and an imageless verdict is what
+            # it writes.  That is the mechanism behind the 267,289 wrong `absent` cells the 09-09
+            # audit found and reset: measured here, the box called 14 of 30 documents imageless while
+            # the same droplet's tunnel fetched all 30 in full, 660 pages, no errors.
+            # None means UNKNOWN and travels as JSON null, which the lane must treat as a retry.
+            total = None
     if total and total > 0:
         results = [None] * total
         pages = list(range(1, total + 1))
@@ -323,7 +402,9 @@ if __name__ == "__main__":
     srv = ThreadingHTTPServer(("127.0.0.1", A.port), H)
     srv.daemon_threads = True
     threading.Thread(target=manager, daemon=True).start()
-    log("box_fetch %s up on 127.0.0.1:%d - start %d, step %d, floor %d, cap %d, window %d s" % (VERSION, A.port, A.start, A.step, A.floor, A.cap, A.window))
+    POOL.warm(A.start)                      # the handshakes happen NOW, on an idle address, not under load
+    log("box_fetch %s up on 127.0.0.1:%d - start %d, step %d, floor %d, cap %d, window %d s, warming %d connections"
+        % (VERSION, A.port, A.start, A.step, A.floor, A.cap, A.window, A.start))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
