@@ -448,6 +448,28 @@ create table if not exists machinery.updates (
   constraint updates_source_check CHECK ((source = ANY (ARRAY['acris'::text, 'richmond'::text])))
 );
 comment on table machinery.updates is 'how the record is being filled, source first: a row per source for the phase (lane = reproduction), one per lane, one per workstation running a lane - the counters land() and insert_ids() keep exact and the rates, eta, status and as-of the board writes every minute; a person reads reproduction.acris_update / richmond_update, never this table';
+
+create table if not exists machinery.doors (
+  station        text not null,
+  slot           integer not null,
+  lane_name      text,
+  region         text,
+  address        text,
+  block          text,
+  port           integer,
+  req_s          numeric(9,2),
+  docs_s         numeric(9,2),
+  pdfs           bigint,
+  absent         bigint,
+  fail           integer,
+  width          text,
+  kept_at        timestamp with time zone,
+  age_min        integer,
+  as_of          timestamp with time zone,
+  first_seen     timestamp with time zone not null default now(),
+  constraint doors_pkey PRIMARY KEY (station, slot)
+);
+comment on table machinery.doors is 'ONE ROW PER LIVE DOOR at a provider station - ten rows beside a four-million-row document table, upserted in place once a minute, so it clogs nothing. It costs NOTHING at the source: every figure is read from the lanes own log and the door ledger, so no probe is spent and no droplet is touched. TWO NUMBERING SCHEMES ON PURPOSE: slot is ours (port minus the providers port base) and lane_name is what the lane calls it - they agree until a slot is refilled and then they drift, and reading one as the other is what destroyed four healthy doors on 2026-09-10. req_s and docs_s are LIVE DELTAS between the last two readings, never a lifetime average, because a lifetime figure under-reports any door that joined late and keeps reporting a door whose lane has died.';
 comment on column machinery.updates.source is 'acris or richmond';
 comment on column machinery.updates.lane is 'reproduction (the phase: every cell filled), identification, registration or documentation';
 comment on column machinery.updates.workstation is 'empty on the phase and lane rows (the totals); a machine''s name on its own row';
