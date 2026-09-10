@@ -6,3 +6,7 @@ logs.archive/
 
 # the survey ledger is written by survey.py on every probe - running state, not code
 survey.md
+
+# a tunnel keeper stderr, now written to the office - this catches any left by a keeper
+# started before that fix, which holds its file open until the door is burnt
+door*.ssh.err

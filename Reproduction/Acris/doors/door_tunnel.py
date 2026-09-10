@@ -11,6 +11,7 @@ logging every start and end with a timestamp to door<port>.tunnel.log beside thi
 import argparse, atexit, os, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+OFFICE = os.environ.get("CRE_OFFICE", "C:/dev/cre-office")   # keys, ledgers, logs and a tunnel's stderr
 ap = argparse.ArgumentParser()
 ap.add_argument("--port", type=int, required=True)
 ap.add_argument("--host", required=True, help="user@address of the rented machine")
@@ -46,7 +47,10 @@ NOWIN = 0x08000000             # CREATE_NO_WINDOW - 09-08 13:06: this keeper run
 while True:
     n += 1
     t0 = time.time()
-    with open(os.path.join(HERE, "door%d.ssh.err" % a.port), "a", encoding="utf-8") as err:
+    # THE OFFICE, NOT HERE.  HERE is wherever this file sits - and since the stations were pointed at
+    # the repo copy on 2026-09-10, every keeper began dropping door<port>.ssh.err into the working
+    # tree.  A tunnel's stderr is running state; the repo holds code.
+    with open(os.path.join(OFFICE, "door%d.ssh.err" % a.port), "a", encoding="utf-8") as err:
         child = subprocess.Popen(cmd, stdout=err, stderr=err, stdin=subprocess.DEVNULL, creationflags=NOWIN)
         log("ssh #%d started, pid %d" % (n, child.pid))
         rc = child.wait()

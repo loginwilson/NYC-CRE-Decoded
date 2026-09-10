@@ -50,7 +50,13 @@ PROVIDERS = {
                      # neither ever appears in an acceptance table - so the loss is invisible from inside the numbers.
                      "nyc1,nyc3,nyc2,ric1,tor1,atl1,mem1,mkc1,sfo2,sfo3,lon1,ams3,fra1,blr1,sgp1,syd1", "DigitalOcean"),
     "vultr":        ("VULTR_TOKEN", "https://api.vultr.com/v2/", "cloud_doors.vultr.json", "cloud_doors.vultr.log", 1200, 1400,
-                     "syd,mel,sgp,nrt,itm,icn,bom,del,blr,ams,fra,lhr,cdg,mad,sto,waw,tlv,man,jnb,scl,sao,mex,ewr,yto,ord,atl,mia,dfw,sea,lax,sjc", "Vultr"),
+                     # NEAREST TO ACRIS FIRST.  This list used to open at syd - Sydney, the farthest address on it -
+                     # and the fill takes regions in order, so the first doors bought were the worst ones available.
+                     # Proximity is the one property of a door that does not change: measured across the DigitalOcean
+                     # fleet the correlation between distance and req/s is -0.78, and it is a STEP not a slope - same
+                     # metro 17.7 req/s, continental 9-10, transatlantic 6.1, far 2.9.  ewr is Piscataway NJ, NINE
+                     # MILES from the ACRIS datacentre and the closest address either provider sells us.
+                     "ewr,yto,ord,atl,mia,dfw,mex,sea,lax,sjc,man,lhr,cdg,mad,ams,fra,sto,mxp,waw,hnl,sao,scl,tlv,nrt,itm,icn,del,bom,jnb,blr,sgp,syd,mel", "Vultr"),
     "linode":       ("LINODE_TOKEN", "https://api.linode.com/v4/", "cloud_doors.linode.json", "cloud_doors.linode.log", 1300, 1500,
                      # THE OLD DATACENTRES FIRST.  Every Linode block probed on 2026-09-09 was REFUSED - 70 of them - and every one
                      # sat in 172.104/105 or 172.232-239, one contiguous Akamai-era range ACRIS appears to have refused
@@ -97,6 +103,8 @@ REGIONS = REGIONS_DEFAULT   # THE PROVIDER'S OWN CODES.  21:48: this line carrie
 # of the world.  The old "near regions first" order was written when the ssh tunnel carried every ACRIS request
 # and the round trip set the rate; with the fetch on the box the tunnel carries only finished bytes, so distance
 # costs almost nothing and a served block is worth everything.  The fastest door of the whole day was Sydney.
+RETRY_TRIES = 12     # a Vultr instance locked by its own provisioning clears in about ten seconds
+RETRY_WAIT = 10
 MIN_SPEED = 0.5      # A LIVENESS FLOOR ONLY.  At six workers documents-a-second runs BACKWARDS: a refused block answers
                      # instantly and scores HIGH (a known-spent block scored 4.95 here) while a real door, waiting on
                      # real scans, scored 1.66 with 2.83 pages a document, 30 errors and 48.5 KB a page.  Every rate
@@ -155,12 +163,24 @@ def api(method, path, body=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(API_BASE + path, data=data, method=method,
                                  headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"})
-    try:
-        r = urllib.request.urlopen(req, timeout=40)
-        raw = r.read()
-        return json.loads(raw) if raw.strip() else {}
-    except urllib.error.HTTPError as e:
-        raise SystemExit("%s API %s %s -> %s %s" % (STATION, method, path, e.code, e.read().decode()[:200]))
+    # 409/429 ARE NOT FAILURES, THEY ARE "NOT YET".  Vultr answers 409 "Server is currently locked" to a
+    # DELETE while the instance is still provisioning - DigitalOcean has no such state - and on 2026-09-10
+    # that ended the destroy loop through SystemExit before it reached the NEXT droplet, leaving one alive
+    # and billing.  A burn that gives up is how a door bills for ever, which is the single most expensive
+    # bug this file can have.  The lock clears in about ten seconds; wait for it.
+    for attempt in range(RETRY_TRIES):
+        try:
+            r = urllib.request.urlopen(req, timeout=40)
+            raw = r.read()
+            return json.loads(raw) if raw.strip() else {}
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()[:200]
+            if e.code in (409, 429) and attempt < RETRY_TRIES - 1:
+                log("%s API %s %s -> %s (attempt %d of %d, waiting %ds): %s"
+                    % (STATION, method, path, e.code, attempt + 1, RETRY_TRIES, RETRY_WAIT, body))
+                time.sleep(RETRY_WAIT)
+                continue
+            raise SystemExit("%s API %s %s -> %s %s" % (STATION, method, path, e.code, body))
 
 
 def log(msg):
@@ -496,10 +516,19 @@ def cmd_destroy(a):
     else:
         ds = [find(x) for x in a.targets]
     kept = ledger_read()
+    failed = []
     for d in ds:
         if not d:
             continue
-        P_destroy(d["id"])
+        # ONE TARGET'S FAILURE MUST NOT ABANDON THE REST.  Every un-destroyed droplet keeps billing and
+        # keeps holding a place against the cap, so the loop finishes and reports what survived.
+        try:
+            P_destroy(d["id"])
+        except SystemExit as e:
+            failed.append((d["id"], d["name"], str(e)[:120]))
+            print("   !! %s %s NOT destroyed - still billing: %s" % (d["id"], d["name"], str(e)[:120]))
+            log("destroy FAILED %s %s: %s" % (d["id"], d["name"], str(e)[:200]))
+            continue
         print("destroyed", d["id"], d["name"])
         log("destroyed %s %s" % (d["id"], d["name"]))
         row = next((r for r in kept if r["name"] == d["name"]), None)
@@ -507,6 +536,9 @@ def cmd_destroy(a):
             _kill_keeper(row["port"])
             kept = [r for r in kept if r is not row]
             ledger_write(kept)
+    if failed:
+        raise SystemExit("%d of %d NOT destroyed and still billing: %s"
+                         % (len(failed), len(ds), ", ".join(n for _, n, _ in failed)))
 
 
 # ---- THE CYCLE: create, probe, keep what serves, burn the rest ------------------------------------------------------------
