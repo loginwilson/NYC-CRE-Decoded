@@ -3,3 +3,6 @@
 *.json
 !package.json
 logs.archive/
+
+# the survey ledger is written by survey.py on every probe - running state, not code
+survey.md

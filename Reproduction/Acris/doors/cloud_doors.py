@@ -31,6 +31,9 @@ import concurrent.futures
 import random
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# THE OFFICE IS WHERE THE KEYS LIVE.  The code is the repository's; the keys, ledgers, logs and running
+# state are the machine's, and they sit in cre-office - never in the repo, never in git.
+OFFICE = os.environ.get("CRE_OFFICE", "C:/dev/cre-office")
 PY = sys.executable
 KEY = r"C:\Users\smile\.ssh\door_ed25519"
 BOX_PORT = 9000                              # box_fetch.py on every kept droplet (the on-box fetch, 2026-09-08): the lane's --box
@@ -120,7 +123,12 @@ def env(k):
 
 
 def _env_any(k):
-    for p in (os.path.join(HERE, PROVIDER + ".env"), os.path.join(HERE, "providers.env"), r"C:/dev/nyc-cre-decoded.env"):
+    # 2026-09-10: this searched HERE (the repo) while every provider key is saved in the OFFICE, so the office
+    # was named in the error message and never actually read.  DigitalOcean alone worked - its token happens to
+    # sit in the absolute-path fallback - which made three providers look unreachable when only the lookup was.
+    for p in (os.path.join(OFFICE, PROVIDER + ".env"), os.path.join(OFFICE, "providers.env"),
+              os.path.join(HERE, PROVIDER + ".env"), os.path.join(HERE, "providers.env"),
+              "C:/dev/nyc-cre-decoded.env"):
         try:
             with open(p, encoding="utf-8") as f:
                 for l in f:
