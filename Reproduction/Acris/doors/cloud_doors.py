@@ -175,6 +175,13 @@ def api(method, path, body=None):
             return json.loads(raw) if raw.strip() else {}
         except urllib.error.HTTPError as e:
             body = e.read().decode()[:200]
+            # A DELETE THAT 404s HAS ALREADY SUCCEEDED.  The droplet is gone, which is the whole
+            # point of the call - and treating "already gone" as a failure is expensive: it raised
+            # SystemExit out of the middle of `adopt` on 2026-09-10, abandoning the rest of a fleet
+            # rebuild with seven untracked droplets still billing.  Absent is the desired end state.
+            if method == "DELETE" and e.code == 404:
+                log("%s %s -> 404: already gone, treating as destroyed" % (method, path))
+                return {}
             if e.code in (409, 429) and attempt < RETRY_TRIES - 1:
                 log("%s API %s %s -> %s (attempt %d of %d, waiting %ds): %s"
                     % (STATION, method, path, e.code, attempt + 1, RETRY_TRIES, RETRY_WAIT, body))
@@ -650,7 +657,15 @@ def _box(ip, force=False):
         return False
 
 
-MAINT = ("/mxpage/maintenance", "acris-bw-pol")     # the two pages ACRIS bounces between while the service is closed
+# ⚠ THE BANDWIDTH PAGE ALONE IS NOT MAINTENANCE.  This tuple carried "acris-bw-pol" too, so a single
+# 307 to the BandwidthPolicy page - the ORDINARY per-address refusal that any spent line draws, and
+# this machine's line has been spent for days - was reported as the whole service being closed.
+# 2026-09-10 20:5x that false reading held both stations idle and refused to rebuild a fleet that had
+# just been cut from 15 doors to 4, while ACRIS was serving other clients perfectly well.
+# MAINTENANCE means the chain REACHES /MXPage/maintenance, or the two pages bounce until the hop
+# budget runs out (handled at the end of site_state).  One hop to the notice means THIS ADDRESS is
+# refused - which is per-address news, and the fleet answers it by buying a different address.
+MAINT = ("/mxpage/maintenance",)
 
 
 def _images_serving():
